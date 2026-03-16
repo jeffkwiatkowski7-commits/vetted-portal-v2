@@ -183,7 +183,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
           )}
 
           {/* Main input container */}
-          <div className={`relative border rounded-2xl bg-white focus-within:border-vetted-accent focus-within:ring-[3px] focus-within:ring-vetted-accent/20 transition-all ${
+          <div className={`relative border rounded-2xl bg-white transition-all ${
             demoActive && (demoHighlight === 'chat-input' || demoHighlight === 'send-button')
               ? 'border-vetted-accent ring-[3px] ring-vetted-accent/20'
               : 'border-vetted-border'

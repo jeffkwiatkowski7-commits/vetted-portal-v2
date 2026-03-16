@@ -397,7 +397,7 @@ function BrowseView({
     <>
       {/* Search */}
       <div className="px-3 pt-3 pb-2 shrink-0 border-b border-vetted-border">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-vetted-border bg-white focus-within:border-vetted-accent focus-within:ring-2 focus-within:ring-vetted-accent/20 transition-all">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-vetted-border bg-white">
           <Search size={14} className="text-vetted-text-muted shrink-0" />
           <input
             ref={searchInputRef}

@@ -45,6 +45,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
   const {
     activeChat, setActiveChat, addToast,
     demoActive, demoHighlight, demoInputText, demoShowModelPicker, demoAttachedFile,
+    demoTriggerSend, setDemoTriggerSend,
   } = useStore();
   const [message, setMessage] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<LibraryFile[]>([]);
@@ -64,6 +65,13 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
   useEffect(() => {
     if (demoActive) setShowModelSelect(demoShowModelPicker);
   }, [demoActive, demoShowModelPicker]);
+
+  useEffect(() => {
+    if (demoActive && demoTriggerSend) {
+      setDemoTriggerSend(false);
+      handleSendMessage();
+    }
+  }, [demoActive, demoTriggerSend]);
 
   useEffect(() => {
     if (textareaRef.current) {

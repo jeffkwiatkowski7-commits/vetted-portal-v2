@@ -1,0 +1,515 @@
+[    1364ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[    1364ms] [WARNING] ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[   71040ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[   71040ms] [WARNING] ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  138521ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  138521ms] [WARNING] ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  248077ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at updateFunctionComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14580:28)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15922:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+[  248080ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at updateFunctionComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14580:28)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15922:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+[  248082ms] [ERROR] The above error occurred in the <Sidebar> component:
+
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:37:20)
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504130605:51:7)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14029
+[  248082ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at updateFunctionComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14580:28)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15922:22)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19751:22)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+    at renderRootSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19114:15)
+    at recoverFromConcurrentError (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:18734:28)
+    at performSyncWorkOnRoot (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:18877:28)
+[  254857ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  254857ms] [WARNING] ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  254972ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+[  254972ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+[  254876ms] [ERROR] The above error occurred in the <Sidebar> component:
+
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:37:20)
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504130605:51:7)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14029
+[  254973ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19751:22)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+    at renderRootSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19114:15)
+    at recoverFromConcurrentError (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:18734:28)
+    at performSyncWorkOnRoot (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:18877:28)
+[  272114ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  272114ms] [WARNING] ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  272124ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+[  272125ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+[  272126ms] [ERROR] The above error occurred in the <Sidebar> component:
+
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:37:20)
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504130605:51:7)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14029
+[  272127ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19751:22)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+    at renderRootSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19114:15)
+    at recoverFromConcurrentError (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:18734:28)
+    at performSyncWorkOnRoot (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:18877:28)
+[  360462ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+[  360463ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+[  360464ms] [ERROR] The above error occurred in the <Sidebar> component:
+
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:37:20)
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504243033:51:7)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14029
+[  360464ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504130605:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19751:22)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+    at renderRootSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19114:15)
+    at recoverFromConcurrentError (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:18734:28)
+    at performSyncWorkOnRoot (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:18877:28)
+[  366346ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504248938:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+[  366347ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504248938:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+[  366347ms] [ERROR] The above error occurred in the <Sidebar> component:
+
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504248938:37:20)
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504248938:51:7)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14029
+[  366347ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504248938:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19751:22)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+    at renderRootSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19114:15)
+    at recoverFromConcurrentError (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:18734:28)
+    at performSyncWorkOnRoot (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:18877:28)
+[  371853ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504248938:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+[  371853ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504248938:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+[  371854ms] [ERROR] The above error occurred in the <Sidebar> component:
+
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504248938:37:20)
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504254446:51:7)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14029
+[  371854ms] TypeError: Cannot read properties of undefined (reading '0')
+    at Sidebar (http://localhost:5174/src/components/sidebar/Sidebar.tsx?t=1773504248938:298:197)
+    at renderWithHooks (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:11546:26)
+    at mountIndeterminateComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14924:21)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15912:22)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19751:22)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+    at renderRootSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19114:15)
+    at recoverFromConcurrentError (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:18734:28)
+    at performSyncWorkOnRoot (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:18877:28)
+[  377968ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  377968ms] [WARNING] ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  431375ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  431375ms] [WARNING] ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  462483ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  462483ms] [WARNING] ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  545757ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  545758ms] [WARNING] ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath. @ http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4433
+[  749078ms] [ERROR] Warning: Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.%s [object Object] 
+    at div
+    at div
+    at div
+    at AppsPage (http://localhost:5174/src/pages/AppsPage.tsx?t=1773504623500:25:20)
+    at RenderedRoute (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4129:5)
+    at Routes (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4599:5)
+    at main
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504623500:51:7) @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:518
+[  749078ms] [ERROR] Warning: Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.%s [object Object] 
+    at div
+    at div
+    at div
+    at AppsPage (http://localhost:5174/src/pages/AppsPage.tsx?t=1773504623500:25:20)
+    at RenderedRoute (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4129:5)
+    at Routes (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4599:5)
+    at main
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504623500:51:7) @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:518
+[  749078ms] [ERROR] Warning: Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.%s [object Object] 
+    at div
+    at div
+    at div
+    at AppsPage (http://localhost:5174/src/pages/AppsPage.tsx?t=1773504623500:25:20)
+    at RenderedRoute (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4129:5)
+    at Routes (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4599:5)
+    at main
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504623500:51:7) @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:518
+[  749128ms] Error: Objects are not valid as a React child (found: object with keys {id, name, description}). If you meant to render a collection of children, use an array instead.
+    at throwOnInvalidObjectType (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:9932:17)
+    at reconcileChildFibers2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:10562:15)
+    at reconcileChildren (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14288:37)
+    at updateHostComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14805:11)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15933:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+[  749128ms] Error: Objects are not valid as a React child (found: object with keys {id, name, description}). If you meant to render a collection of children, use an array instead.
+    at throwOnInvalidObjectType (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:9932:17)
+    at reconcileChildFibers2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:10562:15)
+    at reconcileChildren (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14288:37)
+    at updateHostComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14805:11)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15933:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+[  749128ms] Error: Objects are not valid as a React child (found: object with keys {id, name, description}). If you meant to render a collection of children, use an array instead.
+    at throwOnInvalidObjectType (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:9932:17)
+    at reconcileChildFibers2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:10562:15)
+    at reconcileChildren (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14288:37)
+    at updateHostComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14805:11)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15933:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+[  749129ms] Error: Objects are not valid as a React child (found: object with keys {id, name, description}). If you meant to render a collection of children, use an array instead.
+    at throwOnInvalidObjectType (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:9932:17)
+    at reconcileChildFibers2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:10562:15)
+    at reconcileChildren (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14288:37)
+    at updateHostComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14805:11)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15933:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+[  749081ms] [ERROR] Warning: Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.%s [object Object] 
+    at div
+    at div
+    at div
+    at AppsPage (http://localhost:5174/src/pages/AppsPage.tsx?t=1773504623500:25:20)
+    at RenderedRoute (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4129:5)
+    at Routes (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4599:5)
+    at main
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504623500:51:7) @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:518
+[  749081ms] [ERROR] Warning: Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.%s [object Object] 
+    at div
+    at div
+    at div
+    at AppsPage (http://localhost:5174/src/pages/AppsPage.tsx?t=1773504623500:25:20)
+    at RenderedRoute (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4129:5)
+    at Routes (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4599:5)
+    at main
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504623500:51:7) @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:518
+[  749081ms] [ERROR] Warning: Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.%s [object Object] 
+    at div
+    at div
+    at div
+    at AppsPage (http://localhost:5174/src/pages/AppsPage.tsx?t=1773504623500:25:20)
+    at RenderedRoute (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4129:5)
+    at Routes (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4599:5)
+    at main
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504623500:51:7) @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:518
+[  749130ms] Error: Objects are not valid as a React child (found: object with keys {id, name, description}). If you meant to render a collection of children, use an array instead.
+    at throwOnInvalidObjectType (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:9932:17)
+    at reconcileChildFibers2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:10562:15)
+    at reconcileChildren (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14288:37)
+    at updateHostComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14805:11)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15933:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+[  749132ms] Error: Objects are not valid as a React child (found: object with keys {id, name, description}). If you meant to render a collection of children, use an array instead.
+    at throwOnInvalidObjectType (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:9932:17)
+    at reconcileChildFibers2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:10562:15)
+    at reconcileChildren (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14288:37)
+    at updateHostComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14805:11)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15933:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+[  749132ms] Error: Objects are not valid as a React child (found: object with keys {id, name, description}). If you meant to render a collection of children, use an array instead.
+    at throwOnInvalidObjectType (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:9932:17)
+    at reconcileChildFibers2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:10562:15)
+    at reconcileChildren (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14288:37)
+    at updateHostComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14805:11)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15933:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+[  749132ms] Error: Objects are not valid as a React child (found: object with keys {id, name, description}). If you meant to render a collection of children, use an array instead.
+    at throwOnInvalidObjectType (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:9932:17)
+    at reconcileChildFibers2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:10562:15)
+    at reconcileChildren (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14288:37)
+    at updateHostComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14805:11)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15933:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3697:24)
+    at invokeGuardedCallback (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:3731:39)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19763:15)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+[  749083ms] [ERROR] The above error occurred in the <button> component:
+
+    at button
+    at div
+    at div
+    at div
+    at AppsPage (http://localhost:5174/src/pages/AppsPage.tsx?t=1773504623500:25:20)
+    at RenderedRoute (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4129:5)
+    at Routes (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4599:5)
+    at main
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504623500:51:7)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14029
+[  749083ms] [ERROR] The above error occurred in the <button> component:
+
+    at button
+    at div
+    at div
+    at div
+    at AppsPage (http://localhost:5174/src/pages/AppsPage.tsx?t=1773504623500:25:20)
+    at RenderedRoute (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4129:5)
+    at Routes (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4599:5)
+    at main
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504623500:51:7)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14029
+[  749083ms] [ERROR] The above error occurred in the <button> component:
+
+    at button
+    at div
+    at div
+    at div
+    at AppsPage (http://localhost:5174/src/pages/AppsPage.tsx?t=1773504623500:25:20)
+    at RenderedRoute (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4129:5)
+    at Routes (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4599:5)
+    at main
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504623500:51:7)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14029
+[  749083ms] [ERROR] The above error occurred in the <button> component:
+
+    at button
+    at div
+    at div
+    at div
+    at AppsPage (http://localhost:5174/src/pages/AppsPage.tsx?t=1773504623500:25:20)
+    at RenderedRoute (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4129:5)
+    at Routes (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4599:5)
+    at main
+    at div
+    at Router (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:4542:15)
+    at BrowserRouter (http://localhost:5174/node_modules/.vite/deps/react-router-dom.js?v=528df51f:5288:5)
+    at App (http://localhost:5174/src/App.tsx?t=1773504623500:51:7)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14029
+[  749133ms] Error: Objects are not valid as a React child (found: object with keys {id, name, description}). If you meant to render a collection of children, use an array instead.
+    at throwOnInvalidObjectType (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:9932:17)
+    at reconcileChildFibers2 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:10562:15)
+    at reconcileChildren (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14288:37)
+    at updateHostComponent (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:14805:11)
+    at beginWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:15933:22)
+    at beginWork$1 (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19751:22)
+    at performUnitOfWork (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19196:20)
+    at workLoopSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19135:13)
+    at renderRootSync (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:19114:15)
+    at recoverFromConcurrentError (http://localhost:5174/node_modules/.vite/deps/chunk-BCXODTBQ.js?v=4076a042:18734:28)

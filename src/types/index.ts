@@ -1,0 +1,204 @@
+export interface User {
+  id: string;
+  email: string;
+  display_name: string;
+  job_title?: string;
+  department?: string;
+  role: 'user' | 'admin' | 'super_admin';
+  avatar_path?: string;
+  status: 'active' | 'inactive' | 'suspended';
+  created_at: string;
+  updated_at: string;
+  last_login_at?: string;
+}
+
+export interface Chat {
+  id: string;
+  user_id: string;
+  project_id?: string;
+  title: string;
+  model: string;
+  temperature: number;
+  system_prompt?: string;
+  is_shared: number;
+  created_at: string;
+  updated_at: string;
+  messages?: Message[];
+  shared_by?: string;
+  permission?: string;
+}
+
+export interface Message {
+  id: string;
+  chat_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  model_used?: string;
+  token_count?: number;
+  reasoning?: string;
+  attachments?: string;
+  created_at: string;
+}
+
+export interface Project {
+  id: string;
+  owner_id: string;
+  name: string;
+  description?: string;
+  default_model: string;
+  system_prompt?: string;
+  temperature: number;
+  tool_sets?: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  owner_name?: string;
+  chat_count?: number;
+  file_count?: number;
+  member_count?: number;
+  permission?: string;
+}
+
+export interface ProjectMember {
+  id: string;
+  project_id: string;
+  user_id: string;
+  permission: string;
+  created_at: string;
+  display_name?: string;
+  email?: string;
+}
+
+export interface LibraryFile {
+  id: string;
+  user_id: string;
+  filename: string;
+  original_name: string;
+  file_path: string;
+  file_type: string;
+  file_size: number;
+  mime_type: string;
+  project_id?: string;
+  uploaded_at: string;
+}
+
+export interface App {
+  id: string;
+  name: string;
+  description: string;
+  icon?: string;
+  category: string;
+  system_prompt: string;
+  model: string;
+  temperature: number;
+  tool_sets?: string;
+  visibility: string;
+  status: string;
+  usage_count: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ToolSet {
+  id: string;
+  name: string;
+  description: string;
+  tools: string;
+  api_config: string;
+  status: string;
+  usage_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SystemPrompt {
+  id: string;
+  name: string;
+  prompt_text: string;
+  scope: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ModelConfig {
+  id: string;
+  model_name: string;
+  provider: string;
+  display_name: string;
+  icon_color: string;
+  is_default: number;
+  is_enabled: number;
+  max_tokens: number;
+  rate_limit: number;
+}
+
+export interface ApiKey {
+  id: string;
+  user_id: string;
+  name: string;
+  key_preview: string;
+  permissions: string;
+  expires_at?: string;
+  status: string;
+  last_used_at?: string;
+  created_at: string;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  description: string;
+  link?: string;
+  is_read: number;
+  created_at: string;
+}
+
+export interface UserPreferences {
+  default_model: string;
+  default_temperature: number;
+  show_reasoning: number;
+  auto_scroll: number;
+  compact_view: number;
+  code_theme: string;
+  notify_shared_chat: number;
+  notify_project_updates: number;
+  notify_system: number;
+  notify_weekly_summary: number;
+}
+
+export interface Toast {
+  id: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  detail?: string;
+  action?: { label: string; onClick: () => void };
+}
+
+export interface PipelineStep {
+  name: string;
+  status: 'pending' | 'active' | 'completed' | 'error';
+  elapsed?: number;
+  startTime?: number;
+}
+
+export interface SearchResult {
+  category: 'chats' | 'projects' | 'files' | 'apps';
+  id: string;
+  title: string;
+  subtitle: string;
+  timestamp?: string;
+}
+
+export interface DemoStep {
+  id: number;
+  section: string;
+  feature: string;
+  action: string;
+  duration: number;
+  target?: string;
+  navigate?: string;
+}

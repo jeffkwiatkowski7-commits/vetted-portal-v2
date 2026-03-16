@@ -1,0 +1,277 @@
+import React, { useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
+import { useStore } from '../../store';
+import * as api from '../../api';
+import { Copy, ThumbsUp, ThumbsDown, RefreshCw } from 'lucide-react';
+import ProcessingPipeline from '../pipeline/ProcessingPipeline';
+import ModelReasoning from '../pipeline/ModelReasoning';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import 'highlight.js/styles/github.css';
+
+// ── Markdown renderer for assistant messages ──────────────────────────────────
+function MarkdownContent({ content }: { content: string }) {
+  return (
+    <div className="prose-vetted">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeHighlight]}
+        components={{
+          // Headings
+          h1: ({ children }) => (
+            <h1 className="font-serif text-2xl font-bold text-vetted-text-primary mt-6 mb-3 pb-2 border-b border-vetted-border">
+              {children}
+            </h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="font-serif text-xl font-bold text-vetted-text-primary mt-5 mb-2">
+              {children}
+            </h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="font-sans text-base font-semibold text-vetted-text-primary mt-4 mb-1.5">
+              {children}
+            </h3>
+          ),
+          h4: ({ children }) => (
+            <h4 className="font-sans text-sm font-semibold text-vetted-text-secondary uppercase tracking-wide mt-3 mb-1">
+              {children}
+            </h4>
+          ),
+
+          // Paragraph
+          p: ({ children }) => (
+            <p className="text-[15px] leading-relaxed text-vetted-text-primary mb-3 last:mb-0">
+              {children}
+            </p>
+          ),
+
+          // Lists
+          ul: ({ children }) => (
+            <ul className="my-3 space-y-1.5 pl-5 list-disc marker:text-vetted-accent">
+              {children}
+            </ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="my-3 space-y-1.5 pl-5 list-decimal marker:text-vetted-text-muted">
+              {children}
+            </ol>
+          ),
+          li: ({ children }) => (
+            <li className="text-[15px] leading-relaxed text-vetted-text-primary pl-1">
+              {children}
+            </li>
+          ),
+
+          // Blockquote
+          blockquote: ({ children }) => (
+            <blockquote className="my-3 pl-4 border-l-4 border-vetted-accent bg-amber-50/60 py-2 pr-3 rounded-r-lg text-vetted-text-secondary italic text-[15px]">
+              {children}
+            </blockquote>
+          ),
+
+          // Inline code
+          code: ({ children, className }) => {
+            const isBlock = className?.includes('language-');
+            if (isBlock) {
+              return (
+                <code className={`${className ?? ''} text-[13px] font-mono`}>{children}</code>
+              );
+            }
+            return (
+              <code className="font-mono text-[13px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                {children}
+              </code>
+            );
+          },
+
+          // Code block wrapper
+          pre: ({ children }) => (
+            <pre className="my-3 rounded-xl overflow-auto text-[13px] font-mono bg-vetted-surface border border-vetted-border p-4 leading-relaxed">
+              {children}
+            </pre>
+          ),
+
+          // Tables
+          table: ({ children }) => (
+            <div className="my-4 overflow-x-auto rounded-xl border border-vetted-border">
+              <table className="w-full text-sm border-collapse">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => (
+            <thead className="bg-vetted-surface border-b border-vetted-border">{children}</thead>
+          ),
+          tbody: ({ children }) => (
+            <tbody className="divide-y divide-vetted-border">{children}</tbody>
+          ),
+          tr: ({ children }) => (
+            <tr className="hover:bg-vetted-surface/60 transition-colors">{children}</tr>
+          ),
+          th: ({ children }) => (
+            <th className="px-4 py-2.5 text-left text-xs font-semibold text-vetted-text-secondary uppercase tracking-wide">
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="px-4 py-2.5 text-[14px] text-vetted-text-primary">{children}</td>
+          ),
+
+          // Horizontal rule
+          hr: () => <hr className="my-5 border-vetted-border" />,
+
+          // Links
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-vetted-accent underline underline-offset-2 hover:text-vetted-accent-dark transition-colors"
+            >
+              {children}
+            </a>
+          ),
+
+          // Strong / em
+          strong: ({ children }) => (
+            <strong className="font-semibold text-vetted-text-primary">{children}</strong>
+          ),
+          em: ({ children }) => (
+            <em className="italic text-vetted-text-secondary">{children}</em>
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+// ── Assistant message with pipeline-first sequencing ─────────────────────────
+function AssistantMessage({
+  content,
+  reasoning,
+  isLast,
+}: {
+  content: string;
+  reasoning?: string;
+  isLast: boolean;
+}) {
+  // Non-last messages already ran their pipeline — show content immediately
+  const [responseVisible, setResponseVisible] = React.useState(!isLast);
+
+  useEffect(() => {
+    if (!isLast) setResponseVisible(true);
+  }, [isLast]);
+
+  return (
+    <div className="space-y-3">
+      {/* Pipeline — always rendered for last message, stays visible after done */}
+      {isLast && (
+        <ProcessingPipeline onComplete={() => setResponseVisible(true)} />
+      )}
+
+      {/* Response appears below pipeline once pipeline finishes */}
+      {responseVisible && (
+        <>
+          <MarkdownContent content={content} />
+          {reasoning && <ModelReasoning reasoning={reasoning} />}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => navigator.clipboard.writeText(content)}
+              className="p-1.5 rounded-md text-vetted-text-muted hover:text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
+              title="Copy"
+            >
+              <Copy size={15} />
+            </button>
+            <button
+              className="p-1.5 rounded-md text-vetted-text-muted hover:text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
+              title="Good response"
+            >
+              <ThumbsUp size={15} />
+            </button>
+            <button
+              className="p-1.5 rounded-md text-vetted-text-muted hover:text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
+              title="Bad response"
+            >
+              <ThumbsDown size={15} />
+            </button>
+            <button
+              className="p-1.5 rounded-md text-vetted-text-muted hover:text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
+              title="Regenerate"
+            >
+              <RefreshCw size={15} />
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Main ChatView ─────────────────────────────────────────────────────────────
+export default function ChatView() {
+  const { id } = useParams<{ id: string }>();
+  const { activeChat, setActiveChat } = useStore();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = React.useState(false);
+
+  useEffect(() => {
+    if (id && (id !== activeChat?.id || !activeChat?.messages)) {
+      setLoading(true);
+      api.chats
+        .get(id)
+        .then((chat) => {
+          setActiveChat(chat);
+          setLoading(false);
+        })
+        .catch((err) => {
+          console.error(err);
+          setLoading(false);
+        });
+    }
+  }, [id, activeChat?.id, activeChat?.messages, setActiveChat]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [activeChat?.messages]);
+
+  if (!activeChat) return null;
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-white">
+        <div className="text-vetted-text-secondary">Loading chat...</div>
+      </div>
+    );
+  }
+
+  const messages = activeChat.messages || [];
+  if (messages.length === 0) return null;
+
+  return (
+    <div className="h-full overflow-y-auto bg-white">
+      <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+        {messages.map((msg, idx) => (
+          <div key={msg.id || idx}>
+            {msg.role === 'user' ? (
+              /* User message — right-aligned pill */
+              <div className="flex justify-end">
+                <div className="max-w-[75%] bg-vetted-surface text-vetted-primary rounded-2xl px-5 py-3 text-[15px] leading-relaxed whitespace-pre-wrap">
+                  {msg.content}
+                </div>
+              </div>
+            ) : (
+              <AssistantMessage
+                content={msg.content}
+                reasoning={msg.reasoning}
+                isLast={idx === messages.length - 1}
+              />
+            )}
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
+    </div>
+  );
+}

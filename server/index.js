@@ -1,0 +1,1213 @@
+import express from 'express';
+import cors from 'cors';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
+
+import { initializeDatabase, getDatabase, dbGet, dbAll, dbRun } from './database.js';
+import { getMockResponse } from './mock-responses.js';
+import { seedDatabase } from './seed.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const app = express();
+const PORT = process.env.PORT || 3000;
+const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// Ensure data directory exists
+const dataDir = path.join(__dirname, '../data');
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage });
+
+// Initialize database on startup
+let db;
+try {
+  // Initialize database
+  db = await initializeDatabase();
+
+  // Check if database needs seeding
+  const userCount = dbGet(db, 'SELECT COUNT(*) as count FROM users');
+  if (!userCount || userCount.count === 0) {
+    await seedDatabase();
+    db = getDatabase();
+    console.log('Database initialized and seeded');
+  } else {
+    console.log('Database already seeded, skipping seed process');
+  }
+} catch (error) {
+  console.error('Database initialization error:', error);
+  process.exit(1);
+}
+
+// Helper function to get current user (demo - from header)
+function getCurrentUserId(req) {
+  return req.headers['x-user-id'] || req.query.userId;
+}
+
+function getCurrentUser(req) {
+  const userId = getCurrentUserId(req);
+  if (!userId) {
+    return null;
+  }
+  return dbGet(db, 'SELECT * FROM users WHERE id = ?', [userId]);
+}
+
+// Middleware to check authentication
+function requireAuth(req, res, next) {
+  const user = getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  req.user = user;
+  next();
+}
+
+// ============================================================================
+// AUTH ROUTES
+// ============================================================================
+
+app.post('/api/auth/login', (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email required' });
+  }
+
+  const user = dbGet(db, 'SELECT * FROM users WHERE email = ?', [email]);
+
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  if (user.status !== 'active') {
+    return res.status(403).json({ error: 'User account is not active' });
+  }
+
+  // Update last login
+  dbRun(db, 'UPDATE users SET last_login_at = ? WHERE id = ?', [new Date().toISOString(), user.id]);
+
+  res.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      display_name: user.display_name,
+      role: user.role,
+      avatar_path: user.avatar_path
+    }
+  });
+});
+
+app.post('/api/auth/logout', requireAuth, (req, res) => {
+  res.json({ success: true });
+});
+
+app.get('/api/auth/me', requireAuth, (req, res) => {
+  res.json({
+    user: {
+      id: req.user.id,
+      email: req.user.email,
+      display_name: req.user.display_name,
+      job_title: req.user.job_title,
+      department: req.user.department,
+      role: req.user.role,
+      avatar_path: req.user.avatar_path,
+      status: req.user.status
+    }
+  });
+});
+
+// ============================================================================
+// CHAT ROUTES
+// ============================================================================
+
+app.get('/api/chats', requireAuth, (req, res) => {
+  const chats = dbAll(db, `
+    SELECT
+      c.id, c.user_id, c.project_id, c.title, c.model, c.temperature,
+      c.system_prompt, c.is_shared, c.created_at, c.updated_at,
+      COUNT(m.id) as message_count
+    FROM chats c
+    LEFT JOIN messages m ON c.id = m.chat_id
+    WHERE c.user_id = ?
+    GROUP BY c.id
+    ORDER BY c.updated_at DESC
+  `, [req.user.id]);
+
+  res.json({ chats });
+});
+
+app.post('/api/chats', requireAuth, (req, res) => {
+  const { title, model, project_id, system_prompt, temperature } = req.body;
+
+  const chatId = uuidv4();
+  const now = new Date().toISOString();
+
+  dbRun(db, `
+    INSERT INTO chats (id, user_id, project_id, title, model, temperature, system_prompt, is_shared, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    chatId,
+    req.user.id,
+    project_id || null,
+    title || 'New Chat',
+    model || 'claude-opus',
+    temperature || 0.7,
+    system_prompt || null,
+    0,
+    now,
+    now
+  ]);
+
+  const chat = dbGet(db, 'SELECT * FROM chats WHERE id = ?', [chatId]);
+  res.status(201).json({ chat });
+});
+
+app.get('/api/chats/:id', requireAuth, (req, res) => {
+  const chat = dbGet(db, 'SELECT * FROM chats WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+
+  if (!chat) {
+    return res.status(404).json({ error: 'Chat not found' });
+  }
+
+  const messages = dbAll(db, 'SELECT * FROM messages WHERE chat_id = ? ORDER BY created_at ASC', [req.params.id]);
+
+  // Parse reasoning if it exists
+  const messagesWithParsedReasoning = messages.map(m => ({
+    ...m,
+    reasoning: m.reasoning ? JSON.parse(m.reasoning) : null,
+    attachments: m.attachments ? JSON.parse(m.attachments) : null
+  }));
+
+  res.json({ chat, messages: messagesWithParsedReasoning });
+});
+
+app.put('/api/chats/:id', requireAuth, (req, res) => {
+  const { title, model, temperature, system_prompt } = req.body;
+
+  const chat = dbGet(db, 'SELECT * FROM chats WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+  if (!chat) {
+    return res.status(404).json({ error: 'Chat not found' });
+  }
+
+  const now = new Date().toISOString();
+  dbRun(db, `
+    UPDATE chats
+    SET title = ?, model = ?, temperature = ?, system_prompt = ?, updated_at = ?
+    WHERE id = ?
+  `, [
+    title !== undefined ? title : chat.title,
+    model !== undefined ? model : chat.model,
+    temperature !== undefined ? temperature : chat.temperature,
+    system_prompt !== undefined ? system_prompt : chat.system_prompt,
+    now,
+    req.params.id
+  ]);
+
+  const updatedChat = dbGet(db, 'SELECT * FROM chats WHERE id = ?', [req.params.id]);
+  res.json({ chat: updatedChat });
+});
+
+app.delete('/api/chats/:id', requireAuth, (req, res) => {
+  const chat = dbGet(db, 'SELECT * FROM chats WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+
+  if (!chat) {
+    return res.status(404).json({ error: 'Chat not found' });
+  }
+
+  dbRun(db, 'DELETE FROM messages WHERE chat_id = ?', [req.params.id]);
+  dbRun(db, 'DELETE FROM chats WHERE id = ?', [req.params.id]);
+
+  res.json({ success: true });
+});
+
+app.post('/api/chats/:id/messages', requireAuth, (req, res) => {
+  const { content, attachments } = req.body;
+
+  const chat = dbGet(db, 'SELECT * FROM chats WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+  if (!chat) {
+    return res.status(404).json({ error: 'Chat not found' });
+  }
+
+  const now = new Date().toISOString();
+
+  // Save user message
+  const userMessageId = uuidv4();
+  dbRun(db, `
+    INSERT INTO messages (id, chat_id, role, content, model_used, token_count, reasoning, attachments, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    userMessageId,
+    req.params.id,
+    'user',
+    content,
+    chat.model,
+    Math.ceil(content.split(/\s+/).length * 1.3),
+    null,
+    attachments ? JSON.stringify(attachments) : null,
+    now
+  ]);
+
+  // Generate mock AI response
+  const mockResponse = getMockResponse(content, chat.model);
+
+  // Save AI message
+  const aiMessageId = uuidv4();
+  dbRun(db, `
+    INSERT INTO messages (id, chat_id, role, content, model_used, token_count, reasoning, attachments, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    aiMessageId,
+    req.params.id,
+    'assistant',
+    mockResponse.content,
+    chat.model,
+    Math.ceil(mockResponse.content.split(/\s+/).length * 1.3),
+    JSON.stringify(mockResponse.reasoning),
+    null,
+    now
+  ]);
+
+  // Update chat updated_at
+  dbRun(db, 'UPDATE chats SET updated_at = ? WHERE id = ?', [now, req.params.id]);
+
+  // Return both messages with timing info
+  res.json({
+    messages: [
+      {
+        id: userMessageId,
+        role: 'user',
+        content,
+        model_used: chat.model,
+        created_at: now
+      },
+      {
+        id: aiMessageId,
+        role: 'assistant',
+        content: mockResponse.content,
+        model_used: chat.model,
+        reasoning: mockResponse.reasoning,
+        created_at: now
+      }
+    ],
+    timing: {
+      processing_time_ms: 1200 + Math.random() * 800,
+      tokens_generated: Math.ceil(mockResponse.content.split(/\s+/).length * 1.3),
+      response_time_ms: 2400 + Math.random() * 1200
+    }
+  });
+});
+
+app.post('/api/chats/:id/share', requireAuth, (req, res) => {
+  const { shared_with, permission } = req.body;
+
+  const chat = dbGet(db, 'SELECT * FROM chats WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+  if (!chat) {
+    return res.status(404).json({ error: 'Chat not found' });
+  }
+
+  const shareId = uuidv4();
+  const now = new Date().toISOString();
+
+  dbRun(db, `
+    INSERT INTO chat_shares (id, chat_id, shared_by, shared_with, permission, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `, [shareId, req.params.id, req.user.id, shared_with, permission || 'view', now]);
+
+  res.status(201).json({
+    share: {
+      id: shareId,
+      chat_id: req.params.id,
+      shared_by: req.user.id,
+      shared_with,
+      permission: permission || 'view',
+      created_at: now
+    }
+  });
+});
+
+app.get('/api/chats/shared/with-me', requireAuth, (req, res) => {
+  const sharedChats = dbAll(db, `
+    SELECT
+      c.*,
+      cs.shared_by,
+      cs.permission,
+      u.display_name as shared_by_name
+    FROM chat_shares cs
+    JOIN chats c ON cs.chat_id = c.id
+    JOIN users u ON cs.shared_by = u.id
+    WHERE cs.shared_with = ?
+    ORDER BY cs.created_at DESC
+  `, [req.user.id]);
+
+  res.json({ chats: sharedChats });
+});
+
+// ============================================================================
+// PROJECT ROUTES
+// ============================================================================
+
+app.get('/api/projects', requireAuth, (req, res) => {
+  const projects = dbAll(db, `
+    SELECT DISTINCT p.* FROM projects p
+    WHERE p.owner_id = ? OR p.id IN (
+      SELECT project_id FROM project_members WHERE user_id = ?
+    )
+    ORDER BY p.updated_at DESC
+  `, [req.user.id, req.user.id]);
+
+  const result = projects.map(p => ({
+    ...p,
+    tool_sets: p.tool_sets ? JSON.parse(p.tool_sets) : []
+  }));
+
+  res.json({ projects: result });
+});
+
+app.post('/api/projects', requireAuth, (req, res) => {
+  const { name, description, default_model, system_prompt, temperature, tool_sets } = req.body;
+
+  const projectId = uuidv4();
+  const now = new Date().toISOString();
+
+  dbRun(db, `
+    INSERT INTO projects (id, owner_id, name, description, default_model, system_prompt, temperature, tool_sets, status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    projectId,
+    req.user.id,
+    name,
+    description || null,
+    default_model || 'claude-opus',
+    system_prompt || null,
+    temperature || 0.7,
+    tool_sets ? JSON.stringify(tool_sets) : JSON.stringify([]),
+    'active',
+    now,
+    now
+  ]);
+
+  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [projectId]);
+  res.status(201).json({ project });
+});
+
+app.get('/api/projects/:id', requireAuth, (req, res) => {
+  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [req.params.id]);
+
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  const members = dbAll(db, 'SELECT * FROM project_members WHERE project_id = ?', [req.params.id]);
+
+  res.json({
+    project: {
+      ...project,
+      tool_sets: project.tool_sets ? JSON.parse(project.tool_sets) : []
+    },
+    members
+  });
+});
+
+app.put('/api/projects/:id', requireAuth, (req, res) => {
+  const { name, description, default_model, system_prompt, temperature, tool_sets } = req.body;
+
+  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ? AND owner_id = ?', [req.params.id, req.user.id]);
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found or not authorized' });
+  }
+
+  const now = new Date().toISOString();
+  dbRun(db, `
+    UPDATE projects
+    SET name = ?, description = ?, default_model = ?, system_prompt = ?, temperature = ?, tool_sets = ?, updated_at = ?
+    WHERE id = ?
+  `, [
+    name !== undefined ? name : project.name,
+    description !== undefined ? description : project.description,
+    default_model !== undefined ? default_model : project.default_model,
+    system_prompt !== undefined ? system_prompt : project.system_prompt,
+    temperature !== undefined ? temperature : project.temperature,
+    tool_sets !== undefined ? JSON.stringify(tool_sets) : project.tool_sets,
+    now,
+    req.params.id
+  ]);
+
+  const updated = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [req.params.id]);
+  res.json({ project: updated });
+});
+
+app.delete('/api/projects/:id', requireAuth, (req, res) => {
+  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ? AND owner_id = ?', [req.params.id, req.user.id]);
+
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found or not authorized' });
+  }
+
+  dbRun(db, 'DELETE FROM project_members WHERE project_id = ?', [req.params.id]);
+  dbRun(db, 'DELETE FROM projects WHERE id = ?', [req.params.id]);
+
+  res.json({ success: true });
+});
+
+app.post('/api/projects/:id/members', requireAuth, (req, res) => {
+  const { user_id, permission } = req.body;
+
+  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ? AND owner_id = ?', [req.params.id, req.user.id]);
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found or not authorized' });
+  }
+
+  const memberId = uuidv4();
+  const now = new Date().toISOString();
+
+  try {
+    dbRun(db, `
+      INSERT INTO project_members (id, project_id, user_id, permission, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `, [memberId, req.params.id, user_id, permission || 'viewer', now]);
+
+    res.status(201).json({
+      member: {
+        id: memberId,
+        project_id: req.params.id,
+        user_id,
+        permission: permission || 'viewer',
+        created_at: now
+      }
+    });
+  } catch (error) {
+    res.status(400).json({ error: 'Member already exists or invalid user' });
+  }
+});
+
+app.delete('/api/projects/:id/members/:userId', requireAuth, (req, res) => {
+  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ? AND owner_id = ?', [req.params.id, req.user.id]);
+
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found or not authorized' });
+  }
+
+  dbRun(db, 'DELETE FROM project_members WHERE project_id = ? AND user_id = ?', [req.params.id, req.params.userId]);
+
+  res.json({ success: true });
+});
+
+// ============================================================================
+// LIBRARY ROUTES
+// ============================================================================
+
+app.get('/api/library', requireAuth, (req, res) => {
+  const files = dbAll(db, 'SELECT * FROM library_files WHERE user_id = ? ORDER BY uploaded_at DESC', [req.user.id]);
+
+  res.json({ files });
+});
+
+app.post('/api/library/upload', requireAuth, upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file provided' });
+  }
+
+  const { project_id } = req.body;
+  const fileId = uuidv4();
+  const now = new Date().toISOString();
+  const stats = fs.statSync(req.file.path);
+
+  dbRun(db, `
+    INSERT INTO library_files (id, user_id, filename, original_name, file_path, file_type, file_size, mime_type, project_id, uploaded_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    fileId,
+    req.user.id,
+    req.file.filename,
+    req.file.originalname,
+    `/uploads/${req.file.filename}`,
+    req.file.originalname.split('.').pop(),
+    stats.size,
+    req.file.mimetype,
+    project_id || null,
+    now
+  ]);
+
+  const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ?', [fileId]);
+  res.status(201).json({ file });
+});
+
+app.get('/api/library/:id/download', requireAuth, (req, res) => {
+  const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+
+  if (!file) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  const filePath = path.join(__dirname, '..', file.file_path);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found on disk' });
+  }
+
+  res.download(filePath, file.original_name);
+});
+
+app.put('/api/library/:id', requireAuth, (req, res) => {
+  const { original_name } = req.body;
+
+  const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+  if (!file) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  dbRun(db, 'UPDATE library_files SET original_name = ? WHERE id = ?', [
+    original_name || file.original_name,
+    req.params.id
+  ]);
+
+  const updated = dbGet(db, 'SELECT * FROM library_files WHERE id = ?', [req.params.id]);
+  res.json({ file: updated });
+});
+
+app.delete('/api/library/:id', requireAuth, (req, res) => {
+  const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+
+  if (!file) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  const filePath = path.join(__dirname, '..', file.file_path);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+
+  dbRun(db, 'DELETE FROM library_files WHERE id = ?', [req.params.id]);
+
+  res.json({ success: true });
+});
+
+app.get('/api/library/stats', requireAuth, (req, res) => {
+  const stats = dbGet(db, `
+    SELECT
+      COUNT(*) as total_files,
+      SUM(file_size) as total_size,
+      COUNT(DISTINCT file_type) as file_types
+    FROM library_files
+    WHERE user_id = ?
+  `, [req.user.id]);
+
+  res.json({ stats });
+});
+
+// ============================================================================
+// APPS ROUTES
+// ============================================================================
+
+app.get('/api/apps', (req, res) => {
+  const apps = dbAll(db, 'SELECT * FROM apps WHERE status = ? ORDER BY usage_count DESC', ['active']);
+
+  const result = apps.map(app => ({
+    ...app,
+    tool_sets: app.tool_sets ? JSON.parse(app.tool_sets) : []
+  }));
+
+  res.json({ apps: result });
+});
+
+app.post('/api/apps', requireAuth, (req, res) => {
+  const { name, description, icon, category, system_prompt, model, temperature, tool_sets } = req.body;
+
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only admins can create apps' });
+  }
+
+  const appId = uuidv4();
+  const now = new Date().toISOString();
+
+  dbRun(db, `
+    INSERT INTO apps (id, name, description, icon, category, system_prompt, model, temperature, tool_sets, visibility, status, usage_count, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    appId,
+    name,
+    description || null,
+    icon || null,
+    category,
+    system_prompt,
+    model,
+    temperature || 0.7,
+    tool_sets ? JSON.stringify(tool_sets) : JSON.stringify([]),
+    'all',
+    'active',
+    0,
+    req.user.id,
+    now,
+    now
+  ]);
+
+  const app = dbGet(db, 'SELECT * FROM apps WHERE id = ?', [appId]);
+  res.status(201).json({ app });
+});
+
+app.put('/api/apps/:id', requireAuth, (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only admins can update apps' });
+  }
+
+  const { name, description, icon, category, system_prompt, model, temperature, tool_sets } = req.body;
+
+  const app = dbGet(db, 'SELECT * FROM apps WHERE id = ?', [req.params.id]);
+  if (!app) {
+    return res.status(404).json({ error: 'App not found' });
+  }
+
+  const now = new Date().toISOString();
+  dbRun(db, `
+    UPDATE apps
+    SET name = ?, description = ?, icon = ?, category = ?, system_prompt = ?, model = ?, temperature = ?, tool_sets = ?, updated_at = ?
+    WHERE id = ?
+  `, [
+    name !== undefined ? name : app.name,
+    description !== undefined ? description : app.description,
+    icon !== undefined ? icon : app.icon,
+    category !== undefined ? category : app.category,
+    system_prompt !== undefined ? system_prompt : app.system_prompt,
+    model !== undefined ? model : app.model,
+    temperature !== undefined ? temperature : app.temperature,
+    tool_sets !== undefined ? JSON.stringify(tool_sets) : app.tool_sets,
+    now,
+    req.params.id
+  ]);
+
+  const updated = dbGet(db, 'SELECT * FROM apps WHERE id = ?', [req.params.id]);
+  res.json({ app: updated });
+});
+
+app.delete('/api/apps/:id', requireAuth, (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only admins can delete apps' });
+  }
+
+  const app = dbGet(db, 'SELECT * FROM apps WHERE id = ?', [req.params.id]);
+  if (!app) {
+    return res.status(404).json({ error: 'App not found' });
+  }
+
+  dbRun(db, 'DELETE FROM apps WHERE id = ?', [req.params.id]);
+
+  res.json({ success: true });
+});
+
+app.get('/api/apps/categories', (req, res) => {
+  const categories = dbAll(db, 'SELECT * FROM app_categories ORDER BY name ASC');
+
+  res.json({ categories });
+});
+
+// ============================================================================
+// ADMIN ROUTES
+// ============================================================================
+
+function requireAdmin(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+}
+
+app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
+  const userCount = dbGet(db, 'SELECT COUNT(*) as count FROM users WHERE status = ?', ['active']);
+  const chatCount = dbGet(db, 'SELECT COUNT(*) as count FROM chats');
+  const projectCount = dbGet(db, 'SELECT COUNT(*) as count FROM projects');
+  const messageCount = dbGet(db, 'SELECT COUNT(*) as count FROM messages');
+  const toolSetCount = dbGet(db, 'SELECT COUNT(*) as count FROM tool_sets');
+  const modelCount = dbGet(db, 'SELECT COUNT(*) as count FROM model_configs');
+  const promptCount = dbGet(db, 'SELECT COUNT(*) as count FROM system_prompts');
+  const today = new Date().toISOString().split('T')[0];
+  const activeTodayCount = dbGet(db, "SELECT COUNT(*) as count FROM users WHERE last_login_at >= ?", [today]);
+
+  res.json({
+    stats: {
+      total_users: userCount.count,
+      active_users: userCount.count,
+      active_today: activeTodayCount.count,
+      total_chats: chatCount.count,
+      total_projects: projectCount.count,
+      total_messages: messageCount.count,
+      tool_sets: toolSetCount.count,
+      models: modelCount.count,
+      system_prompts: promptCount.count,
+      timestamp: new Date().toISOString()
+    }
+  });
+});
+
+app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
+  const users = dbAll(db, 'SELECT id, email, display_name, job_title, department, role, status, created_at, last_login_at FROM users ORDER BY created_at DESC');
+
+  res.json({ users });
+});
+
+app.put('/api/admin/users/:id/role', requireAuth, requireAdmin, (req, res) => {
+  const { role } = req.body;
+
+  if (!['user', 'admin'].includes(role)) {
+    return res.status(400).json({ error: 'Invalid role' });
+  }
+
+  dbRun(db, 'UPDATE users SET role = ? WHERE id = ?', [role, req.params.id]);
+
+  const user = dbGet(db, 'SELECT * FROM users WHERE id = ?', [req.params.id]);
+  res.json({ user });
+});
+
+app.put('/api/admin/users/:id/status', requireAuth, requireAdmin, (req, res) => {
+  const { status } = req.body;
+
+  if (!['active', 'inactive', 'suspended'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+
+  dbRun(db, 'UPDATE users SET status = ? WHERE id = ?', [status, req.params.id]);
+
+  const user = dbGet(db, 'SELECT * FROM users WHERE id = ?', [req.params.id]);
+  res.json({ user });
+});
+
+app.get('/api/admin/tool-sets', requireAuth, requireAdmin, (req, res) => {
+  const toolSets = dbAll(db, 'SELECT * FROM tool_sets ORDER BY created_at DESC');
+
+  const result = toolSets.map(ts => ({
+    ...ts,
+    tools: ts.tools ? JSON.parse(ts.tools) : [],
+    api_config: ts.api_config ? JSON.parse(ts.api_config) : {}
+  }));
+
+  res.json({ tool_sets: result });
+});
+
+app.post('/api/admin/tool-sets', requireAuth, requireAdmin, (req, res) => {
+  const { name, description, tools, api_config } = req.body;
+
+  const toolSetId = uuidv4();
+  const now = new Date().toISOString();
+
+  dbRun(db, `
+    INSERT INTO tool_sets (id, name, description, tools, api_config, status, usage_count, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    toolSetId,
+    name,
+    description || null,
+    JSON.stringify(tools || []),
+    api_config ? JSON.stringify(api_config) : null,
+    'active',
+    0,
+    now,
+    now
+  ]);
+
+  const toolSet = dbGet(db, 'SELECT * FROM tool_sets WHERE id = ?', [toolSetId]);
+  res.status(201).json({ tool_set: toolSet });
+});
+
+app.put('/api/admin/tool-sets/:id', requireAuth, requireAdmin, (req, res) => {
+  const { name, description, tools, api_config } = req.body;
+
+  const toolSet = dbGet(db, 'SELECT * FROM tool_sets WHERE id = ?', [req.params.id]);
+  if (!toolSet) {
+    return res.status(404).json({ error: 'Tool set not found' });
+  }
+
+  const now = new Date().toISOString();
+  dbRun(db, `
+    UPDATE tool_sets
+    SET name = ?, description = ?, tools = ?, api_config = ?, updated_at = ?
+    WHERE id = ?
+  `, [
+    name !== undefined ? name : toolSet.name,
+    description !== undefined ? description : toolSet.description,
+    tools !== undefined ? JSON.stringify(tools) : toolSet.tools,
+    api_config !== undefined ? JSON.stringify(api_config) : toolSet.api_config,
+    now,
+    req.params.id
+  ]);
+
+  const updated = dbGet(db, 'SELECT * FROM tool_sets WHERE id = ?', [req.params.id]);
+  res.json({ tool_set: updated });
+});
+
+app.delete('/api/admin/tool-sets/:id', requireAuth, requireAdmin, (req, res) => {
+  const toolSet = dbGet(db, 'SELECT * FROM tool_sets WHERE id = ?', [req.params.id]);
+
+  if (!toolSet) {
+    return res.status(404).json({ error: 'Tool set not found' });
+  }
+
+  dbRun(db, 'DELETE FROM tool_sets WHERE id = ?', [req.params.id]);
+
+  res.json({ success: true });
+});
+
+app.get('/api/admin/models', requireAuth, requireAdmin, (req, res) => {
+  const models = dbAll(db, 'SELECT * FROM model_configs ORDER BY display_name ASC');
+
+  res.json({ models });
+});
+
+app.put('/api/admin/models/:id', requireAuth, requireAdmin, (req, res) => {
+  const { is_enabled, is_default, max_tokens, rate_limit } = req.body;
+
+  const model = dbGet(db, 'SELECT * FROM model_configs WHERE id = ?', [req.params.id]);
+  if (!model) {
+    return res.status(404).json({ error: 'Model not found' });
+  }
+
+  const now = new Date().toISOString();
+  dbRun(db, `
+    UPDATE model_configs
+    SET is_enabled = ?, is_default = ?, max_tokens = ?, rate_limit = ?, updated_at = ?
+    WHERE id = ?
+  `, [
+    is_enabled !== undefined ? is_enabled : model.is_enabled,
+    is_default !== undefined ? is_default : model.is_default,
+    max_tokens !== undefined ? max_tokens : model.max_tokens,
+    rate_limit !== undefined ? rate_limit : model.rate_limit,
+    now,
+    req.params.id
+  ]);
+
+  const updated = dbGet(db, 'SELECT * FROM model_configs WHERE id = ?', [req.params.id]);
+  res.json({ model: updated });
+});
+
+app.get('/api/admin/system-prompts', requireAuth, requireAdmin, (req, res) => {
+  const prompts = dbAll(db, 'SELECT * FROM system_prompts ORDER BY created_at DESC');
+
+  res.json({ prompts });
+});
+
+app.post('/api/admin/system-prompts', requireAuth, requireAdmin, (req, res) => {
+  const { name, prompt_text, scope } = req.body;
+
+  const promptId = uuidv4();
+  const now = new Date().toISOString();
+
+  dbRun(db, `
+    INSERT INTO system_prompts (id, name, prompt_text, scope, status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `, [promptId, name, prompt_text, scope, 'active', now, now]);
+
+  const prompt = dbGet(db, 'SELECT * FROM system_prompts WHERE id = ?', [promptId]);
+  res.status(201).json({ prompt });
+});
+
+app.put('/api/admin/system-prompts/:id', requireAuth, requireAdmin, (req, res) => {
+  const { name, prompt_text, scope } = req.body;
+
+  const prompt = dbGet(db, 'SELECT * FROM system_prompts WHERE id = ?', [req.params.id]);
+  if (!prompt) {
+    return res.status(404).json({ error: 'Prompt not found' });
+  }
+
+  const now = new Date().toISOString();
+  dbRun(db, `
+    UPDATE system_prompts
+    SET name = ?, prompt_text = ?, scope = ?, updated_at = ?
+    WHERE id = ?
+  `, [
+    name !== undefined ? name : prompt.name,
+    prompt_text !== undefined ? prompt_text : prompt.prompt_text,
+    scope !== undefined ? scope : prompt.scope,
+    now,
+    req.params.id
+  ]);
+
+  const updated = dbGet(db, 'SELECT * FROM system_prompts WHERE id = ?', [req.params.id]);
+  res.json({ prompt: updated });
+});
+
+app.get('/api/admin/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    uptime: process.uptime(),
+    environment: NODE_ENV,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ============================================================================
+// SETTINGS ROUTES
+// ============================================================================
+
+app.get('/api/settings/profile', requireAuth, (req, res) => {
+  res.json({ profile: req.user });
+});
+
+app.put('/api/settings/profile', requireAuth, (req, res) => {
+  const { display_name, job_title, department, avatar_path } = req.body;
+
+  const now = new Date().toISOString();
+  dbRun(db, `
+    UPDATE users
+    SET display_name = ?, job_title = ?, department = ?, avatar_path = ?, updated_at = ?
+    WHERE id = ?
+  `, [
+    display_name !== undefined ? display_name : req.user.display_name,
+    job_title !== undefined ? job_title : req.user.job_title,
+    department !== undefined ? department : req.user.department,
+    avatar_path !== undefined ? avatar_path : req.user.avatar_path,
+    now,
+    req.user.id
+  ]);
+
+  const updated = dbGet(db, 'SELECT * FROM users WHERE id = ?', [req.user.id]);
+  res.json({ profile: updated });
+});
+
+app.get('/api/settings/preferences', requireAuth, (req, res) => {
+  const prefs = dbGet(db, 'SELECT * FROM user_preferences WHERE user_id = ?', [req.user.id]);
+
+  if (!prefs) {
+    // Create default preferences
+    const prefId = uuidv4();
+    const now = new Date().toISOString();
+    dbRun(db, `
+      INSERT INTO user_preferences (id, user_id, default_model, default_temperature, show_reasoning, auto_scroll, compact_view, code_theme, notify_shared_chat, notify_project_updates, notify_system, notify_weekly_summary)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [prefId, req.user.id, 'claude-opus', 0.7, 0, 1, 0, 'light', 1, 1, 1, 0]);
+
+    const newPrefs = dbGet(db, 'SELECT * FROM user_preferences WHERE user_id = ?', [req.user.id]);
+    return res.json({ preferences: newPrefs });
+  }
+
+  res.json({ preferences: prefs });
+});
+
+app.put('/api/settings/preferences', requireAuth, (req, res) => {
+  const { default_model, default_temperature, show_reasoning, auto_scroll, compact_view, code_theme, notify_shared_chat, notify_project_updates, notify_system, notify_weekly_summary } = req.body;
+
+  let prefs = dbGet(db, 'SELECT * FROM user_preferences WHERE user_id = ?', [req.user.id]);
+
+  if (!prefs) {
+    // Create default preferences first
+    const prefId = uuidv4();
+    dbRun(db, `
+      INSERT INTO user_preferences (id, user_id, default_model, default_temperature, show_reasoning, auto_scroll, compact_view, code_theme, notify_shared_chat, notify_project_updates, notify_system, notify_weekly_summary)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [prefId, req.user.id, 'claude-opus', 0.7, 0, 1, 0, 'light', 1, 1, 1, 0]);
+
+    prefs = dbGet(db, 'SELECT * FROM user_preferences WHERE user_id = ?', [req.user.id]);
+  }
+
+  dbRun(db, `
+    UPDATE user_preferences
+    SET default_model = ?, default_temperature = ?, show_reasoning = ?, auto_scroll = ?, compact_view = ?, code_theme = ?, notify_shared_chat = ?, notify_project_updates = ?, notify_system = ?, notify_weekly_summary = ?
+    WHERE user_id = ?
+  `, [
+    default_model !== undefined ? default_model : prefs.default_model,
+    default_temperature !== undefined ? default_temperature : prefs.default_temperature,
+    show_reasoning !== undefined ? show_reasoning : prefs.show_reasoning,
+    auto_scroll !== undefined ? auto_scroll : prefs.auto_scroll,
+    compact_view !== undefined ? compact_view : prefs.compact_view,
+    code_theme !== undefined ? code_theme : prefs.code_theme,
+    notify_shared_chat !== undefined ? notify_shared_chat : prefs.notify_shared_chat,
+    notify_project_updates !== undefined ? notify_project_updates : prefs.notify_project_updates,
+    notify_system !== undefined ? notify_system : prefs.notify_system,
+    notify_weekly_summary !== undefined ? notify_weekly_summary : prefs.notify_weekly_summary,
+    req.user.id
+  ]);
+
+  const updated = dbGet(db, 'SELECT * FROM user_preferences WHERE user_id = ?', [req.user.id]);
+  res.json({ preferences: updated });
+});
+
+app.get('/api/settings/api-keys', requireAuth, (req, res) => {
+  const keys = dbAll(db, 'SELECT id, name, key_preview, permissions, expires_at, status, last_used_at, created_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC', [req.user.id]);
+
+  res.json({ api_keys: keys });
+});
+
+app.post('/api/settings/api-keys', requireAuth, (req, res) => {
+  const { name, permissions, expires_at } = req.body;
+
+  const keyId = uuidv4();
+  const rawKey = uuidv4() + '-' + uuidv4();
+  const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+  const keyPreview = rawKey.substring(0, 8) + '...';
+  const now = new Date().toISOString();
+
+  dbRun(db, `
+    INSERT INTO api_keys (id, user_id, name, key_hash, key_preview, permissions, expires_at, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    keyId,
+    req.user.id,
+    name,
+    keyHash,
+    keyPreview,
+    JSON.stringify(permissions || []),
+    expires_at || null,
+    'active',
+    now
+  ]);
+
+  res.status(201).json({
+    api_key: {
+      id: keyId,
+      name,
+      key: rawKey,
+      key_preview: keyPreview,
+      permissions: permissions || [],
+      expires_at: expires_at || null,
+      created_at: now
+    }
+  });
+});
+
+app.delete('/api/settings/api-keys/:id', requireAuth, (req, res) => {
+  const key = dbGet(db, 'SELECT * FROM api_keys WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+
+  if (!key) {
+    return res.status(404).json({ error: 'API key not found' });
+  }
+
+  dbRun(db, 'DELETE FROM api_keys WHERE id = ?', [req.params.id]);
+
+  res.json({ success: true });
+});
+
+app.get('/api/settings/sessions', requireAuth, (req, res) => {
+  const sessions = dbAll(db, 'SELECT id, token, expires_at, created_at FROM sessions WHERE user_id = ? ORDER BY created_at DESC', [req.user.id]);
+
+  res.json({ sessions });
+});
+
+// ============================================================================
+// SEARCH ROUTES
+// ============================================================================
+
+app.get('/api/search', requireAuth, (req, res) => {
+  const query = req.query.q || '';
+
+  if (query.length < 2) {
+    return res.json({ results: [] });
+  }
+
+  const searchTerm = `%${query}%`;
+
+  const chatResults = dbAll(db, 'SELECT id, title, user_id FROM chats WHERE user_id = ? AND (title LIKE ? OR id LIKE ?) LIMIT 5', [req.user.id, searchTerm, searchTerm]);
+
+  const projectResults = dbAll(db, `
+    SELECT p.id, p.name, p.owner_id
+    FROM projects p
+    WHERE (p.owner_id = ? OR p.id IN (SELECT project_id FROM project_members WHERE user_id = ?))
+    AND (p.name LIKE ? OR p.description LIKE ?)
+    LIMIT 5
+  `, [req.user.id, req.user.id, searchTerm, searchTerm]);
+
+  const fileResults = dbAll(db, 'SELECT id, original_name, user_id FROM library_files WHERE user_id = ? AND original_name LIKE ? LIMIT 5', [req.user.id, searchTerm]);
+
+  const appResults = dbAll(db, 'SELECT id, name, category FROM apps WHERE status = ? AND (name LIKE ? OR description LIKE ?) LIMIT 5', ['active', searchTerm, searchTerm]);
+
+  res.json({
+    results: {
+      chats: chatResults.map(c => ({ type: 'chat', ...c })),
+      projects: projectResults.map(p => ({ type: 'project', ...p })),
+      files: fileResults.map(f => ({ type: 'file', ...f })),
+      apps: appResults.map(a => ({ type: 'app', ...a }))
+    }
+  });
+});
+
+// ============================================================================
+// NOTIFICATIONS ROUTES
+// ============================================================================
+
+app.get('/api/notifications', requireAuth, (req, res) => {
+  const notifications = dbAll(db, 'SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC', [req.user.id]);
+
+  res.json({ notifications });
+});
+
+app.put('/api/notifications/:id/read', requireAuth, (req, res) => {
+  const notification = dbGet(db, 'SELECT * FROM notifications WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+
+  if (!notification) {
+    return res.status(404).json({ error: 'Notification not found' });
+  }
+
+  dbRun(db, 'UPDATE notifications SET is_read = 1 WHERE id = ?', [req.params.id]);
+
+  const updated = dbGet(db, 'SELECT * FROM notifications WHERE id = ?', [req.params.id]);
+  res.json({ notification: updated });
+});
+
+app.put('/api/notifications/read-all', requireAuth, (req, res) => {
+  dbRun(db, 'UPDATE notifications SET is_read = 1 WHERE user_id = ?', [req.user.id]);
+
+  res.json({ success: true });
+});
+
+// ============================================================================
+// STATIC FILE SERVING
+// ============================================================================
+
+if (NODE_ENV === 'production') {
+  const distPath = path.join(__dirname, '../dist');
+  app.use(express.static(distPath));
+
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal server error'
+  });
+});
+
+// ============================================================================
+// START SERVER
+// ============================================================================
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT} (${NODE_ENV} mode)`);
+  console.log(`API available at http://localhost:${PORT}/api`);
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\nShutting down gracefully...');
+  process.exit(0);
+});
+
+export default app;

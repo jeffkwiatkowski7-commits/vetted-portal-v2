@@ -45,6 +45,8 @@ interface AppState {
   setDemoInputText: (v: string) => void;
   setDemoShowModelPicker: (v: boolean) => void;
   setDemoAttachedFile: (v: string | null) => void;
+  demoTriggerSend: boolean;
+  setDemoTriggerSend: (v: boolean) => void;
 
   // Search
   searchOpen: boolean;
@@ -102,6 +104,7 @@ export const useStore = create<AppState>((set, get) => ({
     demoInputText: '',
     demoShowModelPicker: false,
     demoAttachedFile: null,
+    demoTriggerSend: false,
   }),
   setDemoPaused: (v) => set({ demoPaused: v }),
   setDemoStep: (v) => set({ demoStep: v }),
@@ -109,6 +112,8 @@ export const useStore = create<AppState>((set, get) => ({
   setDemoInputText: (v) => set({ demoInputText: v }),
   setDemoShowModelPicker: (v) => set({ demoShowModelPicker: v }),
   setDemoAttachedFile: (v) => set({ demoAttachedFile: v }),
+  demoTriggerSend: false,
+  setDemoTriggerSend: (v) => set({ demoTriggerSend: v }),
 
   // Search
   searchOpen: false,

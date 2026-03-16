@@ -1,6 +1,0 @@
-{"type":"server-started","port":50514,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:50514","screen_dir":"/Users/jeffkwiatkowski/vetted_portal_v2/.superpowers/brainstorm/11562-1773539631"}
-{"type":"screen-added","file":"/Users/jeffkwiatkowski/vetted_portal_v2/.superpowers/brainstorm/11562-1773539631/modal-layout.html"}
-{"type":"screen-added","file":"/Users/jeffkwiatkowski/vetted_portal_v2/.superpowers/brainstorm/11562-1773539631/waiting-1.html"}
-{"type":"screen-added","file":"/Users/jeffkwiatkowski/vetted_portal_v2/.superpowers/brainstorm/11562-1773539631/design-overview.html"}
-{"source":"user-event","type":"click","text":"✓\n    \n      Design looks good — proceed\n      Move forward to writing the implementation plan","choice":"approve","id":null,"timestamp":1773540079123}
-{"type":"server-stopped","reason":"idle timeout"}

@@ -21,6 +21,7 @@ export default function DemoMode() {
     setDemoInputText,
     setDemoShowModelPicker,
     setDemoAttachedFile,
+    setDemoTriggerSend,
   } = useStore();
 
   const [activeScenario, setActiveScenario] = useState<number | null>(null);
@@ -42,6 +43,7 @@ export default function DemoMode() {
             setDemoInputText('Summarize the key risks in our Q4 earnings report');
             setDemoShowModelPicker(false);
             setDemoAttachedFile(null);
+            setDemoTriggerSend(false);
           },
           duration: 3000,
         },
@@ -54,12 +56,20 @@ export default function DemoMode() {
           duration: 3000,
         },
         {
-          description: 'Hit send to get your answer',
+          description: 'Sonnet 4.6 selected — ready to send',
           highlight: 'send-button',
           action: () => {
             setDemoShowModelPicker(false);
           },
-          duration: 2500,
+          duration: 2000,
+        },
+        {
+          description: 'Sending your request — watch the response appear below',
+          highlight: null,
+          action: () => {
+            setDemoTriggerSend(true);
+          },
+          duration: 3500,
         },
       ],
     },
@@ -76,14 +86,9 @@ export default function DemoMode() {
             setDemoInputText('');
             setDemoAttachedFile('Q4_Earnings_Report.pdf');
             setDemoShowModelPicker(false);
+            setDemoTriggerSend(false);
           },
           duration: 3000,
-        },
-        {
-          description: 'Your file is attached and ready for analysis',
-          highlight: 'chat-input',
-          action: () => {},
-          duration: 2500,
         },
         {
           description: 'Ask a question about the document',
@@ -94,10 +99,18 @@ export default function DemoMode() {
           duration: 3000,
         },
         {
-          description: 'Send to get instant AI insights on your file',
+          description: 'Your file is attached and ready — sending now',
           highlight: 'send-button',
           action: () => {},
-          duration: 2500,
+          duration: 2000,
+        },
+        {
+          description: 'Sending your request — watch the response appear below',
+          highlight: null,
+          action: () => {
+            setDemoTriggerSend(true);
+          },
+          duration: 3500,
         },
       ],
     },

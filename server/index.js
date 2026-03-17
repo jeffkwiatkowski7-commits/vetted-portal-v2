@@ -10,6 +10,7 @@ import crypto from 'crypto';
 import { initializeDatabase, getDatabase, dbGet, dbAll, dbRun } from './database.js';
 import { getMockResponse } from './mock-responses.js';
 import { seedDatabase } from './seed.js';
+import leaseRoutes from './lease-routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -1104,6 +1105,12 @@ app.get('/api/settings/sessions', requireAuth, (req, res) => {
 
   res.json({ sessions });
 });
+
+// ============================================================================
+// LEASE ROUTES (Firestore + Gemini integration from cbre_leases)
+// ============================================================================
+
+app.use('/api', leaseRoutes);
 
 // ============================================================================
 // SEARCH ROUTES

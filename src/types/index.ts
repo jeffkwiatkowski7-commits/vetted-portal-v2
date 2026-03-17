@@ -202,3 +202,76 @@ export interface DemoStep {
   target?: string;
   navigate?: string;
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Lease Bot Types (from cbre_leases integration)
+// ════════════════════════════════════════════════════════════════════
+
+export interface LeaseData {
+  id?: string;
+  sourceFile: string;
+  tenantName: string | null;
+  landlordName: string | null;
+  propertyAddress: string | null;
+  propertyId: string | null;
+  projectId: string | null;
+  suiteNumber: string | null;
+  leaseStartDate: string | null;
+  leaseEndDate: string | null;
+  monthlyRent: number | null;
+  rentEscalationTerms: string | null;
+  renewalOptions: string | null;
+  permittedUse: string | null;
+  squareFootage: number | null;
+  securityDeposit: number | null;
+  terminationClauses: string | null;
+  specialProvisions: string | null;
+  fullText?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface LeaseProject {
+  id: string;
+  name: string;
+  persona: string;
+  skillIds: string[];
+  leaseCount: number;
+  totalSquareFootage: number;
+  avgMonthlyRent: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface LeaseSkill {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface LeaseProperty {
+  id: string;
+  name: string;
+  address: string;
+  leaseCount: number;
+  totalSquareFootage: number;
+  createdAt?: string;
+}
+
+export interface LeaseChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
+export interface LeaseDashboardStats {
+  totalLeases: number;
+  totalProperties: number;
+  expiring30Days: number;
+  expiring90Days: number;
+  avgMonthlyRent: number;
+  totalSquareFootage: number;
+}

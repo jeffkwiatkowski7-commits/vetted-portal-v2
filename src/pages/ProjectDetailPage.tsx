@@ -2,23 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import * as api from '../api';
-import { ArrowLeft, Settings, Upload, Users, BookOpen, Cpu } from 'lucide-react';
+import { ArrowLeft, Settings } from 'lucide-react';
 import type { Project } from '../types';
 import ChatInput from '../components/chat/ChatInput';
 import ChatView from '../components/chat/ChatView';
 import ProjectForm from '../components/projects/ProjectForm';
 
-const QUICK_ACTIONS = [
-  { label: 'Summarize files', icon: BookOpen },
-  { label: 'Draft with persona', icon: Users },
-  { label: 'Run MCP tool', icon: Cpu },
-  { label: 'Upload context', icon: Upload },
-];
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { addToast, activeChat, setActiveChat } = useStore();
+  const { addToast, activeChat, setActiveChat, setProjectFiles, setRightPanelOpen } = useStore();
   const hasChat = (activeChat?.messages?.length ?? 0) > 0;
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,14 +22,24 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (id) {
       setActiveChat(null);
+      setProjectFiles([]);
       loadProject();
     }
+    return () => {
+      setProjectFiles([]);
+      setRightPanelOpen(false);
+    };
   }, [id]);
 
   const loadProject = async () => {
     try {
-      const proj = await api.projects.get(id!);
+      const [proj, files] = await Promise.all([
+        api.projects.get(id!),
+        api.library.list(id!),
+      ]);
       setProject(proj);
+      setProjectFiles(files);
+      if (files.length > 0) setRightPanelOpen(true);
     } catch {
       addToast({ type: 'error', title: 'Failed to load project' });
     } finally {
@@ -133,17 +137,6 @@ export default function ProjectDetailPage() {
           )}
           <div className="w-full max-w-3xl">
             <ChatInput centered projectId={id} />
-          </div>
-          <div className="flex items-center gap-2 mt-4 flex-wrap justify-center">
-            {QUICK_ACTIONS.map(({ label, icon: Icon }) => (
-              <button
-                key={label}
-                className="flex items-center gap-2 px-4 py-2 rounded-full border border-vetted-border text-sm text-vetted-text-secondary hover:border-vetted-accent hover:text-vetted-primary transition-colors bg-white"
-              >
-                <Icon size={15} />
-                {label}
-              </button>
-            ))}
           </div>
         </div>
       )}

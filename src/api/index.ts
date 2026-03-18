@@ -92,7 +92,11 @@ export const admin = {
   systemPrompts: () => request('/admin/system-prompts').then(d => d.prompts || d.systemPrompts || d || []),
   createSystemPrompt: (data: any) => request('/admin/system-prompts', { method: 'POST', body: JSON.stringify(data) }),
   updateSystemPrompt: (id: string, data: any) => request(`/admin/system-prompts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSystemPrompt: (id: string) => request(`/admin/system-prompts/${id}`, { method: 'DELETE' }),
   health: () => request('/admin/health').then(d => d.health || d),
+  errors: () => request('/admin/errors').then((d: any) => d.errors || []),
+  reportClientError: (payload: { message: string; stack?: string; url?: string; userAgent?: string }) =>
+    request('/admin/client-errors', { method: 'POST', body: JSON.stringify(payload) }).catch(() => {}),
 };
 
 // Settings - unwrap
@@ -101,7 +105,7 @@ export const settings = {
   updateProfile: (data: any) => request('/settings/profile', { method: 'PUT', body: JSON.stringify(data) }),
   preferences: () => request('/settings/preferences').then(d => d.preferences || d),
   updatePreferences: (data: any) => request('/settings/preferences', { method: 'PUT', body: JSON.stringify(data) }),
-  apiKeys: () => request('/settings/api-keys').then(d => d.apiKeys || d.keys || d || []),
+  apiKeys: () => request('/settings/api-keys').then(d => Array.isArray(d.api_keys) ? d.api_keys : Array.isArray(d.apiKeys) ? d.apiKeys : []),
   createApiKey: (data: any) => request('/settings/api-keys', { method: 'POST', body: JSON.stringify(data) }),
   deleteApiKey: (id: string) => request(`/settings/api-keys/${id}`, { method: 'DELETE' }),
   sessions: () => request('/settings/sessions').then(d => d.sessions || d || []),

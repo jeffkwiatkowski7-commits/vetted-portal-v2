@@ -177,7 +177,11 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
         onClose={() => setIsPickerOpen(false)}
         onAttach={(files) => {
           setChatAttachedFiles(files);
-          handleSendMessage({ msg: 'Please summarize this document.', files });
+          const count = files.length;
+          const prompt = count === 1
+            ? 'A file has been attached. Please briefly acknowledge it and let the user know you are ready to help with questions about it.'
+            : `${count} files have been attached. Please briefly acknowledge them and let the user know you are ready to help with questions about them.`;
+          handleSendMessage({ msg: prompt, files, hidden: true });
         }}
         returnFocusRef={paperclipButtonRef}
       />

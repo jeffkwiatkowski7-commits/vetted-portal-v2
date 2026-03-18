@@ -16,11 +16,13 @@ Enhance the Admin Dashboard with:
 
 A shared in-memory array in `server/index.js` holds the last 100 error entries. Oldest entries are evicted when the buffer is full. Entries are never persisted to disk or database. The buffer resets on server restart.
 
+The 100-entry cap also serves as a natural mitigation against runaway error loops flooding the buffer.
+
 ### Error Entry Shape
 
 ```ts
 {
-  id: string,           // uuid or incrementing counter
+  id: number,           // auto-incrementing integer counter
   timestamp: string,    // ISO 8601
   source: 'server' | 'client',
   level: 'error' | 'warn',
@@ -40,16 +42,29 @@ A shared in-memory array in `server/index.js` holds the last 100 error entries. 
 ```js
 const errorLog = [];
 const ERROR_LOG_MAX = 100;
+let errorCounter = 0;
 
 function pushError(entry) {
-  errorLog.unshift({ id: Date.now() + Math.random(), ...entry });
+  errorLog.unshift({ id: ++errorCounter, ...entry });
   if (errorLog.length > ERROR_LOG_MAX) errorLog.length = ERROR_LOG_MAX;
 }
 ```
 
 Placed near the top of the file, after imports.
 
-### 2. Capture Points
+### 2. Admin Auth Note
+
+The existing `requireAdmin` middleware checks `role === 'admin'` exactly, but `AdminPage.tsx` allows both `'admin'` and `'super_admin'` access. Update the shared `requireAdmin` middleware itself to accept both roles — this is additive and safe for all 16 existing routes that use it:
+
+```js
+if (!req.user || !['admin', 'super_admin'].includes(req.user.role)) {
+  return res.status(403).json({ error: 'Admin access required' });
+}
+```
+
+Updating the shared middleware (rather than adding per-route checks) ensures consistent behavior across all admin endpoints going forward.
+
+### 3. Capture Points
 
 **Express error middleware** (registered after all routes):
 ```js
@@ -76,17 +91,33 @@ process.on('unhandledRejection', (reason) => {
 });
 ```
 
-### 3. New Endpoints
+### 4. New Endpoints
 
-**`GET /api/admin/errors`** — admin-only
+**`GET /api/admin/errors`** — requireAdmin (admin + super_admin)
 Returns `{ errors: [...] }` from the ring buffer.
 
 **`POST /api/admin/client-errors`** — requireAuth (any authenticated user)
-Accepts `{ message, stack, url, userAgent }`, pushes to buffer with `source: 'client'`.
+Accepts `{ message, stack, url, userAgent }`. The server maps `url` → `route` when calling `pushError`:
 
-### 4. Extend `/api/admin/stats`
+```js
+app.post('/api/admin/client-errors', requireAuth, (req, res) => {
+  const { message, stack, url, userAgent } = req.body;
+  pushError({
+    timestamp: new Date().toISOString(),
+    source: 'client',
+    level: 'error',
+    message,
+    stack,
+    route: url,   // input field 'url' stored as 'route' in entry shape
+    userAgent,
+  });
+  res.json({ ok: true });
+});
+```
 
-Add to existing stats query:
+### 5. Extend `/api/admin/stats`
+
+Add a global library file count (intentionally unscoped — this is an admin view of total system files, not per-user):
 ```js
 const libraryFileCount = dbGet(db, 'SELECT COUNT(*) as count FROM library_files');
 ```
@@ -99,23 +130,40 @@ Include in response: `total_library_files: libraryFileCount.count`.
 
 ### 1. Global Error Capture — `src/main.tsx`
 
-After app mounts, register:
-```ts
-window.onerror = (message, source, lineno, colno, error) => {
-  api.admin.reportClientError({ message: String(message), stack: error?.stack, url: source });
-};
-window.onunhandledrejection = (event) => {
-  api.admin.reportClientError({ message: String(event.reason), url: window.location.href });
-};
-```
+Register handlers after app mounts using `addEventListener` (more portable than property assignment). Guard with auth check — if no `userId` in localStorage, skip reporting (avoids 401 feedback loop from `requireAuth`):
 
-Only fires after the user is authenticated (user ID available in localStorage).
+```ts
+window.addEventListener('error', (event) => {
+  if (!localStorage.getItem('userId')) return;
+  // Use window.location.href (current page) rather than event.filename (script chunk path)
+  api.admin.reportClientError({ message: String(event.message), stack: event.error?.stack, url: window.location.href });
+});
+window.addEventListener('unhandledrejection', (event) => {
+  if (!localStorage.getItem('userId')) return;
+  api.admin.reportClientError({ message: String(event.reason), url: window.location.href });
+});
+```
 
 ### 2. React Error Boundary — `src/components/ErrorBoundary.tsx`
 
-New component wrapping `<App>` in `main.tsx`. On `componentDidCatch`, calls `api.admin.reportClientError({ message, stack, url })`.
+New class component wrapping `<App>` in `main.tsx`. `componentDidCatch` explicitly guards with a localStorage auth check before reporting:
 
-Renders a minimal fallback UI (not the full admin page) so the app doesn't fully crash.
+```ts
+componentDidCatch(error: Error, info: React.ErrorInfo) {
+  if (!localStorage.getItem('userId')) return;
+  api.admin.reportClientError({
+    message: error.message,
+    stack: error.stack,
+    url: window.location.href,
+  });
+}
+```
+
+Fallback UI renders:
+- A centered message: "Something went wrong."
+- A "Reload page" button (`window.location.reload()`)
+
+This handles crashes before or during router initialization without leaving the user on a blank screen.
 
 ### 3. API Layer — `src/api/index.ts`
 
@@ -123,8 +171,10 @@ Add to the `admin` object:
 ```ts
 errors: () => request('/admin/errors').then(d => d.errors || []),
 reportClientError: (payload: { message: string; stack?: string; url?: string; userAgent?: string }) =>
-  request('/admin/client-errors', { method: 'POST', body: JSON.stringify(payload) }),
+  request('/admin/client-errors', { method: 'POST', body: JSON.stringify(payload) }).catch(() => {}),
 ```
+
+Note: `reportClientError` swallows errors (`.catch(() => {})`) to prevent a failed POST from triggering another `window.onerror` call.
 
 ### 4. Update Stats Interface — `src/pages/AdminPage.tsx`
 
@@ -151,7 +201,7 @@ New section below Quick Stats, titled **"Active Errors"** with a count badge sho
 - **Source** rendered as a badge: `server` (gray) / `client` (blue)
 - **Level** rendered as a badge: `error` (red) / `warn` (yellow)
 - **Time** shown as relative (e.g., "2m ago") with full ISO timestamp on hover
-- **Message** truncated to 80 chars with full text on hover (title attribute)
+- **Message** truncated to 80 chars with full text on hover (`title` attribute)
 - **Route** shown if present, otherwise `—`
 
 Empty state: green checkmark icon + "No errors detected" text.
@@ -164,7 +214,9 @@ If `errors.length > 0`, show a red pill badge next to "Admin Dashboard" title wi
 
 ### Auto-Refresh
 
-Both errors and stats re-fetch every 30 seconds via `setInterval` in `useEffect`. Interval cleared on component unmount.
+A single `setInterval` (30 seconds) in `useEffect` calls one refresh function that re-fetches stats, health, and errors together. The interval is cleared on component unmount.
+
+Note: `/api/admin/health` is intentionally public (no auth middleware) in the existing codebase. Do not add auth guards to it — the auto-refresh calls it alongside the protected endpoints and it must remain accessible.
 
 ---
 
@@ -174,4 +226,4 @@ Both errors and stats re-fetch every 30 seconds via `setInterval` in `useEffect`
 - Error filtering / search
 - Error resolution / acknowledgement workflow
 - Alerting / notifications for new errors
-- Frontend error rate limiting (no debounce on `reportClientError`)
+- Rate limiting / debouncing on `reportClientError`

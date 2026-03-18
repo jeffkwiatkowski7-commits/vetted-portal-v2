@@ -2,13 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../../store';
 import * as api from '../../api';
-import {
-  Send,
-  Paperclip,
-  Share2,
-  ChevronDown,
-  X,
-} from 'lucide-react';
+import { Send, Paperclip, Share2, ChevronDown } from 'lucide-react';
 import { LibraryFile } from '../../types';
 import LibraryPickerModal from './LibraryPickerModal';
 import FileTypeBadge from './FileTypeBadge';
@@ -39,9 +33,10 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
     demoActive, demoHighlight, demoInputText, demoShowModelPicker, demoAttachedFile,
     demoTriggerSend, setDemoTriggerSend,
     quickActionText, setQuickActionText,
+    setAiThinking, addLiveStep, clearLiveSteps,
+    chatAttachedFiles, setChatAttachedFiles,
   } = useStore();
   const [message, setMessage] = useState('');
-  const [attachedFiles, setAttachedFiles] = useState<LibraryFile[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState(() => {
@@ -90,9 +85,10 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
     }
   }, [message]);
 
-  const handleSendMessage = async (overrides?: { msg?: string; files?: LibraryFile[] }) => {
+  const handleSendMessage = async (overrides?: { msg?: string; files?: LibraryFile[]; hidden?: boolean }) => {
     const content = overrides?.msg ?? message;
-    const files = overrides?.files ?? attachedFiles;
+    const files = overrides?.files ?? chatAttachedFiles;
+    const hidden = overrides?.hidden ?? false;
     if (!content.trim()) return;
 
     setLoading(true);
@@ -114,15 +110,26 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
         }
       }
 
-      const sendResult = await api.chats.sendMessage(chatId, {
-        content,
-        model: selectedModel.name,
-        temperature,
-        attachments: files.map((f) => f.id),
-      });
+      // Optimistically show the user's message immediately (skip for hidden sends)
+      if (!hidden) setMessage('');
+      if (!hidden) {
+        setActiveChat({
+          ...(activeChat || { id: chatId, title: content.slice(0, 50), messages: [] }),
+          id: chatId,
+          messages: [
+            ...(activeChat?.messages || []),
+            { id: `optimistic-${Date.now()}`, role: 'user', content, created_at: new Date().toISOString() },
+          ],
+        } as any);
+      }
 
-      setMessage('');
-      setAttachedFiles([]);
+      if (!hidden) { clearLiveSteps(); setAiThinking(true); }
+      const sendResult = await api.chats.streamMessage(
+        chatId,
+        { content, model: selectedModel.name, temperature, attachments: files.map((f) => f.id) },
+        (step) => addLiveStep(step),
+      );
+      if (!hidden) { setAiThinking(false); clearLiveSteps(); }
 
       if (chatId) {
         const updated = await api.chats.get(chatId);
@@ -141,8 +148,10 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
         setActiveChat(updated);
       }
 
-      addToast({ type: 'success', title: 'Message sent' });
+      if (!hidden) addToast({ type: 'success', title: 'Message sent' });
     } catch (err) {
+      setAiThinking(false);
+      clearLiveSteps();
       addToast({
         type: 'error',
         title: 'Failed to send message',
@@ -167,7 +176,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
         isOpen={isPickerOpen}
         onClose={() => setIsPickerOpen(false)}
         onAttach={(files) => {
-          setAttachedFiles(files);
+          setChatAttachedFiles(files);
           handleSendMessage({ msg: 'Please summarize this document.', files });
         }}
         returnFocusRef={paperclipButtonRef}
@@ -176,41 +185,13 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
       <div className={`bg-white px-4 py-4 ${centered ? '' : 'border-t border-vetted-border'}`}>
         <div className="max-w-3xl mx-auto">
 
-          {/* File chips */}
-          {(attachedFiles.length > 0 || (demoActive && demoAttachedFile)) && (
+          {/* Demo attached file chip */}
+          {demoActive && demoAttachedFile && (
             <div className="flex flex-wrap gap-1.5 pb-2">
-              {demoActive && demoAttachedFile && (
-                <div className="flex items-center gap-1.5 rounded-lg px-2 py-1 border border-vetted-accent bg-vetted-surface">
-                  <FileTypeBadge fileType="pdf" size={16} />
-                  <span className="text-xs text-vetted-text-primary">{demoAttachedFile}</span>
-                </div>
-              )}
-              {attachedFiles.map((f) => (
-                <div
-                  key={f.id}
-                  className="flex items-center gap-1.5 rounded-lg px-2 py-1 border border-vetted-border bg-vetted-surface"
-                >
-                  <FileTypeBadge fileType={f.file_type} size={16} />
-                  <span
-                    className="text-xs text-vetted-text-primary"
-                    style={{
-                      maxWidth: 150,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {f.original_name}
-                  </span>
-                  <button
-                    onClick={() => setAttachedFiles((prev) => prev.filter((x) => x.id !== f.id))}
-                    className="ml-0.5 text-vetted-text-muted hover:text-vetted-text-secondary transition-colors"
-                    aria-label={`Remove ${f.original_name}`}
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
+              <div className="flex items-center gap-1.5 rounded-lg px-2 py-1 border border-vetted-accent bg-vetted-surface">
+                <FileTypeBadge fileType="pdf" size={16} />
+                <span className="text-xs text-vetted-text-primary">{demoAttachedFile}</span>
+              </div>
             </div>
           )}
 

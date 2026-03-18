@@ -289,8 +289,11 @@ Today's date is ${today}.
 // ── General document Q&A / project chat ─────────────────────────────
 
 export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null) {
-  const docContext = docs.length > 0
-    ? docs.map((d, i) => `\n--- DOCUMENT ${i + 1}: ${d.name} ---\n${d.text}\n`).join("\n")
+  const textDocs = docs.filter((d) => d.text !== undefined);
+  const pdfDocs = docs.filter((d) => d.base64 !== undefined);
+
+  const docContext = textDocs.length > 0
+    ? textDocs.map((d, i) => `\n--- DOCUMENT ${i + 1}: ${d.name} ---\n${d.text}\n`).join("\n")
     : "";
 
   const basePrompt = systemPromptOverride ?? buildDefaultSystemPrompt();
@@ -298,11 +301,16 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
     ? `${basePrompt}\n\n## Attached Documents\n${docContext}`
     : basePrompt;
 
+  const firstUserText = `[SYSTEM CONTEXT]\n${systemPrompt}\n\n[USER MESSAGE]\n${chatHistory.length === 0 ? userMessage : chatHistory[0].content}`;
+
+  // Build parts for the first user turn: system context + message text, then PDF inline data
+  const firstUserParts = [{ text: firstUserText }];
+  for (const pdf of pdfDocs) {
+    firstUserParts.push({ inlineData: { mimeType: pdf.mimeType, data: pdf.base64 } });
+  }
+
   const contents = [
-    {
-      role: "user",
-      parts: [{ text: `[SYSTEM CONTEXT]\n${systemPrompt}\n\n[USER MESSAGE]\n${chatHistory.length === 0 ? userMessage : chatHistory[0].content}` }],
-    },
+    { role: "user", parts: firstUserParts },
   ];
 
   for (let i = 1; i < chatHistory.length; i++) {

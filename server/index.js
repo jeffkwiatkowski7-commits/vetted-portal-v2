@@ -275,6 +275,15 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     return res.status(404).json({ error: 'Chat not found' });
   }
 
+  // Use SSE to stream steps as they happen
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.socket?.setNoDelay(true);
+  res.flushHeaders();
+
+  const sendEvent = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
   const now = new Date().toISOString();
 
   // Save user message
@@ -297,34 +306,37 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
   let aiContent;
   let aiReasoning = null;
   const steps = [];
-  const step = (msg) => steps.push({ message: msg, ts: new Date().toISOString() });
+  const step = (msg) => {
+    const ts = new Date().toISOString();
+    steps.push({ message: msg, ts });
+    sendEvent({ type: 'step', message: msg, ts });
+  };
 
   // Load project context if this chat belongs to a project
   const project = chat.project_id
     ? dbGet(db, 'SELECT * FROM projects WHERE id = ?', [chat.project_id])
     : null;
 
-  // Helper: read a library file from disk → { name, text }
+  // Helper: read a library file from disk.
+  // PDFs → { name, mimeType, base64 } for native Gemini vision.
+  // Other files → { name, text }.
   async function readLibraryFile(file) {
     const filePath = path.join(__dirname, '..', file.file_path);
-    let text = '';
     if (file.file_type === 'pdf' || file.mime_type === 'application/pdf') {
       try {
-        const pdfParse = (await import('pdf-parse')).default;
         const buffer = fs.readFileSync(filePath);
-        const parsed = await pdfParse(buffer);
-        text = parsed.text || '';
+        return { name: file.original_name, mimeType: 'application/pdf', base64: buffer.toString('base64') };
       } catch {
-        text = `[Could not extract text from ${file.original_name}]`;
+        return { name: file.original_name, text: `[Could not read ${file.original_name}]` };
       }
     } else {
       try {
-        text = fs.readFileSync(filePath, 'utf8');
+        const text = fs.readFileSync(filePath, 'utf8');
+        return { name: file.original_name, text };
       } catch {
-        text = `[Could not read ${file.original_name}]`;
+        return { name: file.original_name, text: `[Could not read ${file.original_name}]` };
       }
     }
-    return { name: file.original_name, text };
   }
 
   try {
@@ -354,9 +366,10 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       }
     }
 
-    // 3. Build system prompt: global default → project override → context header
+    // 3. Build system prompt: project overrides global when present; global is fallback only
     const globalPrompt = dbGet(db, `SELECT prompt_text FROM system_prompts WHERE scope = 'global' AND status = 'active' LIMIT 1`);
-    const basePrompt = globalPrompt?.prompt_text?.trim() || null; // null → chatWithDocuments uses buildDefaultSystemPrompt()
+    const hasProjectPrompt = !!project?.system_prompt?.trim();
+    const basePrompt = hasProjectPrompt ? null : (globalPrompt?.prompt_text?.trim() || null);
 
     if (basePrompt) step('Applying global system prompt');
 
@@ -370,10 +383,10 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     const parts = [];
     if (basePrompt) parts.push(basePrompt);
 
-    // Project-specific instructions appended after global base
-    if (project?.system_prompt?.trim()) {
+    // Project system prompt replaces global when present
+    if (hasProjectPrompt) {
       step('Applying project system prompt');
-      parts.push(`## Project Instructions\n\n${project.system_prompt.trim()}`);
+      parts.push(project.system_prompt.trim());
     }
 
     // Tool sets
@@ -457,7 +470,8 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
   // Update chat updated_at
   dbRun(db, 'UPDATE chats SET updated_at = ? WHERE id = ?', [now, req.params.id]);
 
-  res.json({
+  sendEvent({
+    type: 'done',
     messages: [
       { id: userMessageId, role: 'user', content, model_used: chat.model, created_at: now },
       { id: aiMessageId, role: 'assistant', content: aiContent, model_used: chat.model, reasoning: aiReasoning, steps: steps.map(s => s.message), created_at: now }
@@ -468,6 +482,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       response_time_ms: 2400 + Math.random() * 1200
     }
   });
+  res.end();
 });
 
 app.post('/api/chats/:id/share', requireAuth, (req, res) => {
@@ -670,7 +685,10 @@ app.delete('/api/projects/:id/members/:userId', requireAuth, (req, res) => {
 // ============================================================================
 
 app.get('/api/library', requireAuth, (req, res) => {
-  const files = dbAll(db, 'SELECT * FROM library_files WHERE user_id = ? ORDER BY uploaded_at DESC', [req.user.id]);
+  const { project_id } = req.query;
+  const files = project_id
+    ? dbAll(db, 'SELECT * FROM library_files WHERE user_id = ? AND project_id = ? ORDER BY uploaded_at DESC', [req.user.id, project_id])
+    : dbAll(db, 'SELECT * FROM library_files WHERE user_id = ? ORDER BY uploaded_at DESC', [req.user.id]);
 
   res.json({ files });
 });
@@ -721,15 +739,16 @@ app.get('/api/library/:id/download', requireAuth, (req, res) => {
 });
 
 app.put('/api/library/:id', requireAuth, (req, res) => {
-  const { original_name } = req.body;
+  const { original_name, project_id } = req.body;
 
   const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
   if (!file) {
     return res.status(404).json({ error: 'File not found' });
   }
 
-  dbRun(db, 'UPDATE library_files SET original_name = ? WHERE id = ?', [
+  dbRun(db, 'UPDATE library_files SET original_name = ?, project_id = ? WHERE id = ?', [
     original_name || file.original_name,
+    project_id !== undefined ? project_id : file.project_id,
     req.params.id
   ]);
 

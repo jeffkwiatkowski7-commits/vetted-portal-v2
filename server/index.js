@@ -11,11 +11,22 @@ import { initializeDatabase, getDatabase, dbGet, dbAll, dbRun } from './database
 import { getMockResponse } from './mock-responses.js';
 import { seedDatabase } from './seed.js';
 import leaseRoutes from './lease-routes.js';
+import { chatWithDocuments } from './lib/gemini.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// In-memory error ring buffer
+const errorLog = [];
+const ERROR_LOG_MAX = 100;
+let errorCounter = 0;
+
+function pushError(entry) {
+  errorLog.unshift({ id: ++errorCounter, ...entry });
+  if (errorLog.length > ERROR_LOG_MAX) errorLog.length = ERROR_LOG_MAX;
+}
 
 // Ensure data directory exists
 const dataDir = path.join(__dirname, '../data');
@@ -81,12 +92,20 @@ function getCurrentUser(req) {
 }
 
 // Middleware to check authentication
+const _lastLoginUpdate = new Map(); // userId → timestamp, throttle to 1/hour
 function requireAuth(req, res, next) {
   const user = getCurrentUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   req.user = user;
+  // Refresh last_login_at at most once per hour per user
+  const now = Date.now();
+  const last = _lastLoginUpdate.get(user.id) || 0;
+  if (now - last > 3_600_000) {
+    _lastLoginUpdate.set(user.id, now);
+    dbRun(db, 'UPDATE users SET last_login_at = ? WHERE id = ?', [new Date().toISOString(), user.id]);
+  }
   next();
 }
 
@@ -248,7 +267,7 @@ app.delete('/api/chats/:id', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/chats/:id/messages', requireAuth, (req, res) => {
+app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
   const { content, attachments } = req.body;
 
   const chat = dbGet(db, 'SELECT * FROM chats WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
@@ -275,8 +294,148 @@ app.post('/api/chats/:id/messages', requireAuth, (req, res) => {
     now
   ]);
 
-  // Generate mock AI response
-  const mockResponse = getMockResponse(content, chat.model);
+  let aiContent;
+  let aiReasoning = null;
+  const steps = [];
+  const step = (msg) => steps.push({ message: msg, ts: new Date().toISOString() });
+
+  // Load project context if this chat belongs to a project
+  const project = chat.project_id
+    ? dbGet(db, 'SELECT * FROM projects WHERE id = ?', [chat.project_id])
+    : null;
+
+  // Helper: read a library file from disk → { name, text }
+  async function readLibraryFile(file) {
+    const filePath = path.join(__dirname, '..', file.file_path);
+    let text = '';
+    if (file.file_type === 'pdf' || file.mime_type === 'application/pdf') {
+      try {
+        const pdfParse = (await import('pdf-parse')).default;
+        const buffer = fs.readFileSync(filePath);
+        const parsed = await pdfParse(buffer);
+        text = parsed.text || '';
+      } catch {
+        text = `[Could not extract text from ${file.original_name}]`;
+      }
+    } else {
+      try {
+        text = fs.readFileSync(filePath, 'utf8');
+      } catch {
+        text = `[Could not read ${file.original_name}]`;
+      }
+    }
+    return { name: file.original_name, text };
+  }
+
+  try {
+    const docs = [];
+
+    // 1. Load project files
+    if (project) {
+      step(`Loading project: ${project.name}`);
+      const projectFiles = dbAll(db, 'SELECT * FROM library_files WHERE project_id = ?', [project.id]);
+      if (projectFiles.length > 0) {
+        step(`Reading ${projectFiles.length} project file${projectFiles.length !== 1 ? 's' : ''}`);
+        for (const file of projectFiles) docs.push(await readLibraryFile(file));
+      }
+    }
+
+    // 2. Load per-message attachments (deduplicate against project files)
+    if (attachments && attachments.length > 0) {
+      step(`Reading ${attachments.length} attached file${attachments.length !== 1 ? 's' : ''}`);
+      const projectFileIds = project
+        ? new Set(dbAll(db, 'SELECT id FROM library_files WHERE project_id = ?', [project.id]).map(f => f.id))
+        : new Set();
+      for (const fileId of attachments) {
+        if (projectFileIds.has(fileId)) continue;
+        const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ?', [fileId]);
+        if (!file) continue;
+        docs.push(await readLibraryFile(file));
+      }
+    }
+
+    // 3. Build system prompt: global default → project override → context header
+    const globalPrompt = dbGet(db, `SELECT prompt_text FROM system_prompts WHERE scope = 'global' AND status = 'active' LIMIT 1`);
+    const basePrompt = globalPrompt?.prompt_text?.trim() || null; // null → chatWithDocuments uses buildDefaultSystemPrompt()
+
+    if (basePrompt) step('Applying global system prompt');
+
+    const now2 = new Date();
+    const contextHeader = [
+      `**User:** ${req.user.display_name || req.user.email}`,
+      `**Date:** ${now2.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`,
+      `**Time:** ${now2.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })}`,
+    ].join('  \n');
+
+    const parts = [];
+    if (basePrompt) parts.push(basePrompt);
+
+    // Project-specific instructions appended after global base
+    if (project?.system_prompt?.trim()) {
+      step('Applying project system prompt');
+      parts.push(`## Project Instructions\n\n${project.system_prompt.trim()}`);
+    }
+
+    // Tool sets
+    if (project) {
+      const rawToolSets = project.tool_sets;
+      let toolSetIds = [];
+      try {
+        const parsed = Array.isArray(rawToolSets) ? rawToolSets : JSON.parse(rawToolSets || '[]');
+        toolSetIds = Array.isArray(parsed) ? parsed : [];
+      } catch { toolSetIds = []; }
+      if (toolSetIds.length > 0) {
+        const toolSets = dbAll(db,
+          `SELECT name, description, tools FROM tool_sets WHERE id IN (${toolSetIds.map(() => '?').join(',')})`,
+          toolSetIds
+        );
+        if (toolSets.length > 0) {
+          step(`Loading ${toolSets.length} tool set${toolSets.length !== 1 ? 's' : ''}: ${toolSets.map(t => t.name).join(', ')}`);
+          const toolBlock = toolSets.map(ts => {
+            const tools = ts.tools ? JSON.parse(ts.tools) : [];
+            return `**${ts.name}**: ${ts.description || ''}\nTools: ${tools.join(', ')}`;
+          }).join('\n\n');
+          parts.push(`## Available Tools\n\n${toolBlock}`);
+        }
+      }
+    }
+
+    // Always append context (user + date/time) at the end so model always sees it
+    parts.push(`## Session Context\n\n${contextHeader}`);
+
+    const systemPromptOverride = parts.join('\n\n');
+
+    // 4. Load chat history
+    const history = dbAll(db, `
+      SELECT role, content FROM messages
+      WHERE chat_id = ? AND id != ?
+      ORDER BY created_at ASC
+    `, [req.params.id, userMessageId]).map(m => ({ role: m.role, content: m.content }));
+
+    if (history.length > 0) step(`Loaded ${history.length} previous message${history.length !== 1 ? 's' : ''}`);
+    if (docs.length > 0) step(`Building prompt with ${docs.length} document${docs.length !== 1 ? 's' : ''}`);
+    step('Calling Gemini');
+
+    const result = await chatWithDocuments(docs, content, history, systemPromptOverride);
+    aiContent = result.text;
+
+    if (result.searchQueries?.length > 0) {
+      result.searchQueries.forEach(q => step(`Web search: "${q}"`));
+    }
+    step('Response received');
+  } catch (err) {
+    console.error('[chat] Gemini error:', err.message);
+    const msg = err.message || '';
+    if (msg.includes('invalid_grant') || msg.includes('invalid_rapt') || msg.includes('reauth') || msg.includes('Unable to authenticate')) {
+      aiContent = 'The AI service credentials have expired. Please ask your administrator to run `gcloud auth application-default login` on the server and restart the backend.';
+    } else if (msg.includes('quota') || msg.includes('rate limit') || msg.includes('429')) {
+      aiContent = 'The AI service is temporarily rate-limited. Please wait a moment and try again.';
+    } else if (msg.includes('not found') || msg.includes('404')) {
+      aiContent = 'The AI model is not available in this environment. Please contact your administrator.';
+    } else {
+      aiContent = 'Sorry, I was unable to generate a response. Please try again.';
+    }
+  }
 
   // Save AI message
   const aiMessageId = uuidv4();
@@ -287,10 +446,10 @@ app.post('/api/chats/:id/messages', requireAuth, (req, res) => {
     aiMessageId,
     req.params.id,
     'assistant',
-    mockResponse.content,
+    aiContent,
     chat.model,
-    Math.ceil(mockResponse.content.split(/\s+/).length * 1.3),
-    JSON.stringify(mockResponse.reasoning),
+    Math.ceil(aiContent.split(/\s+/).length * 1.3),
+    aiReasoning ? JSON.stringify(aiReasoning) : null,
     null,
     now
   ]);
@@ -298,28 +457,14 @@ app.post('/api/chats/:id/messages', requireAuth, (req, res) => {
   // Update chat updated_at
   dbRun(db, 'UPDATE chats SET updated_at = ? WHERE id = ?', [now, req.params.id]);
 
-  // Return both messages with timing info
   res.json({
     messages: [
-      {
-        id: userMessageId,
-        role: 'user',
-        content,
-        model_used: chat.model,
-        created_at: now
-      },
-      {
-        id: aiMessageId,
-        role: 'assistant',
-        content: mockResponse.content,
-        model_used: chat.model,
-        reasoning: mockResponse.reasoning,
-        created_at: now
-      }
+      { id: userMessageId, role: 'user', content, model_used: chat.model, created_at: now },
+      { id: aiMessageId, role: 'assistant', content: aiContent, model_used: chat.model, reasoning: aiReasoning, steps: steps.map(s => s.message), created_at: now }
     ],
     timing: {
       processing_time_ms: 1200 + Math.random() * 800,
-      tokens_generated: Math.ceil(mockResponse.content.split(/\s+/).length * 1.3),
+      tokens_generated: Math.ceil(aiContent.split(/\s+/).length * 1.3),
       response_time_ms: 2400 + Math.random() * 1200
     }
   });
@@ -732,7 +877,7 @@ app.get('/api/apps/categories', (req, res) => {
 // ============================================================================
 
 function requireAdmin(req, res, next) {
-  if (!req.user || req.user.role !== 'admin') {
+  if (!req.user || !['admin', 'super_admin'].includes(req.user.role)) {
     return res.status(403).json({ error: 'Admin access required' });
   }
   next();
@@ -879,7 +1024,7 @@ app.get('/api/admin/models', requireAuth, requireAdmin, (req, res) => {
 });
 
 app.put('/api/admin/models/:id', requireAuth, requireAdmin, (req, res) => {
-  const { is_enabled, is_default, max_tokens, rate_limit } = req.body;
+  const { is_enabled, is_default, max_tokens, rate_limit, display_name, model_name, provider, icon_color } = req.body;
 
   const model = dbGet(db, 'SELECT * FROM model_configs WHERE id = ?', [req.params.id]);
   if (!model) {
@@ -889,13 +1034,17 @@ app.put('/api/admin/models/:id', requireAuth, requireAdmin, (req, res) => {
   const now = new Date().toISOString();
   dbRun(db, `
     UPDATE model_configs
-    SET is_enabled = ?, is_default = ?, max_tokens = ?, rate_limit = ?, updated_at = ?
+    SET is_enabled = ?, is_default = ?, max_tokens = ?, rate_limit = ?, display_name = ?, model_name = ?, provider = ?, icon_color = ?, updated_at = ?
     WHERE id = ?
   `, [
     is_enabled !== undefined ? is_enabled : model.is_enabled,
     is_default !== undefined ? is_default : model.is_default,
     max_tokens !== undefined ? max_tokens : model.max_tokens,
     rate_limit !== undefined ? rate_limit : model.rate_limit,
+    display_name !== undefined ? display_name : model.display_name,
+    model_name !== undefined ? model_name : model.model_name,
+    provider !== undefined ? provider : model.provider,
+    icon_color !== undefined ? icon_color : model.icon_color,
     now,
     req.params.id
   ]);
@@ -948,6 +1097,14 @@ app.put('/api/admin/system-prompts/:id', requireAuth, requireAdmin, (req, res) =
 
   const updated = dbGet(db, 'SELECT * FROM system_prompts WHERE id = ?', [req.params.id]);
   res.json({ prompt: updated });
+});
+
+app.delete('/api/admin/system-prompts/:id', requireAuth, requireAdmin, (req, res) => {
+  const prompt = dbGet(db, 'SELECT * FROM system_prompts WHERE id = ?', [req.params.id]);
+  if (!prompt) return res.status(404).json({ error: 'Prompt not found' });
+  if (prompt.scope === 'global') return res.status(400).json({ error: 'Cannot delete the global default prompt' });
+  dbRun(db, 'DELETE FROM system_prompts WHERE id = ?', [req.params.id]);
+  res.json({ success: true });
 });
 
 app.get('/api/admin/health', (req, res) => {

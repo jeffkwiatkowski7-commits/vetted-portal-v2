@@ -8,7 +8,7 @@ import { formatFileSize } from '../../utils/formatFileSize';
 export interface LibraryPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAttach: (files: LibraryFile[]) => void;
+  onAttach: (files: LibraryFile[]) => void | Promise<void>;
   returnFocusRef: React.RefObject<HTMLButtonElement>;
   projectId?: string;
   onUploadComplete?: () => void;
@@ -346,8 +346,8 @@ export default function LibraryPickerModal({
               </span>
               <button
                 disabled={selectedIds.size === 0}
-                onClick={() => {
-                  onAttach(selectedFiles);
+                onClick={async () => {
+                  await onAttach(selectedFiles);
                   handleClose();
                 }}
                 className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-opacity"

@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import * as api from '../api';
-import { Wrench, Users, BarChart3, Activity, Zap, AlertCircle, CheckCircle } from 'lucide-react';
+import { Wrench, Users, Zap, AlertCircle, CheckCircle, CheckCircle2 } from 'lucide-react';
 
 interface Stats {
   total_users?: number;
   active_today?: number;
   total_projects?: number;
+  total_library_files?: number;
   tool_sets?: number;
   models?: number;
   system_prompts?: number;
@@ -24,6 +25,24 @@ export default function AdminPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [errors, setErrors] = useState<any[]>([]);
+
+  const loadAdminData = async () => {
+    try {
+      const [statsData, healthData, errorsData] = await Promise.all([
+        api.admin.stats(),
+        api.admin.health(),
+        api.admin.errors(),
+      ]);
+      setStats(statsData);
+      setHealth(healthData);
+      setErrors(errorsData);
+    } catch (err) {
+      addToast({ type: 'error', title: 'Failed to load admin data' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (user?.role !== 'admin' && user?.role !== 'super_admin') {
@@ -31,23 +50,9 @@ export default function AdminPage() {
       return;
     }
     loadAdminData();
+    const interval = setInterval(loadAdminData, 30000);
+    return () => clearInterval(interval);
   }, [user, navigate]);
-
-  const loadAdminData = async () => {
-    try {
-      const statsData = await api.admin.stats();
-      const healthData = await api.admin.health();
-      setStats(statsData);
-      setHealth(healthData);
-    } catch (err) {
-      addToast({
-        type: 'error',
-        title: 'Failed to load admin data',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -59,7 +64,7 @@ export default function AdminPage() {
 
   const resourceCards = [
     {
-      label: 'AI Tool Sets',
+      label: 'MCP Servers',
       count: stats?.tool_sets || 0,
       icon: Wrench,
       path: '/admin/tool-sets',
@@ -82,13 +87,31 @@ export default function AdminPage() {
     { label: 'Total Users', value: stats?.total_users || 0 },
     { label: 'Active Today', value: stats?.active_today || 0 },
     { label: 'Projects', value: stats?.total_projects || 0 },
+    { label: 'Library Files', value: stats?.total_library_files || 0 },
   ];
+
+  const formatRelativeTime = (isoString: string) => {
+    const diff = Date.now() - new Date(isoString).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="border-b border-vetted-border p-6">
-        <h1 className="text-3xl font-serif text-vetted-primary">Admin Dashboard</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-serif text-vetted-primary">Admin Dashboard</h1>
+          {errors.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-xs font-medium">
+              {errors.length}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Content */}
@@ -116,7 +139,7 @@ export default function AdminPage() {
         {/* Quick Stats */}
         <div>
           <h2 className="text-lg font-medium text-vetted-primary mb-4">Quick Stats</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {statCards.map(({ label, value }) => (
               <div key={label} className="card text-center">
                 <p className="text-vetted-text-secondary text-sm mb-2">{label}</p>
@@ -126,12 +149,80 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {/* Active Errors */}
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-lg font-medium text-vetted-primary">Active Errors</h2>
+            {errors.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-xs font-medium">
+                {errors.length}
+              </span>
+            )}
+          </div>
+
+          {errors.length === 0 ? (
+            <div className="card flex items-center gap-3 text-vetted-success">
+              <CheckCircle2 size={20} />
+              <span className="text-sm">No errors detected</span>
+            </div>
+          ) : (
+            <div className="card p-0 overflow-hidden">
+              <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-vetted-surface border-b border-vetted-border sticky top-0">
+                    <tr>
+                      <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Time</th>
+                      <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Source</th>
+                      <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Level</th>
+                      <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Message</th>
+                      <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Route</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {errors.map((err) => (
+                      <tr key={err.id} className="border-b border-vetted-border last:border-0 hover:bg-vetted-surface/50">
+                        <td className="px-4 py-2 text-vetted-text-secondary whitespace-nowrap" title={err.timestamp}>
+                          {formatRelativeTime(err.timestamp)}
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                            err.source === 'server'
+                              ? 'bg-gray-200 text-gray-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {err.source}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                            err.level === 'error'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {err.level}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-vetted-primary max-w-xs" title={err.message}>
+                          {err.message?.length > 80 ? err.message.slice(0, 80) + '…' : err.message}
+                        </td>
+                        <td className="px-4 py-2 text-vetted-text-secondary">
+                          {err.route || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Support Tools */}
         <div>
           <h2 className="text-lg font-medium text-vetted-primary mb-4">Support Tools</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
-              { label: 'AI Tool Sets Health', icon: Wrench },
+              { label: 'MCP Servers Health', icon: Wrench },
               { label: 'Model Health', icon: Zap },
             ].map(({ label, icon: Icon }) => (
               <div key={label} className="card p-4">

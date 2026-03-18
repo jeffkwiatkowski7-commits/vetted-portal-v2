@@ -5,6 +5,7 @@ import * as api from '../api';
 import { ArrowLeft, Settings, Upload, Users, BookOpen, Cpu } from 'lucide-react';
 import type { Project } from '../types';
 import ChatInput from '../components/chat/ChatInput';
+import ChatView from '../components/chat/ChatView';
 import ProjectForm from '../components/projects/ProjectForm';
 
 const QUICK_ACTIONS = [
@@ -17,14 +18,18 @@ const QUICK_ACTIONS = [
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { addToast } = useStore();
+  const { addToast, activeChat, setActiveChat } = useStore();
+  const hasChat = (activeChat?.messages?.length ?? 0) > 0;
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (id) loadProject();
+    if (id) {
+      setActiveChat(null);
+      loadProject();
+    }
   }, [id]);
 
   const loadProject = async () => {
@@ -113,27 +118,35 @@ export default function ProjectDetailPage() {
         />
       )}
 
-      {/* Chat area — same layout as main chat empty state */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 pb-16">
-        <h2 className="text-3xl font-playfair text-vetted-primary mb-8">{project.name}</h2>
-        {project.description && (
-          <p className="text-sm text-vetted-text-secondary mb-6 max-w-md text-center">{project.description}</p>
-        )}
-        <div className="w-full max-w-3xl">
-          <ChatInput centered projectId={id} />
+      {hasChat ? (
+        <>
+          <div className="flex-1 overflow-hidden">
+            <ChatView />
+          </div>
+          <ChatInput projectId={id} />
+        </>
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center px-4 pb-16">
+          <h2 className="text-3xl font-playfair text-vetted-primary mb-8">{project.name}</h2>
+          {project.description && (
+            <p className="text-sm text-vetted-text-secondary mb-6 max-w-md text-center">{project.description}</p>
+          )}
+          <div className="w-full max-w-3xl">
+            <ChatInput centered projectId={id} />
+          </div>
+          <div className="flex items-center gap-2 mt-4 flex-wrap justify-center">
+            {QUICK_ACTIONS.map(({ label, icon: Icon }) => (
+              <button
+                key={label}
+                className="flex items-center gap-2 px-4 py-2 rounded-full border border-vetted-border text-sm text-vetted-text-secondary hover:border-vetted-accent hover:text-vetted-primary transition-colors bg-white"
+              >
+                <Icon size={15} />
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex items-center gap-2 mt-4 flex-wrap justify-center">
-          {QUICK_ACTIONS.map(({ label, icon: Icon }) => (
-            <button
-              key={label}
-              className="flex items-center gap-2 px-4 py-2 rounded-full border border-vetted-border text-sm text-vetted-text-secondary hover:border-vetted-accent hover:text-vetted-primary transition-colors bg-white"
-            >
-              <Icon size={15} />
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

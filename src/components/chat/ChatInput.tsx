@@ -13,14 +13,6 @@ import { LibraryFile } from '../../types';
 import LibraryPickerModal from './LibraryPickerModal';
 import FileTypeBadge from './FileTypeBadge';
 
-function ClaudeIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path d="M7 1v2M7 11v2M1 7h2M11 7h2M2.93 2.93l1.41 1.41M9.66 9.66l1.41 1.41M2.93 11.07l1.41-1.41M9.66 4.34l1.41-1.41" stroke="#E8774A" strokeWidth="1.8" strokeLinecap="round"/>
-      <circle cx="7" cy="7" r="2" fill="#E8774A"/>
-    </svg>
-  );
-}
 
 function GeminiIcon({ flash = false }: { flash?: boolean }) {
   const color = flash ? '#60A5FA' : '#3B82F6';
@@ -33,29 +25,47 @@ function GeminiIcon({ flash = false }: { flash?: boolean }) {
 }
 
 const MODELS = [
-  { name: 'Sonnet 4.6', icon: <ClaudeIcon /> },
-  { name: 'Opus 4.6', icon: <ClaudeIcon /> },
   { name: 'Gemini 3', icon: <GeminiIcon /> },
-  { name: 'Gemini Flash 3', icon: <GeminiIcon flash /> },
+  { name: 'Gemini 3 Flash', icon: <GeminiIcon flash /> },
 ];
 
 export default function ChatInput({ centered = false, projectId }: { centered?: boolean; projectId?: string }) {
-  const { id } = useParams<{ id: string }>();
+  const { id: urlId } = useParams<{ id: string }>();
+  // When on a project page, the URL :id is the project ID — don't use it as a chat ID
+  const id = projectId ? undefined : urlId;
   const navigate = useNavigate();
   const {
     activeChat, setActiveChat, addToast,
     demoActive, demoHighlight, demoInputText, demoShowModelPicker, demoAttachedFile,
     demoTriggerSend, setDemoTriggerSend,
+    quickActionText, setQuickActionText,
   } = useStore();
   const [message, setMessage] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<LibraryFile[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(MODELS[0]);
+  const [selectedModel, setSelectedModel] = useState(() => {
+    const saved = localStorage.getItem('selectedModel');
+    return MODELS.find((m) => m.name === saved) ?? MODELS[0];
+  });
   const [temperature, setTemperature] = useState(0.7);
   const [showModelSelect, setShowModelSelect] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const paperclipButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Focus textarea on mount and whenever the route changes
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, [id, projectId]);
+
+  // Consume quick action text
+  useEffect(() => {
+    if (quickActionText) {
+      setMessage(quickActionText);
+      setQuickActionText('');
+      textareaRef.current?.focus();
+    }
+  }, [quickActionText, setQuickActionText]);
 
   // Sync demo state into local state
   useEffect(() => {
@@ -80,8 +90,10 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
     }
   }, [message]);
 
-  const handleSendMessage = async () => {
-    if (!message.trim()) return;
+  const handleSendMessage = async (overrides?: { msg?: string; files?: LibraryFile[] }) => {
+    const content = overrides?.msg ?? message;
+    const files = overrides?.files ?? attachedFiles;
+    if (!content.trim()) return;
 
     setLoading(true);
     try {
@@ -89,20 +101,24 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
 
       if (!chatId) {
         const newChat = await api.chats.create({
-          title: message.slice(0, 50),
+          title: content.slice(0, 50),
           model: selectedModel.name,
           temperature,
           ...(projectId && { project_id: projectId }),
         });
         chatId = newChat.id;
-        navigate(`/chat/${chatId}`);
+        if (projectId) {
+          navigate(`/projects/${projectId}`);
+        } else {
+          navigate(`/chat/${chatId}`);
+        }
       }
 
-      await api.chats.sendMessage(chatId, {
-        content: message,
+      const sendResult = await api.chats.sendMessage(chatId, {
+        content,
         model: selectedModel.name,
         temperature,
-        attachments: attachedFiles.map((f) => f.id),
+        attachments: files.map((f) => f.id),
       });
 
       setMessage('');
@@ -110,6 +126,18 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
 
       if (chatId) {
         const updated = await api.chats.get(chatId);
+        // Merge steps from send response into the assistant message
+        if (sendResult?.messages) {
+          const stepsById: Record<string, string[]> = {};
+          for (const m of sendResult.messages) {
+            if (m.steps?.length) stepsById[m.id] = m.steps;
+          }
+          if (Object.keys(stepsById).length > 0 && updated.messages) {
+            updated.messages = updated.messages.map((m: any) =>
+              stepsById[m.id] ? { ...m, steps: stepsById[m.id] } : m
+            );
+          }
+        }
         setActiveChat(updated);
       }
 
@@ -122,6 +150,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
       });
     } finally {
       setLoading(false);
+      textareaRef.current?.focus();
     }
   };
 
@@ -137,7 +166,10 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
       <LibraryPickerModal
         isOpen={isPickerOpen}
         onClose={() => setIsPickerOpen(false)}
-        onAttach={(files) => setAttachedFiles(files)}
+        onAttach={(files) => {
+          setAttachedFiles(files);
+          handleSendMessage({ msg: 'Please summarize this document.', files });
+        }}
         returnFocusRef={paperclipButtonRef}
       />
 
@@ -183,11 +215,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
           )}
 
           {/* Main input container */}
-          <div className={`relative border rounded-2xl bg-white transition-all ${
-            demoActive && (demoHighlight === 'chat-input' || demoHighlight === 'send-button')
-              ? 'border-vetted-accent ring-[3px] ring-vetted-accent/20'
-              : 'border-vetted-border'
-          }`}>
+          <div className="relative border border-vetted-border rounded-2xl bg-white focus-within:border-vetted-accent focus-within:ring-2 focus-within:ring-vetted-accent/20 outline-none">
             {/* Textarea */}
             <textarea
               ref={textareaRef}
@@ -218,14 +246,16 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
                 {activeChat && (
                   <button
                     onClick={() => {
+                      const url = `${window.location.origin}/chat/${activeChat.id}`;
+                      navigator.clipboard.writeText(url);
                       addToast({
                         type: 'success',
                         title: 'Chat link copied',
-                        detail: 'Share this chat with others',
+                        detail: url,
                       });
                     }}
                     className="p-2 text-vetted-text-muted hover:text-vetted-text-secondary hover:bg-vetted-surface rounded-lg transition-colors"
-                    title="Share chat"
+                    title="Copy chat link"
                   >
                     <Share2 size={18} />
                   </button>
@@ -257,6 +287,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
                           key={model.name}
                           onClick={() => {
                             setSelectedModel(model);
+                            localStorage.setItem('selectedModel', model.name);
                             setShowModelSelect(false);
                           }}
                           className={`w-full text-left px-3 py-2.5 text-sm hover:bg-vetted-surface flex items-center gap-2.5 transition-colors ${

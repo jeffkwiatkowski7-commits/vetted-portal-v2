@@ -118,33 +118,33 @@ export default function AdminUsersPage() {
       </div>
 
       {/* Users Table */}
-      <div className="flex-1 overflow-y-auto">
-        <table className="w-full">
+      <div className="flex-1 overflow-auto">
+        <table className="w-full min-w-[700px]">
           <thead className="bg-vetted-surface sticky top-0 border-b border-vetted-border">
             <tr className="text-left text-xs font-medium text-vetted-text-muted">
-              <th className="px-6 py-3">Avatar</th>
-              <th className="px-6 py-3">Name</th>
-              <th className="px-6 py-3">Email</th>
-              <th className="px-6 py-3">Role</th>
-              <th className="px-6 py-3">Status</th>
-              <th className="px-6 py-3">Last Active</th>
-              <th className="px-6 py-3">Actions</th>
+              <th className="px-4 py-3">Name</th>
+              <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3">Role</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3 whitespace-nowrap">Last Active</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-vetted-border">
             {filtered.map((u) => (
               <tr key={u.id} className="hover:bg-vetted-surface transition-colors">
-                <td className="px-6 py-4">
-                  <div className="w-8 h-8 rounded-full bg-vetted-accent flex items-center justify-center text-vetted-primary font-medium text-sm">
-                    {u.display_name[0]?.toUpperCase()}
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-vetted-accent flex items-center justify-center text-vetted-primary font-medium text-xs shrink-0">
+                      {u.display_name[0]?.toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-vetted-primary text-sm truncate">{u.display_name}</p>
+                      {u.job_title && <p className="text-xs text-vetted-text-secondary truncate">{u.job_title}</p>}
+                    </div>
                   </div>
                 </td>
-                <td className="px-6 py-4">
-                  <p className="font-medium text-vetted-primary">{u.display_name}</p>
-                  {u.job_title && <p className="text-xs text-vetted-text-secondary">{u.job_title}</p>}
-                </td>
-                <td className="px-6 py-4 text-sm text-vetted-text-secondary">{u.email}</td>
-                <td className="px-6 py-4">
+                <td className="px-4 py-3 text-sm text-vetted-text-secondary max-w-[200px] truncate">{u.email}</td>
+                <td className="px-4 py-3">
                   <select
                     value={u.role}
                     onChange={(e) => handleRoleChange(u.id, e.target.value)}
@@ -156,7 +156,7 @@ export default function AdminUsersPage() {
                     <option value="super_admin">Super Admin</option>
                   </select>
                 </td>
-                <td className="px-6 py-4">
+                <td className="px-4 py-3">
                   <select
                     value={u.status}
                     onChange={(e) => handleStatusChange(u.id, e.target.value)}
@@ -170,13 +170,8 @@ export default function AdminUsersPage() {
                     <option value="suspended">Suspended</option>
                   </select>
                 </td>
-                <td className="px-6 py-4 text-sm text-vetted-text-muted">
+                <td className="px-4 py-3 text-sm text-vetted-text-muted whitespace-nowrap">
                   {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : 'Never'}
-                </td>
-                <td className="px-6 py-4">
-                  <button className="text-vetted-text-secondary hover:text-vetted-primary transition-colors">
-                    {/* More menu could go here */}
-                  </button>
                 </td>
               </tr>
             ))}

@@ -37,6 +37,7 @@ export interface Message {
   token_count?: number;
   reasoning?: string;
   attachments?: string;
+  steps?: string[];
   created_at: string;
 }
 

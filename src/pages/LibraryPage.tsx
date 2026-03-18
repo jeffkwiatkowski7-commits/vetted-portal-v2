@@ -123,7 +123,10 @@ export default function LibraryPage() {
     );
   }
 
-  const sizeInKB = (stats.totalSize / 1024).toFixed(1);
+  const STORAGE_LIMIT = 50 * 1024 * 1024; // 50 MB
+  const sizeInMB = (stats.totalSize / (1024 * 1024)).toFixed(1);
+  const limitInMB = (STORAGE_LIMIT / (1024 * 1024)).toFixed(0);
+  const storagePercent = Math.min((stats.totalSize / STORAGE_LIMIT) * 100, 100);
   const selectedSize = selected.reduce((sum, id) => {
     const file = files.find((f) => f.id === id);
     return sum + (file?.file_size || 0);
@@ -136,13 +139,13 @@ export default function LibraryPage() {
         <div>
           <h1 className="text-3xl font-serif text-vetted-primary mb-2">Library</h1>
           <p className="text-vetted-text-secondary">
-            {sizeInKB} KB used | {stats.fileCount} files
+            {sizeInMB} MB of {limitInMB} MB used · {stats.fileCount} files
           </p>
           {/* Storage Meter */}
           <div className="mt-3 bg-vetted-surface rounded-full h-2">
             <div
               className="bg-vetted-accent h-full rounded-full"
-              style={{ width: `${Math.min((stats.totalSize / (5 * 1024 * 1024)) * 100, 100)}%` }}
+              style={{ width: `${storagePercent}%` }}
             />
           </div>
         </div>

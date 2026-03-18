@@ -48,6 +48,10 @@ interface AppState {
   demoTriggerSend: boolean;
   setDemoTriggerSend: (v: boolean) => void;
 
+  // Quick actions
+  quickActionText: string;
+  setQuickActionText: (v: string) => void;
+
   // Search
   searchOpen: boolean;
   setSearchOpen: (v: boolean) => void;
@@ -114,6 +118,10 @@ export const useStore = create<AppState>((set, get) => ({
   setDemoAttachedFile: (v) => set({ demoAttachedFile: v }),
   demoTriggerSend: false,
   setDemoTriggerSend: (v) => set({ demoTriggerSend: v }),
+
+  // Quick actions
+  quickActionText: '',
+  setQuickActionText: (v) => set({ quickActionText: v }),
 
   // Search
   searchOpen: false,

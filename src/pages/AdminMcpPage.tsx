@@ -15,23 +15,27 @@ interface McpServer {
 const STORAGE_KEY = 'admin_mcps';
 
 const PRESET_MCPS: McpServer[] = [
-  { id: 'web_search', name: 'Web Search', description: 'Search the web in real time via Brave or Google', url: 'https://mcp.example.com/web-search', apiKey: '', enabled: true, createdAt: new Date().toISOString() },
-  { id: 'code_execution', name: 'Code Execution', description: 'Run Python, JS, and shell scripts in a sandbox', url: 'https://mcp.example.com/code', apiKey: '', enabled: true, createdAt: new Date().toISOString() },
-  { id: 'file_browser', name: 'File Browser', description: 'Browse and read project files', url: 'https://mcp.example.com/files', apiKey: '', enabled: false, createdAt: new Date().toISOString() },
-  { id: 'database_query', name: 'Database Query', description: 'Query connected databases via SQL', url: 'https://mcp.example.com/db', apiKey: '', enabled: false, createdAt: new Date().toISOString() },
-  { id: 'email', name: 'Email', description: 'Send and read emails via SMTP/IMAP', url: 'https://mcp.example.com/email', apiKey: '', enabled: false, createdAt: new Date().toISOString() },
-  { id: 'calendar', name: 'Calendar', description: 'Access and manage calendar events', url: 'https://mcp.example.com/calendar', apiKey: '', enabled: false, createdAt: new Date().toISOString() },
+  { id: 'web_search', name: 'Web Search', description: 'Search the web in real time via Brave or Google', url: '', apiKey: '', enabled: false, createdAt: new Date().toISOString() },
+  { id: 'code_execution', name: 'Code Execution', description: 'Run Python, JS, and shell scripts in a sandbox', url: '', apiKey: '', enabled: false, createdAt: new Date().toISOString() },
+  { id: 'file_browser', name: 'File Browser', description: 'Browse and read project files', url: '', apiKey: '', enabled: false, createdAt: new Date().toISOString() },
+  { id: 'database_query', name: 'Database Query', description: 'Query connected databases via SQL', url: '', apiKey: '', enabled: false, createdAt: new Date().toISOString() },
+  { id: 'email', name: 'Email', description: 'Send and read emails via SMTP/IMAP', url: '', apiKey: '', enabled: false, createdAt: new Date().toISOString() },
+  { id: 'calendar', name: 'Calendar', description: 'Access and manage calendar events', url: '', apiKey: '', enabled: false, createdAt: new Date().toISOString() },
 ];
 
+const MCP_VERSION = 'v2'; // bump to reset stale localStorage
 function loadMcps(): McpServer[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : PRESET_MCPS;
+    const version = localStorage.getItem(STORAGE_KEY + '_version');
+    if (!stored || version !== MCP_VERSION) return PRESET_MCPS;
+    return JSON.parse(stored);
   } catch { return PRESET_MCPS; }
 }
 
 function saveMcps(mcps: McpServer[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(mcps));
+  localStorage.setItem(STORAGE_KEY + '_version', MCP_VERSION);
 }
 
 const BLANK = { name: '', description: '', url: '', apiKey: '' };

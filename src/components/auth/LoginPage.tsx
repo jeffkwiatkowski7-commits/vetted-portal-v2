@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useStore } from '../../store';
 import * as api from '../../api';
 import { AlertCircle } from 'lucide-react';
@@ -13,6 +13,8 @@ const DEMO_USERS = [
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as any)?.from || '/';
   const setUser = useStore((s) => s.setUser);
   const [email, setEmail] = useState(DEMO_USERS[0]);
   const [loading, setLoading] = useState(false);
@@ -25,7 +27,7 @@ export default function LoginPage() {
       const result = await api.auth.login(email);
       localStorage.setItem('userId', result.user.id);
       setUser(result.user);
-      navigate('/');
+      navigate(from, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

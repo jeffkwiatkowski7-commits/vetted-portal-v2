@@ -39,10 +39,15 @@ code, pre {
 ::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
 
-/* Focus ring */
-*:focus-visible {
+/* Focus ring — skip form elements that manage their own focus styles */
+*:focus-visible:not(textarea):not(input):not(select):not(button) {
   outline: 2px solid #C4A962;
   outline-offset: 2px;
+}
+textarea:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: none;
 }
 
 @layer components {

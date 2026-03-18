@@ -1,39 +1,73 @@
 /**
- * Vertex AI Gemini client — ported from cbre_leases.
+ * Vertex AI Gemini client — uses @google/genai SDK with v1beta for Gemini 3.
  *
- * Three main functions:
+ * Functions:
  * 1. ocrPdf()              — OCR scanned PDFs using Gemini vision
  * 2. extractLeaseData()    — structured data extraction from lease text
  * 3. chatWithLeases()      — per-project Q&A using full context window
  * 4. chatCrossPortfolio()  — cross-portfolio Q&A using summaries
+ * 5. chatWithDocuments()   — general document Q&A
  */
-import { VertexAI, HarmCategory, HarmBlockThreshold } from "@google-cloud/vertexai";
+import { GoogleGenAI } from "@google/genai";
 import { config } from "./config.js";
 
-// Singleton Vertex AI client
-let vertexAi = null;
+// Singleton client
+let _client = null;
 
 function getClient() {
-  if (!vertexAi) {
-    vertexAi = new VertexAI({
+  if (!_client) {
+    _client = new GoogleGenAI({
+      vertexai: true,
       project: config.gcpProject,
       location: config.gcpLocation,
+      httpOptions: { apiVersion: config.apiVersion },
     });
   }
-  return vertexAi;
+  return _client;
 }
 
-function getModel(modelId) {
+async function generate(contents, genConfig = {}, tools = []) {
   const client = getClient();
-  return client.getGenerativeModel({
-    model: modelId || config.modelId,
-    safetySettings: [
-      {
-        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-        threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-      },
-    ],
-  });
+  const req = {
+    model: config.modelId,
+    contents,
+    config: {
+      temperature: 0.3,
+      maxOutputTokens: 4096,
+      ...genConfig,
+    },
+  };
+  if (tools.length) req.config.tools = tools;
+  return client.models.generateContent(req);
+}
+
+// ── Response extraction ──────────────────────────────────────────────
+
+function extractGroundedResponse(result) {
+  const candidate = result.candidates?.[0];
+  const meta = candidate?.groundingMetadata;
+  const searchQueries = meta?.webSearchQueries ?? [];
+  const chunks = meta?.groundingChunks ?? [];
+
+  const rawText = (candidate?.content?.parts ?? [])
+    .map((p) => p.text ?? "")
+    .join("")
+    .trim();
+
+  console.log("[gemini] finishReason:", candidate?.finishReason);
+  console.log("[gemini] searchQueries:", searchQueries);
+
+  let text = rawText || result.text || "No response generated.";
+
+  const sourceLines = chunks
+    .filter((c) => c.web?.uri && c.web?.title)
+    .slice(0, 5)
+    .map((c) => `- [${c.web.title}](${c.web.uri})`)
+    .join("\n");
+
+  if (sourceLines) text += `\n\n---\n**Sources:**\n${sourceLines}`;
+
+  return { text, searchQueries };
 }
 
 // ── OCR ─────────────────────────────────────────────────────────────
@@ -44,30 +78,24 @@ Include all text: headings, paragraphs, clauses, signatures, dates, addresses, a
 If there are handwritten annotations, transcribe those too and mark them as [handwritten: ...].`;
 
 export async function ocrPdf(pdfBase64) {
-  const model = getModel();
-  const result = await model.generateContent({
-    contents: [
+  const result = await generate(
+    [
       {
         role: "user",
         parts: [
-          {
-            inlineData: {
-              mimeType: "application/pdf",
-              data: pdfBase64,
-            },
-          },
+          { inlineData: { mimeType: "application/pdf", data: pdfBase64 } },
           { text: OCR_PROMPT },
         ],
       },
     ],
-    generationConfig: {
-      temperature: 0.1,
-      maxOutputTokens: 8192,
-    },
-  });
+    { temperature: 0.1, maxOutputTokens: 8192 },
+  );
 
-  const response = result.response;
-  return response.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  return (
+    result.candidates?.[0]?.content?.parts?.[0]?.text ||
+    result.text ||
+    ""
+  );
 }
 
 // ── Structured extraction ───────────────────────────────────────────
@@ -102,38 +130,23 @@ LEASE DOCUMENT TEXT:
 `;
 
 export async function extractLeaseData(fullText, sourceFile) {
-  const model = getModel();
   const truncated = fullText.slice(0, 100_000);
 
-  const result = await model.generateContent({
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: EXTRACTION_PROMPT + truncated }],
-      },
-    ],
-    generationConfig: {
-      temperature: 0.1,
-      maxOutputTokens: 4096,
-      responseMimeType: "application/json",
-    },
-  });
+  const result = await generate(
+    [{ role: "user", parts: [{ text: EXTRACTION_PROMPT + truncated }] }],
+    { temperature: 0.1, maxOutputTokens: 4096, responseMimeType: "application/json" },
+  );
 
-  const response = result.response;
   let rawJson =
-    response.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "{}";
+    result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
+    result.text?.trim() ||
+    "{}";
 
   // Clean up markdown code fences if present
-  if (rawJson.startsWith("```")) {
-    rawJson = rawJson.split("\n").slice(1).join("\n");
-  }
-  if (rawJson.endsWith("```")) {
-    rawJson = rawJson.slice(0, rawJson.lastIndexOf("```"));
-  }
+  if (rawJson.startsWith("```")) rawJson = rawJson.split("\n").slice(1).join("\n");
+  if (rawJson.endsWith("```")) rawJson = rawJson.slice(0, rawJson.lastIndexOf("```"));
 
   const data = JSON.parse(rawJson);
-
-  // Handle array responses (e.g. lease + amendments)
   const parsed = Array.isArray(data) ? data[0] : data;
 
   return {
@@ -156,48 +169,13 @@ export async function extractLeaseData(fullText, sourceFile) {
   };
 }
 
-// ── Shared grounding response extractor ─────────────────────────────
-
-function extractGroundedResponse(result) {
-  const candidate = result.response?.candidates?.[0];
-  const meta = candidate?.groundingMetadata;
-  const searchQueries = meta?.webSearchQueries ?? [];
-
-  const chunks =
-    meta?.groundingChunks ?? candidate?.groundingChunks ?? [];
-
-  // Concatenate ALL text parts
-  const rawText = (candidate?.content?.parts ?? [])
-    .map((p) => p.text ?? "")
-    .join("")
-    .trim();
-
-  console.log("[gemini] finishReason:", candidate?.finishReason);
-  console.log("[gemini] parts count:", candidate?.content?.parts?.length);
-  console.log("[gemini] searchQueries:", searchQueries);
-
-  let text = rawText || "No response generated.";
-
-  const sourceLines = chunks
-    .filter((c) => c.web?.uri && c.web?.title)
-    .slice(0, 5)
-    .map((c) => `- [${c.web.title}](${c.web.uri})`)
-    .join("\n");
-
-  if (sourceLines) text += `\n\n---\n**Sources:**\n${sourceLines}`;
-
-  return { text, searchQueries };
-}
-
-// ── Per-project Q&A (context window approach) ────────────────────────
+// ── System prompt ────────────────────────────────────────────────────
 
 function getChatSystemPrompt(useSearch, persona) {
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
-  const personaSection = persona?.trim()
-    ? `## Your Role\n\n${persona.trim()}\n\n`
-    : "";
+  const personaSection = persona?.trim() ? `## Your Role\n\n${persona.trim()}\n\n` : "";
 
   return `${personaSection}You are a confidential lease assistant for a commercial real estate portfolio manager.
 You answer questions about lease documents. All lease data is confidential and must not be shared outside this system.
@@ -238,85 +216,123 @@ CRITICAL table formatting rules — FOLLOW EXACTLY:
 - NEVER put multiple | rows on the same line`;
 }
 
-export async function chatWithLeases(
-  leaseTexts,
-  userMessage,
-  chatHistory,
-  useSearch = false,
-  persona,
-) {
-  const model = getModel();
+// ── Per-project Q&A ──────────────────────────────────────────────────
 
-  // Build context with all property leases
+export async function chatWithLeases(leaseTexts, userMessage, chatHistory, useSearch = false, persona) {
   const leaseContext = leaseTexts
-    .map(
-      (l, i) =>
-        `\n--- LEASE ${i + 1}: ${l.tenantName} (Suite ${l.suiteNumber}) ---\n${l.text}\n`,
-    )
+    .map((l, i) => `\n--- LEASE ${i + 1}: ${l.tenantName} (Suite ${l.suiteNumber}) ---\n${l.text}\n`)
     .join("\n");
 
   const systemContext = `${getChatSystemPrompt(useSearch, persona)}\n\nYou have access to ${leaseTexts.length} lease(s) for this property:\n${leaseContext}`;
 
-  // Build conversation history
   const contents = [
     {
       role: "user",
-      parts: [
-        {
-          text: `[SYSTEM CONTEXT — not from user]\n${systemContext}\n\n[USER QUESTION]\n${chatHistory.length === 0 ? userMessage : chatHistory[0].content}`,
-        },
-      ],
+      parts: [{ text: `[SYSTEM CONTEXT — not from user]\n${systemContext}\n\n[USER QUESTION]\n${chatHistory.length === 0 ? userMessage : chatHistory[0].content}` }],
     },
   ];
 
-  // Add prior turns if any
-  for (let i = 0; i < chatHistory.length; i++) {
+  for (let i = 1; i < chatHistory.length; i++) {
     const msg = chatHistory[i];
-    if (i === 0) continue;
-    contents.push({
-      role: msg.role === "user" ? "user" : "model",
-      parts: [{ text: msg.content }],
-    });
+    contents.push({ role: msg.role === "user" ? "user" : "model", parts: [{ text: msg.content }] });
   }
 
-  // Add current message if there's history
   if (chatHistory.length > 0) {
-    contents.push({
-      role: "user",
-      parts: [{ text: userMessage }],
-    });
+    contents.push({ role: "user", parts: [{ text: userMessage }] });
   }
 
-  const result = await model.generateContent({
-    contents,
-    ...(useSearch ? { tools: [{ googleSearch: {} }] } : {}),
-    generationConfig: {
-      temperature: 0.3,
-      maxOutputTokens: 4096,
-    },
-  });
+  const tools = useSearch ? [{ googleSearch: {} }] : [];
+  const result = await generate(contents, {}, tools);
+
+  for (const q of result.candidates?.[0]?.groundingMetadata?.webSearchQueries ?? []) {
+    console.log("[gemini] web search:", q);
+  }
 
   return extractGroundedResponse(result);
 }
 
-// ── Cross-portfolio Q&A ─────────────────────────────────────────────
+// ── Default system prompt ────────────────────────────────────────────
 
-export async function chatCrossPortfolio(
-  leaseSummaries,
-  userMessage,
-  chatHistory = [],
-  useSearch = false,
-  persona,
-) {
-  const model = getModel();
+export function buildDefaultSystemPrompt() {
+  const today = new Date().toLocaleDateString("en-US", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+  });
 
+  return `You are a knowledgeable, precise, and helpful AI assistant powered by Gemini.
+
+Today's date is ${today}.
+
+## Core Behavior
+
+- Answer questions directly and accurately
+- Use Google Search when questions require current information, recent events, live data, or anything likely beyond your training knowledge — search proactively, don't wait to be asked
+- When using grounded sources, cite them inline as [Source](URL)
+- If you're uncertain about something, say so clearly rather than speculating
+- Never refuse a reasonable request — if you can't do exactly what's asked, do the closest useful thing and explain
+
+## Reasoning
+
+- For complex questions, think step by step before answering
+- Show your work when doing calculations or multi-step analysis
+- Label any assumptions you make as **[Assumption: ...]**
+
+## Formatting — follow exactly
+
+- Use **bold** for key terms and important values
+- Use bullet lists and numbered lists to organize information
+- Use ## and ### headers to structure longer responses
+- Use markdown tables when comparing multiple items or presenting structured data
+- Use code blocks (\`\`\`) for code, commands, JSON, or technical output
+- Keep responses focused — lead with the answer, then provide supporting detail`;
+}
+
+// ── General document Q&A / project chat ─────────────────────────────
+
+export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null) {
+  const docContext = docs.length > 0
+    ? docs.map((d, i) => `\n--- DOCUMENT ${i + 1}: ${d.name} ---\n${d.text}\n`).join("\n")
+    : "";
+
+  const basePrompt = systemPromptOverride ?? buildDefaultSystemPrompt();
+  const systemPrompt = docContext
+    ? `${basePrompt}\n\n## Attached Documents\n${docContext}`
+    : basePrompt;
+
+  const contents = [
+    {
+      role: "user",
+      parts: [{ text: `[SYSTEM CONTEXT]\n${systemPrompt}\n\n[USER MESSAGE]\n${chatHistory.length === 0 ? userMessage : chatHistory[0].content}` }],
+    },
+  ];
+
+  for (let i = 1; i < chatHistory.length; i++) {
+    const msg = chatHistory[i];
+    contents.push({ role: msg.role === "user" ? "user" : "model", parts: [{ text: msg.content }] });
+  }
+
+  if (chatHistory.length > 0) {
+    contents.push({ role: "user", parts: [{ text: userMessage }] });
+  }
+
+  // Always enable Google Grounding — model decides when to search
+  const result = await generate(contents, {}, [{ googleSearch: {} }]);
+
+  for (const q of result.candidates?.[0]?.groundingMetadata?.webSearchQueries ?? []) {
+    console.log("[gemini] web search:", q);
+  }
+
+  return extractGroundedResponse(result);
+}
+
+// ── Cross-portfolio Q&A ──────────────────────────────────────────────
+
+export async function chatCrossPortfolio(leaseSummaries, userMessage, chatHistory = [], useSearch = false, persona) {
   const summaryContext = leaseSummaries
-    .map(
-      (l, i) =>
-        `Lease ${i + 1}: ${l.tenantName} | Suite ${l.suiteNumber} | ${l.propertyAddress} | ` +
-        `${l.leaseStartDate || "?"} to ${l.leaseEndDate || "?"} | ` +
-        `$${l.monthlyRent?.toLocaleString() || "?"}/mo | ${l.squareFootage || "?"}sqft | ` +
-        `Renewal: ${l.renewalOptions || "N/A"} | Notes: ${l.specialProvisions || "N/A"}`,
+    .map((l, i) =>
+      `Lease ${i + 1}: ${l.tenantName} | Suite ${l.suiteNumber} | ${l.propertyAddress} | ` +
+      `${l.leaseStartDate || "?"} to ${l.leaseEndDate || "?"} | ` +
+      `$${l.monthlyRent?.toLocaleString() || "?"}/mo | ${l.squareFootage || "?"}sqft | ` +
+      `Renewal: ${l.renewalOptions || "N/A"} | Notes: ${l.specialProvisions || "N/A"}`,
     )
     .join("\n");
 
@@ -331,38 +347,20 @@ Answer questions using this portfolio data. If you need the full lease text to a
   const contents = [
     {
       role: "user",
-      parts: [
-        {
-          text: `[SYSTEM CONTEXT — not from user]\n${systemContext}\n\n[USER QUESTION]\n${chatHistory.length === 0 ? userMessage : chatHistory[0].content}`,
-        },
-      ],
+      parts: [{ text: `[SYSTEM CONTEXT — not from user]\n${systemContext}\n\n[USER QUESTION]\n${chatHistory.length === 0 ? userMessage : chatHistory[0].content}` }],
     },
   ];
 
-  for (let i = 0; i < chatHistory.length; i++) {
+  for (let i = 1; i < chatHistory.length; i++) {
     const msg = chatHistory[i];
-    if (i === 0) continue;
-    contents.push({
-      role: msg.role === "user" ? "user" : "model",
-      parts: [{ text: msg.content }],
-    });
+    contents.push({ role: msg.role === "user" ? "user" : "model", parts: [{ text: msg.content }] });
   }
 
   if (chatHistory.length > 0) {
-    contents.push({
-      role: "user",
-      parts: [{ text: userMessage }],
-    });
+    contents.push({ role: "user", parts: [{ text: userMessage }] });
   }
 
-  const result = await model.generateContent({
-    contents,
-    ...(useSearch ? { tools: [{ googleSearch: {} }] } : {}),
-    generationConfig: {
-      temperature: 0.3,
-      maxOutputTokens: 4096,
-    },
-  });
-
+  const tools = useSearch ? [{ googleSearch: {} }] : [];
+  const result = await generate(contents, {}, tools);
   return extractGroundedResponse(result);
 }

@@ -2,8 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore } from '../../store';
 import * as api from '../../api';
-import { Copy, ThumbsUp, ThumbsDown, RefreshCw } from 'lucide-react';
-import ProcessingPipeline from '../pipeline/ProcessingPipeline';
+import { Copy, ThumbsUp, ThumbsDown, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import ModelReasoning from '../pipeline/ModelReasoning';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -148,63 +147,91 @@ function MarkdownContent({ content }: { content: string }) {
 }
 
 // ── Assistant message with pipeline-first sequencing ─────────────────────────
+function StepsLog({ steps }: { steps: string[] }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="rounded-lg border border-vetted-border bg-vetted-surface overflow-hidden text-[11px]">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition-colors text-left"
+      >
+        {open ? <ChevronDown size={11} className="text-gray-400 shrink-0" /> : <ChevronRight size={11} className="text-gray-400 shrink-0" />}
+        <span className="text-gray-400 font-mono">{steps.length} steps</span>
+      </button>
+      {open && (
+        <div className="px-3 pb-2.5 pt-0.5 space-y-1 border-t border-vetted-border">
+          {steps.map((s, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0 mt-1.5" />
+              <span className="text-gray-500 font-mono leading-snug">{s}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AssistantMessage({
   content,
   reasoning,
-  isLast,
+  steps,
+  modelUsed,
 }: {
   content: string;
   reasoning?: string;
-  isLast: boolean;
+  steps?: string[];
+  modelUsed?: string;
 }) {
-  // Non-last messages already ran their pipeline — show content immediately
-  const [responseVisible, setResponseVisible] = React.useState(!isLast);
+  const [copied, setCopied] = React.useState(false);
+  const [thumbs, setThumbs] = React.useState<'up' | 'down' | null>(null);
 
-  useEffect(() => {
-    if (!isLast) setResponseVisible(true);
-  }, [isLast]);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div className="space-y-3">
-      {/* Pipeline — always rendered for last message, stays visible after done */}
-      {isLast && (
-        <ProcessingPipeline onComplete={() => setResponseVisible(true)} />
-      )}
-
-      {/* Response appears below pipeline once pipeline finishes */}
-      {responseVisible && (
-        <>
-          <MarkdownContent content={content} />
-          {reasoning && <ModelReasoning reasoning={reasoning} />}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => navigator.clipboard.writeText(content)}
-              className="p-1.5 rounded-md text-vetted-text-muted hover:text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
-              title="Copy"
-            >
-              <Copy size={15} />
-            </button>
-            <button
-              className="p-1.5 rounded-md text-vetted-text-muted hover:text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
-              title="Good response"
-            >
-              <ThumbsUp size={15} />
-            </button>
-            <button
-              className="p-1.5 rounded-md text-vetted-text-muted hover:text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
-              title="Bad response"
-            >
-              <ThumbsDown size={15} />
-            </button>
-            <button
-              className="p-1.5 rounded-md text-vetted-text-muted hover:text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
-              title="Regenerate"
-            >
-              <RefreshCw size={15} />
-            </button>
-          </div>
-        </>
-      )}
+      {steps && steps.length > 0 && <StepsLog steps={steps} />}
+      <MarkdownContent content={content} />
+      {reasoning && <ModelReasoning reasoning={reasoning} />}
+      <div className="flex items-center gap-1">
+        <button
+          onClick={handleCopy}
+          className={`p-1.5 rounded-md transition-colors ${copied ? 'text-vetted-accent' : 'text-vetted-text-muted hover:text-vetted-text-secondary hover:bg-vetted-surface'}`}
+          title={copied ? 'Copied!' : 'Copy'}
+        >
+          <Copy size={15} />
+        </button>
+        {copied && <span className="text-[11px] text-vetted-accent mr-1">Copied!</span>}
+        <button
+          onClick={() => setThumbs(thumbs === 'up' ? null : 'up')}
+          className={`p-1.5 rounded-md transition-colors ${thumbs === 'up' ? 'text-vetted-accent' : 'text-vetted-text-muted hover:text-vetted-text-secondary hover:bg-vetted-surface'}`}
+          title="Good response"
+        >
+          <ThumbsUp size={15} />
+        </button>
+        <button
+          onClick={() => setThumbs(thumbs === 'down' ? null : 'down')}
+          className={`p-1.5 rounded-md transition-colors ${thumbs === 'down' ? 'text-vetted-danger' : 'text-vetted-text-muted hover:text-vetted-text-secondary hover:bg-vetted-surface'}`}
+          title="Bad response"
+        >
+          <ThumbsDown size={15} />
+        </button>
+        <button
+          className="p-1.5 rounded-md text-vetted-text-muted hover:text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
+          title="Regenerate"
+        >
+          <RefreshCw size={15} />
+        </button>
+        {modelUsed && (
+          <span className="ml-2 text-[11px] text-vetted-text-muted">
+            Response provided by {modelUsed}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -247,7 +274,7 @@ export default function ChatView() {
   }
 
   const messages = activeChat.messages || [];
-  if (messages.length === 0) return null;
+  if (messages.length === 0) return <div className="flex-1 bg-white" />;
 
   return (
     <div className="h-full overflow-y-auto bg-white">
@@ -265,7 +292,8 @@ export default function ChatView() {
               <AssistantMessage
                 content={msg.content}
                 reasoning={msg.reasoning}
-                isLast={idx === messages.length - 1}
+                steps={msg.steps}
+                modelUsed={msg.model_used}
               />
             )}
           </div>

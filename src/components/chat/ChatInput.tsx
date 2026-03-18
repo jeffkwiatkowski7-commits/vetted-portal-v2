@@ -150,9 +150,8 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
 
       if (!hidden) addToast({ type: 'success', title: 'Message sent' });
     } catch (err) {
-      setAiThinking(false);
-      clearLiveSteps();
-      addToast({
+      if (!hidden) { setAiThinking(false); clearLiveSteps(); }
+      if (!hidden) addToast({
         type: 'error',
         title: 'Failed to send message',
         detail: err instanceof Error ? err.message : 'Unknown error',

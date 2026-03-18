@@ -34,7 +34,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
     demoTriggerSend, setDemoTriggerSend,
     quickActionText, setQuickActionText,
     setAiThinking, addLiveStep, clearLiveSteps,
-    chatAttachedFiles, setChatAttachedFiles,
+    chatAttachedFiles, setChatAttachedFiles, setProjectFiles,
   } = useStore();
   const [message, setMessage] = useState('');
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -174,8 +174,22 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
       <LibraryPickerModal
         isOpen={isPickerOpen}
         onClose={() => setIsPickerOpen(false)}
-        onAttach={(files) => {
-          setChatAttachedFiles(files);
+        projectId={projectId}
+        onUploadComplete={projectId ? async () => {
+          const updated = await api.library.list(projectId);
+          setProjectFiles(updated);
+        } : undefined}
+        onAttach={async (files) => {
+          if (projectId) {
+            // Assign any existing library files not yet in this project
+            const unassigned = files.filter((f) => f.project_id !== projectId);
+            await Promise.all(unassigned.map((f) => api.library.assignProject(f.id, projectId)));
+            // Refresh project files in the panel
+            const updated = await api.library.list(projectId);
+            setProjectFiles(updated);
+          } else {
+            setChatAttachedFiles(files);
+          }
           const count = files.length;
           const prompt = count === 1
             ? 'A file has been attached. Please briefly acknowledge it and let the user know you are ready to help with questions about it.'

@@ -893,6 +893,7 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
   const promptCount = dbGet(db, 'SELECT COUNT(*) as count FROM system_prompts');
   const today = new Date().toISOString().split('T')[0];
   const activeTodayCount = dbGet(db, "SELECT COUNT(*) as count FROM users WHERE last_login_at >= ?", [today]);
+  const libraryFileCount = dbGet(db, 'SELECT COUNT(*) as count FROM library_files');
 
   res.json({
     stats: {
@@ -905,6 +906,7 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
       tool_sets: toolSetCount.count,
       models: modelCount.count,
       system_prompts: promptCount.count,
+      total_library_files: libraryFileCount.count,
       timestamp: new Date().toISOString()
     }
   });
@@ -1114,6 +1116,24 @@ app.get('/api/admin/health', (req, res) => {
     environment: NODE_ENV,
     timestamp: new Date().toISOString()
   });
+});
+
+app.get('/api/admin/errors', requireAuth, requireAdmin, (req, res) => {
+  res.json({ errors: errorLog });
+});
+
+app.post('/api/admin/client-errors', requireAuth, (req, res) => {
+  const { message, stack, url, userAgent } = req.body;
+  pushError({
+    timestamp: new Date().toISOString(),
+    source: 'client',
+    level: 'error',
+    message: message || 'Unknown client error',
+    stack,
+    route: url,
+    userAgent,
+  });
+  res.json({ ok: true });
 });
 
 // ============================================================================

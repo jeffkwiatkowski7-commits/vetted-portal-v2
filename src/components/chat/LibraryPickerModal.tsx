@@ -10,6 +10,8 @@ export interface LibraryPickerModalProps {
   onClose: () => void;
   onAttach: (files: LibraryFile[]) => void;
   returnFocusRef: React.RefObject<HTMLButtonElement>;
+  projectId?: string;
+  onUploadComplete?: () => void;
 }
 
 type UploadCard = {
@@ -31,6 +33,8 @@ export default function LibraryPickerModal({
   onClose,
   onAttach,
   returnFocusRef,
+  projectId,
+  onUploadComplete,
 }: LibraryPickerModalProps) {
   const [view, setView] = useState<ModalView>('browse');
   const [files, setFiles] = useState<LibraryFile[]>([]);
@@ -203,6 +207,7 @@ export default function LibraryPickerModal({
           setSelectedIds((prev) => new Set([...prev, result.id]));
           setView('browse');
           setTimeout(() => searchInputRef.current?.focus(), 0);
+          if (projectId) onUploadComplete?.();
         }, 600);
       } else {
         setCards((prev) =>
@@ -219,6 +224,7 @@ export default function LibraryPickerModal({
 
     const formData = new FormData();
     formData.append('file', file);
+    if (projectId) formData.append('project_id', projectId);
     xhr.send(formData);
   }
 
@@ -352,7 +358,7 @@ export default function LibraryPickerModal({
                   cursor: selectedIds.size === 0 ? 'not-allowed' : 'pointer',
                 }}
               >
-                Attach to Chat
+                {projectId ? 'Add to Project' : 'Attach to Chat'}
               </button>
             </>
           ) : (

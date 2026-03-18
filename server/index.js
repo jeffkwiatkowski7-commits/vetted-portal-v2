@@ -1354,14 +1354,41 @@ if (NODE_ENV === 'production') {
 
 app.use((err, req, res, next) => {
   console.error('Error:', err);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error'
+  pushError({
+    timestamp: new Date().toISOString(),
+    source: 'server',
+    level: 'error',
+    message: err.message || 'Internal server error',
+    stack: err.stack,
+    route: req.path,
   });
+  if (!res.headersSent) {
+    res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+  }
 });
 
 // ============================================================================
 // START SERVER
 // ============================================================================
+
+process.on('uncaughtException', (err) => {
+  pushError({
+    timestamp: new Date().toISOString(),
+    source: 'server',
+    level: 'error',
+    message: err.message,
+    stack: err.stack,
+  });
+});
+
+process.on('unhandledRejection', (reason) => {
+  pushError({
+    timestamp: new Date().toISOString(),
+    source: 'server',
+    level: 'error',
+    message: String(reason),
+  });
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT} (${NODE_ENV} mode)`);

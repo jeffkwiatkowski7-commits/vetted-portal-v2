@@ -127,7 +127,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
       const sendResult = await api.chats.streamMessage(
         chatId,
         { content, model: selectedModel.name, temperature, attachments: files.map((f) => f.id) },
-        (step) => addLiveStep(step),
+        hidden ? () => {} : (step) => addLiveStep(step),
       );
       if (!hidden) { setAiThinking(false); clearLiveSteps(); }
 

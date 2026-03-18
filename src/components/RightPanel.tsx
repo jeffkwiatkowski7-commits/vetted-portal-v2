@@ -47,7 +47,7 @@ export default function RightPanel() {
                 {chatAttachedFiles.map((f) => (
                   <div
                     key={f.id}
-                    className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-vetted-surface group"
+                    className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-vetted-surface"
                   >
                     <FileTypeBadge fileType={f.file_type} size={16} />
                     <span className="text-[12px] text-vetted-primary flex-1 truncate leading-tight">

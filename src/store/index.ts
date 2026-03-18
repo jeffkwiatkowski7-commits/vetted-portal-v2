@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { User, Chat, Toast, Notification } from '../types';
+import type { User, Chat, Toast, Notification, LibraryFile } from '../types';
 
 interface AppState {
   // Auth
@@ -48,6 +48,13 @@ interface AppState {
   demoTriggerSend: boolean;
   setDemoTriggerSend: (v: boolean) => void;
 
+  // AI thinking state
+  aiThinking: boolean;
+  setAiThinking: (v: boolean) => void;
+  liveSteps: Array<{ message: string; ts: string }>;
+  addLiveStep: (step: { message: string; ts: string }) => void;
+  clearLiveSteps: () => void;
+
   // Quick actions
   quickActionText: string;
   setQuickActionText: (v: string) => void;
@@ -55,6 +62,20 @@ interface AppState {
   // Search
   searchOpen: boolean;
   setSearchOpen: (v: boolean) => void;
+
+  // Right panel
+  rightPanelOpen: boolean;
+  toggleRightPanel: () => void;
+  setRightPanelOpen: (open: boolean) => void;
+
+  // Chat attached files (queued for next message)
+  chatAttachedFiles: LibraryFile[];
+  setChatAttachedFiles: (files: LibraryFile[]) => void;
+  addChatAttachedFile: (file: LibraryFile) => void;
+
+  // Project files
+  projectFiles: LibraryFile[];
+  setProjectFiles: (files: LibraryFile[]) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -120,10 +141,30 @@ export const useStore = create<AppState>((set, get) => ({
   setDemoTriggerSend: (v) => set({ demoTriggerSend: v }),
 
   // Quick actions
+  aiThinking: false,
+  setAiThinking: (v) => set({ aiThinking: v }),
+  liveSteps: [],
+  addLiveStep: (step) => set((s) => ({ liveSteps: [...s.liveSteps, step] })),
+  clearLiveSteps: () => set({ liveSteps: [] }),
+
   quickActionText: '',
   setQuickActionText: (v) => set({ quickActionText: v }),
 
   // Search
   searchOpen: false,
   setSearchOpen: (v) => set({ searchOpen: v }),
+
+  // Right panel
+  rightPanelOpen: false,
+  toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
+  setRightPanelOpen: (open) => set({ rightPanelOpen: open }),
+
+  // Chat attached files
+  chatAttachedFiles: [],
+  setChatAttachedFiles: (files) => set({ chatAttachedFiles: files, ...(files.length > 0 && { rightPanelOpen: true }) }),
+  addChatAttachedFile: (file) => set((s) => ({ chatAttachedFiles: [...s.chatAttachedFiles, file], rightPanelOpen: true })),
+
+  // Project files
+  projectFiles: [],
+  setProjectFiles: (files) => set({ projectFiles: files }),
 }));

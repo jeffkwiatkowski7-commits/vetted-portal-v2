@@ -35,7 +35,7 @@ if (!fs.existsSync(dataDir)) {
 }
 
 // Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../uploads');
+const uploadsDir = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -431,6 +431,10 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
 
     const result = await chatWithDocuments(docs, content, history, systemPromptOverride);
     aiContent = result.text;
+
+    console.log('[chat] aiContent length:', aiContent.length);
+    console.log('[chat] aiContent preview (first 500):', aiContent.slice(0, 500));
+    console.log('[chat] aiContent tail (last 200):', aiContent.slice(-200));
 
     if (result.searchQueries?.length > 0) {
       result.searchQueries.forEach(q => step(`Web search: "${q}"`));

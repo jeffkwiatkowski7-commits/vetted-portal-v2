@@ -432,10 +432,6 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     const result = await chatWithDocuments(docs, content, history, systemPromptOverride);
     aiContent = result.text;
 
-    console.log('[chat] aiContent length:', aiContent.length);
-    console.log('[chat] aiContent preview (first 500):', aiContent.slice(0, 500));
-    console.log('[chat] aiContent tail (last 200):', aiContent.slice(-200));
-
     if (result.searchQueries?.length > 0) {
       result.searchQueries.forEach(q => step(`Web search: "${q}"`));
     }

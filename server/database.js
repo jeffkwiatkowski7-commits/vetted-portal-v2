@@ -4,7 +4,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, '../data/vetted_portal.db');
+const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, '../data/vetted_portal.db');
 
 let SQL = null;
 let dbInstance = null;

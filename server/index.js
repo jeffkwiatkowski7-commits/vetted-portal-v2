@@ -11,7 +11,8 @@ import { initializeDatabase, getDatabase, dbGet, dbAll, dbRun } from './database
 import { getMockResponse } from './mock-responses.js';
 import { seedDatabase } from './seed.js';
 import leaseRoutes from './lease-routes.js';
-import { chatWithDocuments } from './lib/gemini.js';
+import { chatWithDocuments as geminiChatWithDocuments } from './lib/gemini.js';
+import { chatWithDocuments as claudeChatWithDocuments } from './lib/claude.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -427,8 +428,10 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
 
     if (history.length > 0) step(`Loaded ${history.length} previous message${history.length !== 1 ? 's' : ''}`);
     if (docs.length > 0) step(`Building prompt with ${docs.length} document${docs.length !== 1 ? 's' : ''}`);
-    step('Calling Gemini');
+    const useClaude = req.body.model === 'claude';
+    step(useClaude ? 'Calling Claude' : 'Calling Gemini');
 
+    const chatWithDocuments = useClaude ? claudeChatWithDocuments : geminiChatWithDocuments;
     const result = await chatWithDocuments(docs, content, history, systemPromptOverride);
     aiContent = result.text;
 
@@ -437,13 +440,13 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     }
     step('Response received');
   } catch (err) {
-    console.error('[chat] Gemini error:', err.message);
+    console.error('[chat] AI error:', err.message);
     const msg = err.message || '';
     if (msg.includes('invalid_grant') || msg.includes('invalid_rapt') || msg.includes('reauth') || msg.includes('Unable to authenticate')) {
       aiContent = 'The AI service credentials have expired. Please ask your administrator to run `gcloud auth application-default login` on the server and restart the backend.';
     } else if (msg.includes('quota') || msg.includes('rate limit') || msg.includes('429')) {
       aiContent = 'The AI service is temporarily rate-limited. Please wait a moment and try again.';
-    } else if (msg.includes('not found') || msg.includes('404')) {
+    } else if (msg.includes('not found') || msg.includes('404') || msg.includes('Claude API error')) {
       aiContent = 'The AI model is not available in this environment. Please contact your administrator.';
     } else {
       aiContent = 'Sorry, I was unable to generate a response. Please try again.';

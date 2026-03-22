@@ -8,19 +8,28 @@ import LibraryPickerModal from './LibraryPickerModal';
 import FileTypeBadge from './FileTypeBadge';
 
 
-function GeminiIcon({ flash = false }: { flash?: boolean }) {
-  const color = flash ? '#60A5FA' : '#3B82F6';
+function GeminiIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path d="M7 1L9.5 6.5L7 13L4.5 6.5Z" fill={color} opacity="0.9"/>
-      <path d="M1 7L6.5 4.5L13 7L6.5 9.5Z" fill={color} opacity="0.6"/>
+      <path d="M7 1L9.5 6.5L7 13L4.5 6.5Z" fill="#3B82F6" opacity="0.9"/>
+      <path d="M1 7L6.5 4.5L13 7L6.5 9.5Z" fill="#3B82F6" opacity="0.6"/>
+    </svg>
+  );
+}
+
+function ClaudeIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <circle cx="7" cy="7" r="5.5" stroke="#D97706" strokeWidth="1.5" fill="none"/>
+      <path d="M4.5 9.5L7 4.5L9.5 9.5" stroke="#D97706" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M5.5 7.5h3" stroke="#D97706" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   );
 }
 
 const MODELS = [
-  { name: 'Gemini 3', icon: <GeminiIcon /> },
-  { name: 'Gemini 3 Flash', icon: <GeminiIcon flash /> },
+  { name: 'Gemini 3.1', value: 'gemini', icon: <GeminiIcon /> },
+  { name: 'Claude Opus 4.6', value: 'claude', icon: <ClaudeIcon /> },
 ];
 
 export default function ChatInput({ centered = false, projectId }: { centered?: boolean; projectId?: string }) {
@@ -34,14 +43,14 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
     demoTriggerSend, setDemoTriggerSend,
     quickActionText, setQuickActionText,
     setAiThinking, addLiveStep, clearLiveSteps,
-    chatAttachedFiles, setChatAttachedFiles, setProjectFiles,
+    chatAttachedFiles, setChatAttachedFiles, setProjectFiles, setRightPanelOpen,
   } = useStore();
   const [message, setMessage] = useState('');
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState(() => {
     const saved = localStorage.getItem('selectedModel');
-    return MODELS.find((m) => m.name === saved) ?? MODELS[0];
+    return MODELS.find((m) => m.value === saved) ?? MODELS[0];
   });
   const [temperature, setTemperature] = useState(0.7);
   const [showModelSelect, setShowModelSelect] = useState(false);
@@ -98,7 +107,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
       if (!chatId) {
         const newChat = await api.chats.create({
           title: content.slice(0, 50),
-          model: selectedModel.name,
+          model: selectedModel.value,
           temperature,
           ...(projectId && { project_id: projectId }),
         });
@@ -126,7 +135,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
       if (!hidden) { clearLiveSteps(); setAiThinking(true); }
       const sendResult = await api.chats.streamMessage(
         chatId,
-        { content, model: selectedModel.name, temperature, attachments: files.map((f) => f.id) },
+        { content, model: selectedModel.value, temperature, attachments: files.map((f) => f.id) },
         hidden ? () => {} : (step) => addLiveStep(step),
       );
       if (!hidden) { setAiThinking(false); clearLiveSteps(); }
@@ -178,17 +187,28 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
         onUploadComplete={projectId ? async () => {
           const updated = await api.library.list(projectId);
           setProjectFiles(updated);
+          if (updated.length > 0) setRightPanelOpen(true);
         } : undefined}
         onAttach={async (files) => {
           if (projectId) {
-            // Assign any existing library files not yet in this project
-            const unassigned = files.filter((f) => f.project_id !== projectId);
-            await Promise.all(unassigned.map((f) => api.library.assignProject(f.id, projectId)));
-            // Refresh project files in the panel
-            const updated = await api.library.list(projectId);
-            setProjectFiles(updated);
+            try {
+              // Assign any existing library files not yet in this project
+              const unassigned = files.filter((f) => f.project_id !== projectId);
+              await Promise.all(unassigned.map((f) => api.library.assignProject(f.id, projectId)));
+              // Refresh project files in the panel
+              const updated = await api.library.list(projectId);
+              setProjectFiles(updated);
+              if (updated.length > 0) setRightPanelOpen(true);
+            } catch (err) {
+              addToast({ type: 'error', title: 'Failed to assign files to project', detail: err instanceof Error ? err.message : 'Unknown error' });
+              return;
+            }
           } else {
-            setChatAttachedFiles(files);
+            // Merge with existing attached files (avoid duplicates)
+            setChatAttachedFiles([
+              ...chatAttachedFiles,
+              ...files.filter((f) => !chatAttachedFiles.some((cf) => cf.id === f.id)),
+            ]);
           }
           const count = files.length;
           const prompt = count === 1
@@ -285,16 +305,16 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
                           key={model.name}
                           onClick={() => {
                             setSelectedModel(model);
-                            localStorage.setItem('selectedModel', model.name);
+                            localStorage.setItem('selectedModel', model.value);
                             setShowModelSelect(false);
                           }}
                           className={`w-full text-left px-3 py-2.5 text-sm hover:bg-vetted-surface flex items-center gap-2.5 transition-colors ${
-                            selectedModel.name === model.name ? 'bg-vetted-surface font-medium' : ''
+                            selectedModel.value === model.value ? 'bg-vetted-surface font-medium' : ''
                           }`}
                         >
                           {model.icon}
                           {model.name}
-                          {selectedModel.name === model.name && (
+                          {selectedModel.value === model.value && (
                             <span className="ml-auto text-vetted-accent text-xs">&#10003;</span>
                           )}
                         </button>

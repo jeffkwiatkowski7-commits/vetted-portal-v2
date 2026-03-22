@@ -74,7 +74,7 @@ async function runMigrations(db) {
     const hash = await bcrypt.hash('Vetted@3:16', 10);
     const newId = crypto.randomUUID();
     const now = new Date().toISOString();
-    dbRun(db, "INSERT INTO users (id, email, display_name, role, status, password_hash, created_at, updated_at) VALUES (?, 'jeffk@vettedbot.com', 'Jeff K', 'admin', 'active', ?, ?, ?)", [newId, hash, now, now]);
+    dbRun(db, "INSERT INTO users (id, email, display_name, role, status, password_hash, created_at, updated_at) VALUES (?, 'jeffk@vettedbot.com', 'Jeff Kwiatkowski', 'admin', 'active', ?, ?, ?)", [newId, hash, now, now]);
     console.log('Migration: created jeffk@vettedbot.com user with password');
   } else if (!jeffk.password_hash) {
     const hash = await bcrypt.hash('Vetted@3:16', 10);

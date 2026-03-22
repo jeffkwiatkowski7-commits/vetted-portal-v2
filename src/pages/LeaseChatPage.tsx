@@ -3,6 +3,46 @@ import { Upload, FileText, Trash2, Send, Loader2, X, ChevronDown, ChevronUp } fr
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+// ── Normalize markdown tables (remove blank lines within table blocks) ────────
+function normalizeMarkdown(content: string): string {
+  const lines = content.split('\n');
+  const result: string[] = [];
+  let inTable = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const isTableLine = /^\s*\|/.test(line);
+    const isEmpty = line.trim() === '';
+
+    if (isTableLine) {
+      // Inject blank line before table if previous line is non-empty non-table text
+      if (!inTable && result.length > 0) {
+        const prev = result[result.length - 1];
+        if (prev.trim() !== '' && !/^\s*\|/.test(prev)) {
+          result.push('');
+        }
+      }
+      inTable = true;
+      result.push(line);
+    } else if (isEmpty && inTable) {
+      // Peek ahead: if next non-empty line is a table line, skip this blank
+      let j = i + 1;
+      while (j < lines.length && lines[j].trim() === '') j++;
+      if (j < lines.length && /^\s*\|/.test(lines[j])) {
+        continue; // drop blank line inside table
+      } else {
+        inTable = false;
+        result.push(line);
+      }
+    } else {
+      inTable = false;
+      result.push(line);
+    }
+  }
+
+  return result.join('\n');
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface IngestedLease {
@@ -157,7 +197,7 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
   }
 
   return (
-    <div className="flex flex-col gap-1 max-w-[85%]">
+    <div className="flex flex-col gap-1 w-full">
       {msg.steps && msg.steps.length > 0 && (
         <button
           onClick={() => setStepsOpen(!stepsOpen)}
@@ -172,9 +212,37 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
           {msg.steps.map((s, i) => <div key={i}>{s}</div>)}
         </div>
       )}
-      <div className="bg-vetted-bg border border-vetted-border rounded-2xl rounded-tl-sm px-4 py-3">
-        <div className="prose-vetted text-[15px]">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+      <div className="bg-vetted-bg border border-vetted-border rounded-2xl rounded-tl-sm px-4 py-3 overflow-x-auto">
+        <div className="text-[15px]">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              table: ({ children }) => (
+                <div className="my-3 overflow-x-auto rounded-xl border border-vetted-border">
+                  <table className="w-full text-sm border-collapse">{children}</table>
+                </div>
+              ),
+              thead: ({ children }) => (
+                <thead className="bg-vetted-surface border-b border-vetted-border">{children}</thead>
+              ),
+              tbody: ({ children }) => (
+                <tbody className="divide-y divide-vetted-border">{children}</tbody>
+              ),
+              tr: ({ children }) => (
+                <tr className="hover:bg-vetted-surface/60 transition-colors">{children}</tr>
+              ),
+              th: ({ children }) => (
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-vetted-text-secondary uppercase tracking-wide whitespace-nowrap">
+                  {children}
+                </th>
+              ),
+              td: ({ children }) => (
+                <td className="px-4 py-2.5 text-[14px] text-vetted-text-primary align-top">{children}</td>
+              ),
+            }}
+          >
+            {normalizeMarkdown(msg.content)}
+          </ReactMarkdown>
         </div>
       </div>
     </div>
@@ -192,6 +260,11 @@ export default function LeaseChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [chatting, setChatting] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'claude'>(() => {
+    const saved = localStorage.getItem('selectedModel');
+    return (saved === 'gemini' || saved === 'claude') ? saved : 'gemini';
+  });
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
@@ -214,10 +287,12 @@ export default function LeaseChatPage() {
     setIngesting(true);
     setIngestLogs([]);
     setIngestDone(false);
+    setUploadProgress(0);
 
     const formData = new FormData();
     formData.append('file', file);
 
+    setUploadProgress(null);
     const res = await fetch('/api/leases/ingest', {
       method: 'POST',
       body: formData,
@@ -262,7 +337,7 @@ export default function LeaseChatPage() {
     const res = await fetch('/api/leases/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text, history }),
+      body: JSON.stringify({ message: text, history, model: selectedModel }),
     });
 
     await readSSE(res, (event, data: any) => {
@@ -307,6 +382,14 @@ export default function LeaseChatPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {uploadProgress !== null && (
+            <div className="mb-2">
+              <div className="h-1.5 w-full bg-vetted-border rounded-full overflow-hidden">
+                <div className="h-full bg-vetted-accent animate-pulse w-full" />
+              </div>
+              <p className="text-[10px] text-vetted-text-muted mt-1">Uploading PDF…</p>
+            </div>
+          )}
           {!ingesting && <UploadZone onFile={handleFile} />}
 
           {(ingesting || (ingestLogs.length > 0)) && (
@@ -351,6 +434,20 @@ export default function LeaseChatPage() {
         {/* Input */}
         <div className="border-t border-vetted-border p-4">
           <div className="flex gap-2 items-end">
+            <div className="relative shrink-0">
+              <select
+                value={selectedModel}
+                onChange={e => {
+                  const val = e.target.value as 'gemini' | 'claude';
+                  setSelectedModel(val);
+                  localStorage.setItem('selectedModel', val);
+                }}
+                className="h-9 rounded-xl border border-vetted-border px-2 text-xs text-vetted-text-secondary bg-white focus:outline-none cursor-pointer"
+              >
+                <option value="gemini">Gemini 3.1</option>
+                <option value="claude">Opus 4.6</option>
+              </select>
+            </div>
             <textarea
               value={input}
               onChange={e => setInput(e.target.value)}

@@ -27,7 +27,8 @@
  */
 import { Router } from "express";
 import multer from "multer";
-import { ocrPdf, extractLeaseData, chatWithLeases, chatCrossPortfolio } from "./lib/gemini.js";
+import { ocrPdf, extractLeaseData, chatWithLeases as geminiChatWithLeases, chatCrossPortfolio as geminiChatCrossPortfolio } from "./lib/gemini.js";
+import { chatWithLeases as claudeChatWithLeases, chatCrossPortfolio as claudeChatCrossPortfolio } from "./lib/claude.js";
 import {
   upsertLease, getLeaseById, getAllLeases, getLeasesByProperty,
   getLeasesByProject, searchLeases, deleteLease, deleteAllData,
@@ -164,7 +165,10 @@ router.post("/leases/chat", async (req, res) => {
   res.setHeader("X-Accel-Buffering", "no");
   res.setHeader("Connection", "keep-alive");
 
-  const { message, projectId, propertyId, history = [] } = req.body;
+  const { message, projectId, propertyId, history = [], model } = req.body;
+  const useClaude = model === 'claude';
+  const chatFn = useClaude ? claudeChatWithLeases : geminiChatWithLeases;
+  const crossFn = useClaude ? claudeChatCrossPortfolio : geminiChatCrossPortfolio;
   const scopeId = projectId || propertyId;
 
   if (!message?.trim()) {
@@ -234,8 +238,8 @@ router.post("/leases/chat", async (req, res) => {
       const totalChars = leaseTexts.reduce((sum, l) => sum + l.text.length, 0);
       emit(`Building prompt — ${totalChars.toLocaleString()} chars of lease text`);
 
-      emit("Calling Gemini...");
-      const result = await chatWithLeases(leaseTexts, message, history, useSearch, persona);
+      emit(useClaude ? "Calling Claude..." : "Calling Gemini...");
+      const result = await chatFn(leaseTexts, message, history, useSearch, persona);
       for (const q of result.searchQueries) {
         emit(`Web search: "${q}"`);
       }
@@ -279,8 +283,8 @@ router.post("/leases/chat", async (req, res) => {
       }));
 
       emit("Building cross-portfolio prompt...");
-      emit("Calling Gemini...");
-      const result = await chatCrossPortfolio(summaries, message, history, useSearch);
+      emit(useClaude ? "Calling Claude..." : "Calling Gemini...");
+      const result = await crossFn(summaries, message, history, useSearch);
       for (const q of result.searchQueries) {
         emit(`Web search: "${q}"`);
       }

@@ -23,109 +23,18 @@ export async function seedDatabase() {
   const users = [
     {
       id: uuidv4(),
-      email: 'admin@vetted.com',
-      display_name: 'Sarah Chen',
-      job_title: 'Product Manager',
-      department: 'Product',
+      email: 'jeffk@vettedbot.com',
+      display_name: 'Jeff Kwiatkowski',
+      job_title: 'Administrator',
+      department: 'Admin',
       role: 'admin',
-      avatar_path: '/avatars/sarah-chen.jpg',
-      status: 'active',
-      created_at: now,
-      updated_at: now,
-      last_login_at: now
-    },
-    {
-      id: uuidv4(),
-      email: 'james.wilson@company.com',
-      display_name: 'James Wilson',
-      job_title: 'Senior Engineer',
-      department: 'Engineering',
-      role: 'user',
-      avatar_path: '/avatars/james-wilson.jpg',
-      status: 'active',
-      created_at: now,
-      updated_at: now,
-      last_login_at: now
-    },
-    {
-      id: uuidv4(),
-      email: 'emily.rodriguez@company.com',
-      display_name: 'Emily Rodriguez',
-      job_title: 'Data Analyst',
-      department: 'Analytics',
-      role: 'user',
-      avatar_path: '/avatars/emily-rodriguez.jpg',
-      status: 'active',
-      created_at: now,
-      updated_at: now,
-      last_login_at: now
-    },
-    {
-      id: uuidv4(),
-      email: 'michael.kim@company.com',
-      display_name: 'Michael Kim',
-      job_title: 'UX Designer',
-      department: 'Design',
-      role: 'user',
-      avatar_path: '/avatars/michael-kim.jpg',
-      status: 'active',
-      created_at: now,
-      updated_at: now,
-      last_login_at: now
-    },
-    {
-      id: uuidv4(),
-      email: 'lisa.park@company.com',
-      display_name: 'Lisa Park',
-      job_title: 'Marketing Manager',
-      department: 'Marketing',
-      role: 'user',
-      avatar_path: '/avatars/lisa-park.jpg',
-      status: 'active',
-      created_at: now,
-      updated_at: now,
-      last_login_at: now
-    },
-    {
-      id: uuidv4(),
-      email: 'david.thompson@company.com',
-      display_name: 'David Thompson',
-      job_title: 'Finance Lead',
-      department: 'Finance',
-      role: 'user',
-      avatar_path: '/avatars/david-thompson.jpg',
+      avatar_path: null,
       status: 'active',
       created_at: now,
       updated_at: now,
       last_login_at: now
     }
   ];
-
-  // Generate 20 additional users
-  const firstNames = ['Alex', 'Jordan', 'Casey', 'Morgan', 'Taylor', 'Riley', 'Avery', 'Quinn', 'Blake', 'Sam',
-    'Drew', 'Chris', 'Dana', 'Parker', 'Sage', 'Reese', 'Cameron', 'Jesse', 'Sydney', 'Charlie'];
-  const lastNames = ['Anderson', 'Baker', 'Chen', 'Davis', 'Evans', 'Foster', 'Garcia', 'Harris', 'Indian', 'Jenkins',
-    'Kumar', 'Lewis', 'Martinez', 'Nelson', 'O\'Brien', 'Patterson', 'Quinn', 'Roberts', 'Singh', 'Taylor'];
-  const departments = ['Engineering', 'Product', 'Design', 'Marketing', 'Sales', 'Finance', 'HR', 'Operations'];
-  const jobTitles = ['Software Engineer', 'Senior Developer', 'Product Specialist', 'Designer', 'Analyst', 'Manager', 'Coordinator', 'Specialist'];
-
-  for (let i = 0; i < 20; i++) {
-    const firstName = firstNames[i % firstNames.length];
-    const lastName = lastNames[i % lastNames.length];
-    users.push({
-      id: uuidv4(),
-      email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@company.com`,
-      display_name: `${firstName} ${lastName}`,
-      job_title: jobTitles[i % jobTitles.length],
-      department: departments[i % departments.length],
-      role: 'user',
-      avatar_path: `/avatars/${firstName.toLowerCase()}-${lastName.toLowerCase()}.jpg`,
-      status: 'active',
-      created_at: now,
-      updated_at: now,
-      last_login_at: now
-    });
-  }
 
   for (const user of users) {
     dbRun(db, `
@@ -317,7 +226,7 @@ export async function seedDatabase() {
       visibility: 'all',
       status: 'active',
       usage_count: 2156,
-      created_by: users[1].id,
+      created_by: users[0].id,
       created_at: now,
       updated_at: now
     },
@@ -334,7 +243,7 @@ export async function seedDatabase() {
       visibility: 'all',
       status: 'active',
       usage_count: 876,
-      created_by: users[4].id,
+      created_by: users[0].id,
       created_at: now,
       updated_at: now
     },
@@ -351,7 +260,7 @@ export async function seedDatabase() {
       visibility: 'all',
       status: 'active',
       usage_count: 654,
-      created_by: users[2].id,
+      created_by: users[0].id,
       created_at: now,
       updated_at: now
     }
@@ -620,7 +529,7 @@ export async function seedDatabase() {
     },
     {
       id: uuidv4(),
-      user_id: users[1].id,
+      user_id: users[0].id,
       filename: 'api-design-guidelines.docx',
       original_name: 'API Design Guidelines.docx',
       file_path: '/library/api-design-guidelines.docx',
@@ -632,7 +541,7 @@ export async function seedDatabase() {
     },
     {
       id: uuidv4(),
-      user_id: users[2].id,
+      user_id: users[0].id,
       filename: 'customer-data-analysis.xlsx',
       original_name: 'Customer Data Analysis.xlsx',
       file_path: '/library/customer-data-analysis.xlsx',
@@ -644,7 +553,7 @@ export async function seedDatabase() {
     },
     {
       id: uuidv4(),
-      user_id: users[3].id,
+      user_id: users[0].id,
       filename: 'ui-design-system.fig',
       original_name: 'UI Design System.fig',
       file_path: '/library/ui-design-system.fig',
@@ -656,7 +565,7 @@ export async function seedDatabase() {
     },
     {
       id: uuidv4(),
-      user_id: users[4].id,
+      user_id: users[0].id,
       filename: 'marketing-campaign-brief.pptx',
       original_name: 'Marketing Campaign Brief.pptx',
       file_path: '/library/marketing-campaign-brief.pptx',
@@ -707,24 +616,24 @@ export async function seedDatabase() {
       user_id: users[0].id,
       type: 'project_update',
       title: 'Project Updated',
-      description: 'Q2 Product Roadmap has been updated by Sarah Chen',
+      description: 'Q2 Product Roadmap has been updated',
       link: `/projects/${projects[0].id}`,
       is_read: 0,
       created_at: now
     },
     {
       id: uuidv4(),
-      user_id: users[1].id,
+      user_id: users[0].id,
       type: 'chat_shared',
       title: 'Chat Shared',
-      description: 'Sarah Chen shared a chat with you',
+      description: 'A chat has been shared with you',
       link: `/chats/${chats[0].id}`,
       is_read: 0,
       created_at: now
     },
     {
       id: uuidv4(),
-      user_id: users[2].id,
+      user_id: users[0].id,
       type: 'system',
       title: 'System Maintenance',
       description: 'Scheduled maintenance completed successfully',
@@ -737,7 +646,7 @@ export async function seedDatabase() {
       user_id: users[0].id,
       type: 'team_mention',
       title: 'You were mentioned',
-      description: 'James Wilson mentioned you in a project comment',
+      description: 'You were mentioned in a project comment',
       link: `/projects/${projects[1].id}`,
       is_read: 0,
       created_at: now

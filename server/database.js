@@ -38,7 +38,8 @@ export async function initializeDatabase() {
       status TEXT DEFAULT 'active',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      last_login_at TEXT
+      last_login_at TEXT,
+      password_hash TEXT
     );
 
     CREATE TABLE IF NOT EXISTS sessions (

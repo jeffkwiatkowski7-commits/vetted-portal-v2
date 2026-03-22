@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcrypt';
 import { initializeDatabase, dbGet, dbRun } from './database.js';
 
 function getCurrentTimestamp() {
@@ -19,6 +20,8 @@ export async function seedDatabase() {
 
   const now = getCurrentTimestamp();
 
+  const jeffkPasswordHash = await bcrypt.hash('Vetted@3:16', 10);
+
   // Seed Users
   const users = [
     {
@@ -32,15 +35,16 @@ export async function seedDatabase() {
       status: 'active',
       created_at: now,
       updated_at: now,
-      last_login_at: now
+      last_login_at: now,
+      password_hash: jeffkPasswordHash
     }
   ];
 
   for (const user of users) {
     dbRun(db, `
-      INSERT INTO users (id, email, display_name, job_title, department, role, avatar_path, status, created_at, updated_at, last_login_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [user.id, user.email, user.display_name, user.job_title, user.department, user.role, user.avatar_path, user.status, user.created_at, user.updated_at, user.last_login_at]);
+      INSERT INTO users (id, email, display_name, job_title, department, role, avatar_path, status, created_at, updated_at, last_login_at, password_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [user.id, user.email, user.display_name, user.job_title, user.department, user.role, user.avatar_path, user.status, user.created_at, user.updated_at, user.last_login_at, user.password_hash]);
   }
 
   console.log(`✓ Created ${users.length} users`);

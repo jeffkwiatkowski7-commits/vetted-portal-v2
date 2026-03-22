@@ -16,6 +16,7 @@
     "@google-cloud/firestore": "^7.11.0",
     "@google-cloud/vertexai": "^1.10.0",
     "@google/genai": "^1.45.0",
+    "bcrypt": "^6.0.0",
     "concurrently": "^8.2.2",
     "cors": "^2.8.5",
     "date-fns": "^3.0.0",
@@ -34,6 +35,7 @@
     "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.2.1",

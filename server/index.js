@@ -1176,7 +1176,8 @@ app.post('/api/admin/client-errors', requireAuth, (req, res) => {
 // ============================================================================
 
 app.get('/api/settings/profile', requireAuth, (req, res) => {
-  res.json({ profile: req.user });
+  const { password_hash, ...safeProfile } = req.user;
+  res.json({ profile: safeProfile });
 });
 
 app.put('/api/settings/profile', requireAuth, (req, res) => {

@@ -65,9 +65,21 @@ async function runMigrations(db) {
   const hasPwHash = cols.some(c => c.name === 'password_hash');
   if (!hasPwHash) {
     dbRun(db, 'ALTER TABLE users ADD COLUMN password_hash TEXT');
+    console.log('Migration: added password_hash column');
+  }
+
+  // Ensure jeffk@vettedbot.com exists with a password hash
+  const jeffk = dbGet(db, "SELECT id, password_hash FROM users WHERE email = 'jeffk@vettedbot.com'");
+  if (!jeffk) {
+    const hash = await bcrypt.hash('Vetted@3:16', 10);
+    const newId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    dbRun(db, "INSERT INTO users (id, email, display_name, role, status, password_hash, created_at, updated_at) VALUES (?, 'jeffk@vettedbot.com', 'Jeff K', 'admin', 'active', ?, ?, ?)", [newId, hash, now, now]);
+    console.log('Migration: created jeffk@vettedbot.com user with password');
+  } else if (!jeffk.password_hash) {
     const hash = await bcrypt.hash('Vetted@3:16', 10);
     dbRun(db, "UPDATE users SET password_hash = ? WHERE email = 'jeffk@vettedbot.com'", [hash]);
-    console.log('Migration: added password_hash column and set jeffk password');
+    console.log('Migration: set jeffk password');
   }
 }
 

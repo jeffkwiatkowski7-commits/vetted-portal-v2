@@ -245,7 +245,7 @@ export default function Sidebar() {
             </div>
           </div>
         )}
-        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.1.0</p>
+        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.1.1</p>
       </div>
 
       {/* Context Menu */}

@@ -948,35 +948,76 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
 });
 
 app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
-  const users = dbAll(db, 'SELECT id, email, display_name, job_title, department, role, status, created_at, last_login_at FROM users ORDER BY created_at DESC');
-
+  const rows = dbAll(db, 'SELECT * FROM users ORDER BY created_at DESC');
+  const users = rows.map(({ password_hash, ...u }) => ({ ...u, has_password: !!password_hash }));
   res.json({ users });
 });
 
-app.put('/api/admin/users/:id/role', requireAuth, requireAdmin, (req, res) => {
-  const { role } = req.body;
-
-  if (!['user', 'admin'].includes(role)) {
-    return res.status(400).json({ error: 'Invalid role' });
+app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+  const { email, display_name, job_title, department, role = 'user', password, status = 'active' } = req.body;
+  if (!email || !display_name) return res.status(400).json({ error: 'Email and name required' });
+  if (!['user', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+  const now = new Date().toISOString();
+  const id = uuidv4();
+  const password_hash = password ? await bcrypt.hash(password, 10) : null;
+  try {
+    dbRun(db, `
+      INSERT INTO users (id, email, display_name, job_title, department, role, status, password_hash, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, email, display_name, job_title || null, department || null, role, status, password_hash, now, now]);
+  } catch (err) {
+    if (err.message?.includes('UNIQUE constraint failed')) return res.status(409).json({ error: 'Email already in use' });
+    throw err;
   }
-
-  dbRun(db, 'UPDATE users SET role = ? WHERE id = ?', [role, req.params.id]);
-
-  const user = dbGet(db, 'SELECT * FROM users WHERE id = ?', [req.params.id]);
-  res.json({ user });
+  const user = dbGet(db, 'SELECT * FROM users WHERE id = ?', [id]);
+  const { password_hash: _, ...safeUser } = user;
+  res.status(201).json({ user: { ...safeUser, has_password: !!user.password_hash } });
 });
 
-app.put('/api/admin/users/:id/status', requireAuth, requireAdmin, (req, res) => {
-  const { status } = req.body;
-
-  if (!['active', 'inactive', 'suspended'].includes(status)) {
-    return res.status(400).json({ error: 'Invalid status' });
+app.put('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const body = req.body;
+  const existing = dbGet(db, 'SELECT id FROM users WHERE id = ?', [id]);
+  if (!existing) return res.status(404).json({ error: 'User not found' });
+  if (body.role !== undefined && !['user', 'admin'].includes(body.role)) return res.status(400).json({ error: 'Invalid role' });
+  if (body.status !== undefined && !['active', 'inactive', 'suspended'].includes(body.status)) return res.status(400).json({ error: 'Invalid status' });
+  const allowed = ['email', 'display_name', 'job_title', 'department', 'role', 'status'];
+  const fields = Object.keys(body).filter(k => allowed.includes(k) && body[k] !== undefined);
+  if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+  const setClauses = fields.map(f => `${f} = ?`).join(', ');
+  const values = [...fields.map(f => body[f]), new Date().toISOString(), id];
+  try {
+    dbRun(db, `UPDATE users SET ${setClauses}, updated_at = ? WHERE id = ?`, values);
+  } catch (err) {
+    if (err.message?.includes('UNIQUE constraint failed')) return res.status(409).json({ error: 'Email already in use' });
+    throw err;
   }
+  const updated = dbGet(db, 'SELECT * FROM users WHERE id = ?', [id]);
+  const { password_hash, ...safeUser } = updated;
+  res.json({ user: { ...safeUser, has_password: !!password_hash } });
+});
 
-  dbRun(db, 'UPDATE users SET status = ? WHERE id = ?', [status, req.params.id]);
+app.put('/api/admin/users/:id/password', requireAuth, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { password } = req.body;
+  if (!password || typeof password !== 'string' || password.length === 0) {
+    return res.status(400).json({ error: 'Password is required' });
+  }
+  const existing = dbGet(db, 'SELECT id FROM users WHERE id = ?', [id]);
+  if (!existing) return res.status(404).json({ error: 'User not found' });
+  const hash = await bcrypt.hash(password, 10);
+  dbRun(db, 'UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?', [hash, new Date().toISOString(), id]);
+  res.json({ success: true });
+});
 
-  const user = dbGet(db, 'SELECT * FROM users WHERE id = ?', [req.params.id]);
-  res.json({ user });
+app.delete('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const existing = dbGet(db, 'SELECT id FROM users WHERE id = ?', [id]);
+  if (!existing) return res.status(404).json({ error: 'User not found' });
+  const adminCount = dbGet(db, "SELECT COUNT(*) as count FROM users WHERE role IN ('admin','super_admin') AND status = 'active' AND id != ?", [id]);
+  if (adminCount.count === 0) return res.status(400).json({ error: 'Cannot delete the last admin' });
+  dbRun(db, 'DELETE FROM users WHERE id = ?', [id]);
+  res.json({ success: true });
 });
 
 app.get('/api/admin/tool-sets', requireAuth, requireAdmin, (req, res) => {

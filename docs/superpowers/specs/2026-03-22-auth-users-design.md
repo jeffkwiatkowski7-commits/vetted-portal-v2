@@ -106,6 +106,8 @@ All require `requireAuth` + `requireAdmin`.
 
 **`PUT /api/admin/users/:id`** — **does not currently exist as a unified endpoint; create it and remove the existing `/:id/role` and `/:id/status` routes in the same edit** (the new route must be registered at or near the same position in the file as the routes it replaces, to avoid any routing order ambiguity). Accepts any subset of `{ email, display_name, job_title, department, role, status }`. Role must be one of `['user', 'admin']` if provided. `super_admin` is intentionally excluded from the allowed set.
 
+**Validate inputs before updating.** If `role` is provided, it must be in `['user', 'admin']`. If `status` is provided, it must be in `['active', 'inactive', 'suspended']`. Return `400 { error: 'Invalid role' }` or `400 { error: 'Invalid status' }` respectively.
+
 **Check existence first** (`dbGet` before `dbRun`) — sql.js silently succeeds on UPDATE with 0 rows matched:
 ```js
 const existing = dbGet(db, 'SELECT id FROM users WHERE id = ?', [id]);
@@ -194,7 +196,7 @@ On mount: fetch `api.admin.users.list()` and store in `users` state.
 *Add User modal* — fields: First Name, Last Name, Email, Job Title (optional), Department (optional), Role (select: user / admin), Password (optional), Confirm Password (optional). Client-side validation: if either password field is non-empty, both must match. On success: close modal, call `api.admin.users.list()` and update `users` state.
 
 *Edit User modal* — same fields pre-filled. Password and Confirm Password optional (blank = keep current). On submit:
-1. Call `api.admin.users.update(id, nonPasswordFields)`.
+1. Call `api.admin.users.update(id, nonPasswordFields)` — **strip password and confirmPassword from the payload before calling update**; only send `{ display_name, email, job_title, department, role, status }`.
 2. If password field is non-empty, call `api.admin.users.setPassword(id, password)` after update succeeds.
 3. If `setPassword` fails, show inline error: "Profile saved but password update failed — try again from the Password button." Do not roll back.
 4. On success: close modal, refresh user list via `api.admin.users.list()`.

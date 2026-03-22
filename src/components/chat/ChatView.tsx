@@ -9,6 +9,13 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
 
+function modelDisplayName(value?: string): string | undefined {
+  if (!value) return undefined;
+  if (value === 'gemini') return 'Gemini 3.1';
+  if (value === 'claude') return 'Opus 4.6';
+  return value; // fallback: show raw value
+}
+
 // ── Markdown renderer for assistant messages ──────────────────────────────────
 function MarkdownContent({ content }: { content: string }) {
   return (
@@ -113,7 +120,7 @@ function MarkdownContent({ content }: { content: string }) {
             </th>
           ),
           td: ({ children }) => (
-            <td className="px-4 py-2.5 text-[14px] text-vetted-text-primary">{children}</td>
+            <td className="px-4 py-2.5 text-[14px] text-vetted-text-primary border-b border-vetted-border">{children}</td>
           ),
 
           // Horizontal rule
@@ -226,9 +233,9 @@ function AssistantMessage({
         >
           <RefreshCw size={15} />
         </button>
-        {modelUsed && (
+        {modelDisplayName(modelUsed) && (
           <span className="ml-2 text-[11px] text-vetted-text-muted">
-            Response provided by {modelUsed}
+            {modelDisplayName(modelUsed)}
           </span>
         )}
       </div>
@@ -236,10 +243,61 @@ function AssistantMessage({
   );
 }
 
+// ── Thinking indicator ────────────────────────────────────────────────────────
+function ThinkingIndicator({ steps }: { steps: Array<{ message: string; ts: string }> }) {
+  const bottomRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [steps.length]);
+
+  if (steps.length === 0) {
+    return (
+      <div className="flex items-center gap-1.5 py-1">
+        <span className="w-2 h-2 rounded-full bg-vetted-text-muted animate-bounce [animation-delay:0ms]" />
+        <span className="w-2 h-2 rounded-full bg-vetted-text-muted animate-bounce [animation-delay:150ms]" />
+        <span className="w-2 h-2 rounded-full bg-vetted-text-muted animate-bounce [animation-delay:300ms]" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="rounded-lg border border-vetted-border bg-vetted-surface overflow-hidden text-[11px]">
+        <div className="px-3 py-2 space-y-1.5">
+          {steps.map((s, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1.5 ${i === steps.length - 1 ? 'bg-vetted-accent animate-pulse' : 'bg-gray-300'}`} />
+              <span className="text-gray-500 font-mono leading-snug flex-1">{s.message}</span>
+              <span className="text-gray-400 font-mono whitespace-nowrap shrink-0">
+                {new Date(s.ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 py-1">
+        <span className="w-2 h-2 rounded-full bg-vetted-text-muted animate-bounce [animation-delay:0ms]" />
+        <span className="w-2 h-2 rounded-full bg-vetted-text-muted animate-bounce [animation-delay:150ms]" />
+        <span className="w-2 h-2 rounded-full bg-vetted-text-muted animate-bounce [animation-delay:300ms]" />
+      </div>
+      <div ref={bottomRef} />
+    </div>
+  );
+}
+
+function formatMessageTime(isoStr: string) {
+  const d = new Date(isoStr);
+  const today = new Date();
+  const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  if (d.toDateString() === today.toDateString()) return timePart;
+  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${timePart}`;
+}
+
 // ── Main ChatView ─────────────────────────────────────────────────────────────
-export default function ChatView() {
-  const { id } = useParams<{ id: string }>();
-  const { activeChat, setActiveChat } = useStore();
+export default function ChatView({ chatId: chatIdProp }: { chatId?: string } = {}) {
+  const { id: urlId } = useParams<{ id: string }>();
+  const id = chatIdProp !== undefined ? chatIdProp : urlId;
+  const { activeChat, setActiveChat, aiThinking, liveSteps } = useStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = React.useState(false);
 
@@ -261,7 +319,7 @@ export default function ChatView() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeChat?.messages]);
+  }, [activeChat?.messages, aiThinking]);
 
   if (!activeChat) return null;
 
@@ -283,21 +341,34 @@ export default function ChatView() {
           <div key={msg.id || idx}>
             {msg.role === 'user' ? (
               /* User message — right-aligned pill */
-              <div className="flex justify-end">
+              <div className="flex flex-col items-end gap-1">
                 <div className="max-w-[75%] bg-vetted-surface text-vetted-primary rounded-2xl px-5 py-3 text-[15px] leading-relaxed whitespace-pre-wrap">
                   {msg.content}
                 </div>
+                {msg.created_at && (
+                  <span className="text-[10px] text-vetted-text-muted pr-1">
+                    {formatMessageTime(msg.created_at)}
+                  </span>
+                )}
               </div>
             ) : (
-              <AssistantMessage
-                content={msg.content}
-                reasoning={msg.reasoning}
-                steps={msg.steps}
-                modelUsed={msg.model_used}
-              />
+              <div className="space-y-1">
+                <AssistantMessage
+                  content={msg.content}
+                  reasoning={msg.reasoning}
+                  steps={msg.steps}
+                  modelUsed={msg.model_used}
+                />
+                {msg.created_at && (
+                  <span className="text-[10px] text-vetted-text-muted">
+                    {formatMessageTime(msg.created_at)}
+                  </span>
+                )}
+              </div>
             )}
           </div>
         ))}
+        {aiThinking && <ThinkingIndicator steps={liveSteps} />}
         <div ref={messagesEndRef} />
       </div>
     </div>

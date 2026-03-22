@@ -33,6 +33,7 @@ export default function Sidebar() {
     setUser,
     demoActive,
     setDemoActive,
+    setChatAttachedFiles,
   } = useStore();
   const [contextMenu, setContextMenu] = useState<{ chatId: string; x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -45,8 +46,9 @@ export default function Sidebar() {
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
 
   const handleNewChat = () => {
-    navigate('/');
+    setChatAttachedFiles([]);
     setActiveChat(null);
+    navigate('/');
   };
 
   const handleLogout = () => {
@@ -243,7 +245,7 @@ export default function Sidebar() {
             </div>
           </div>
         )}
-        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.0.0</p>
+        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.1.0</p>
       </div>
 
       {/* Context Menu */}

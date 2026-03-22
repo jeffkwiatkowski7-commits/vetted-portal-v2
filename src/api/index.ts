@@ -19,7 +19,7 @@ async function request(path: string, options: RequestInit = {}) {
 
 // Auth
 export const auth = {
-  login: (email: string) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email }) }),
+  login: (email: string, password: string) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   me: () => request('/auth/me').then(d => d.user || d),
 };
@@ -132,9 +132,16 @@ export const apps = {
 // Admin - unwrap
 export const admin = {
   stats: () => request('/admin/stats').then(d => d.stats || d),
-  users: () => request('/admin/users').then(d => d.users || d || []),
-  updateRole: (id: string, role: string) => request(`/admin/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) }),
-  updateStatus: (id: string, status: string) => request(`/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+  users: {
+    list: () => request('/admin/users').then((d: any) => d.users || d || []),
+    create: (data: { email: string; display_name: string; job_title?: string; department?: string; role?: string; password?: string }) =>
+      request('/admin/users', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<{ email: string; display_name: string; job_title: string; department: string; role: string; status: string }>) =>
+      request(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    setPassword: (id: string, password: string) =>
+      request(`/admin/users/${id}/password`, { method: 'PUT', body: JSON.stringify({ password }) }),
+    remove: (id: string) => request(`/admin/users/${id}`, { method: 'DELETE' }),
+  },
   toolSets: () => request('/admin/tool-sets').then(d => d.toolSets || d.tool_sets || d || []),
   createToolSet: (data: any) => request('/admin/tool-sets', { method: 'POST', body: JSON.stringify(data) }),
   updateToolSet: (id: string, data: any) => request(`/admin/tool-sets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

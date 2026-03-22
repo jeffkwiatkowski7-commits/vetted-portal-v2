@@ -1198,7 +1198,8 @@ app.put('/api/settings/profile', requireAuth, (req, res) => {
   ]);
 
   const updated = dbGet(db, 'SELECT * FROM users WHERE id = ?', [req.user.id]);
-  res.json({ profile: updated });
+  const { password_hash, ...safeProfile } = updated;
+  res.json({ profile: safeProfile });
 });
 
 app.get('/api/settings/preferences', requireAuth, (req, res) => {

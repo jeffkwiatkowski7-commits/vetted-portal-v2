@@ -292,7 +292,6 @@ export default function LeaseChatPage() {
     const formData = new FormData();
     formData.append('file', file);
 
-    setUploadProgress(null);
     const res = await fetch('/api/leases/ingest', {
       method: 'POST',
       body: formData,
@@ -300,6 +299,7 @@ export default function LeaseChatPage() {
 
     await readSSE(res, (event, data: any) => {
       if (event === 'log') {
+        setUploadProgress(null);
         setIngestLogs(prev => [...prev, data.message]);
       } else if (event === 'done') {
         setIngestDone(true);

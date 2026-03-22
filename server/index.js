@@ -446,8 +446,10 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       aiContent = 'The AI service credentials have expired. Please ask your administrator to run `gcloud auth application-default login` on the server and restart the backend.';
     } else if (msg.includes('quota') || msg.includes('rate limit') || msg.includes('429')) {
       aiContent = 'The AI service is temporarily rate-limited. Please wait a moment and try again.';
-    } else if (msg.includes('not found') || msg.includes('404') || msg.includes('Claude API error')) {
+    } else if (msg.includes('not found') || msg.includes('404') || msg.includes('Claude API error 404')) {
       aiContent = 'The AI model is not available in this environment. Please contact your administrator.';
+    } else if (msg.includes('Claude API error 401') || msg.includes('Claude API error 403')) {
+      aiContent = 'The AI service credentials have expired. Please ask your administrator to run `gcloud auth application-default login` on the server and restart the backend.';
     } else {
       aiContent = 'Sorry, I was unable to generate a response. Please try again.';
     }

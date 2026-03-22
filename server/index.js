@@ -13,6 +13,7 @@ import { seedDatabase } from './seed.js';
 import leaseRoutes from './lease-routes.js';
 import { chatWithDocuments as geminiChatWithDocuments } from './lib/gemini.js';
 import { chatWithDocuments as claudeChatWithDocuments } from './lib/claude.js';
+import bcrypt from 'bcrypt';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -59,6 +60,17 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
+async function runMigrations(db) {
+  const cols = dbAll(db, "PRAGMA table_info('users')");
+  const hasPwHash = cols.some(c => c.name === 'password_hash');
+  if (!hasPwHash) {
+    dbRun(db, 'ALTER TABLE users ADD COLUMN password_hash TEXT');
+    const hash = await bcrypt.hash('Vetted@3:16', 10);
+    dbRun(db, "UPDATE users SET password_hash = ? WHERE email = 'jeffk@vettedbot.com'", [hash]);
+    console.log('Migration: added password_hash column and set jeffk password');
+  }
+}
+
 // Initialize database on startup
 let db;
 try {
@@ -74,6 +86,7 @@ try {
   } else {
     console.log('Database already seeded, skipping seed process');
   }
+  await runMigrations(db);
 } catch (error) {
   console.error('Database initialization error:', error);
   process.exit(1);
@@ -114,11 +127,11 @@ function requireAuth(req, res, next) {
 // AUTH ROUTES
 // ============================================================================
 
-app.post('/api/auth/login', (req, res) => {
-  const { email } = req.body;
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
 
-  if (!email) {
-    return res.status(400).json({ error: 'Email required' });
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password required' });
   }
 
   const user = dbGet(db, 'SELECT * FROM users WHERE email = ?', [email]);
@@ -131,18 +144,16 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(403).json({ error: 'User account is not active' });
   }
 
+  if (!user.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
+    return res.status(401).json({ error: 'Invalid password' });
+  }
+
   // Update last login
   dbRun(db, 'UPDATE users SET last_login_at = ? WHERE id = ?', [new Date().toISOString(), user.id]);
 
-  res.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      display_name: user.display_name,
-      role: user.role,
-      avatar_path: user.avatar_path
-    }
-  });
+  // Return same shape as before — strip password_hash, keep everything else
+  const { password_hash, ...safeUser } = user;
+  res.json({ user: safeUser });
 });
 
 app.post('/api/auth/logout', requireAuth, (req, res) => {

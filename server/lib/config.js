@@ -5,7 +5,8 @@
 export const config = {
   gcpProject: process.env.GCP_PROJECT || "bill-leases",
   gcpLocation: process.env.GCP_LOCATION || "us-central1",
-  modelId: process.env.MODEL_ID || "gemini-2.0-flash-preview",
+  modelId: process.env.MODEL_ID || "gemini-3.1-pro-preview",
+  claudeModel: process.env.CLAUDE_MODEL || "claude-opus-4-6",
   apiVersion: process.env.API_VERSION || "v1beta1",
   firestoreLeasesCollection:
     process.env.FIRESTORE_LEASES_COLLECTION || "leases",

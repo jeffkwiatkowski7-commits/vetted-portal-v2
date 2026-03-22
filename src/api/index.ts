@@ -32,6 +32,44 @@ export const chats = {
   update: (id: string, data: any) => request(`/chats/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(d => d.chat || d),
   delete: (id: string) => request(`/chats/${id}`, { method: 'DELETE' }),
   sendMessage: (id: string, data: any) => request(`/chats/${id}/messages`, { method: 'POST', body: JSON.stringify(data) }),
+  streamMessage: (
+    id: string,
+    data: any,
+    onStep: (step: { message: string; ts: string }) => void,
+  ): Promise<any> =>
+    new Promise(async (resolve, reject) => {
+      try {
+        const userId = localStorage.getItem('userId') || '';
+        const res = await fetch(`${BASE}/chats/${id}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+          body: JSON.stringify(data),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'Request failed' }));
+          return reject(new Error(err.error || `HTTP ${res.status}`));
+        }
+        const reader = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop()!;
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'step') onStep({ message: event.message, ts: event.ts });
+            else if (event.type === 'done') resolve(event);
+            else if (event.type === 'error') reject(new Error(event.message));
+          }
+        }
+      } catch (err) {
+        reject(err);
+      }
+    }),
   share: (id: string, data: any) => request(`/chats/${id}/share`, { method: 'POST', body: JSON.stringify(data) }),
   sharedWithMe: () => request('/chats/shared/with-me').then(d => d.chats || d || []),
 };
@@ -49,19 +87,33 @@ export const projects = {
 
 // Library - unwrap
 export const library = {
-  list: () => request('/library').then(d => d.files || d || []),
-  upload: async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const userId = localStorage.getItem('userId') || '';
-    const res = await fetch(`${BASE}/library/upload`, {
-      method: 'POST',
-      headers: { 'X-User-Id': userId },
-      body: formData,
-    });
-    if (!res.ok) throw new Error('Upload failed');
-    return res.json();
-  },
+  list: (projectId?: string) => request(projectId ? `/library?project_id=${projectId}` : '/library').then(d => d.files || d || []),
+  upload: (file: File, projectId?: string, onProgress?: (percent: number) => void): Promise<any> =>
+    new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (projectId) formData.append('project_id', projectId);
+      const userId = localStorage.getItem('userId') || '';
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${BASE}/library/upload`);
+      xhr.setRequestHeader('X-User-Id', userId);
+      if (onProgress) {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+        };
+      }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({}); }
+        } else {
+          reject(new Error('Upload failed'));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.send(formData);
+    }),
+  assignProject: (id: string, projectId: string | null) =>
+    request(`/library/${id}`, { method: 'PUT', body: JSON.stringify({ project_id: projectId }) }),
   download: (id: string) => `${BASE}/library/${id}/download`,
   rename: (id: string, name: string) => request(`/library/${id}`, { method: 'PUT', body: JSON.stringify({ original_name: name }) }),
   delete: (id: string) => request(`/library/${id}`, { method: 'DELETE' }),

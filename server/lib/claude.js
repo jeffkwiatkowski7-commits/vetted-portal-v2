@@ -32,31 +32,6 @@ async function getAccessToken() {
   return token.token;
 }
 
-// ── Raw API call ──────────────────────────────────────────────────────
-
-async function callClaude(system, messages) {
-  const token = await getAccessToken();
-  const body = {
-    anthropic_version: "vertex-2023-10-16",
-    max_tokens: MAX_TOKENS,
-    system,
-    messages,
-  };
-  const res = await fetch(VERTEX_ENDPOINT, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Claude API error ${res.status}: ${text}`);
-  }
-  return res.json();
-}
-
 // ── Tavily search ─────────────────────────────────────────────────────
 
 async function tavilySearch(query) {
@@ -72,7 +47,7 @@ async function tavilySearch(query) {
       max_results: 5,
     }),
   });
-  if (!res.ok) return null;
+  if (!res.ok) { console.warn("[claude] Tavily search failed:", res.status); return null; }
   const data = await res.json();
   const results = (data.results || [])
     .map((r) => `**${r.title}** (${r.url})\n${r.content}`)
@@ -118,8 +93,8 @@ async function runWithTools(system, messages, useSearch) {
     body.tools = TOOLS_DEF;
   }
 
+  const token = await getAccessToken();
   for (let i = 0; i < MAX_SEARCH_ITERATIONS; i++) {
-    const token = await getAccessToken();
     const res = await fetch(VERTEX_ENDPOINT, {
       method: "POST",
       headers: {

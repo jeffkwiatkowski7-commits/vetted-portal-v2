@@ -58,6 +58,12 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
     return (
       <div className="flex justify-end">
         <div className="max-w-[75%] bg-vetted-primary text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm whitespace-pre-wrap">
+          {msg.attachedFileName && (
+            <div className="flex items-center gap-1 opacity-50 mb-1.5 text-[11px]">
+              <Paperclip size={10} />
+              <span className="truncate max-w-[200px]">{msg.attachedFileName}</span>
+            </div>
+          )}
           {msg.content}
         </div>
       </div>

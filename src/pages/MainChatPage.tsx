@@ -262,29 +262,48 @@ export default function MainChatPage() {
 
   const firstName = user?.display_name?.split(' ')[0] ?? 'there';
 
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-
-      {/* Messages area */}
-      {messages.length > 0 ? (
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {messages.map((msg, i) => <ChatBubble key={i} msg={msg} />)}
-          <div ref={messagesEndRef} />
-        </div>
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center px-4 pb-16">
-          <h2 className="text-3xl font-playfair text-vetted-primary mb-2">
-            Good to see you, {firstName}!
-          </h2>
-          <p className="text-sm text-vetted-text-muted">Ask me anything, or attach a file to get started.</p>
+  const inputCard = (
+    <div className={`rounded-2xl border border-vetted-border bg-white p-3 shadow-sm ${chatting ? 'opacity-60 pointer-events-none' : ''}`}>
+      {/* File chip — shown when a file is pending */}
+      {pendingFile && (
+        <div className="flex items-center gap-1.5 px-2 py-1 bg-vetted-surface border border-vetted-border rounded-lg text-xs text-vetted-text-muted mb-2 w-fit">
+          <Paperclip size={11} />
+          <span className="max-w-[160px] truncate">{pendingFile.name}</span>
+          <button onClick={() => setPendingFile(null)} className="hover:text-vetted-primary transition-colors ml-0.5">
+            <X size={11} />
+          </button>
         </div>
       )}
 
-      {/* Input bar */}
-      <div className="border-t border-vetted-border p-4">
-        <div className="flex gap-2 items-end">
+      {/* Textarea */}
+      <textarea
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSend();
+          }
+        }}
+        placeholder="Ask anything…"
+        disabled={chatting}
+        rows={2}
+        className="w-full resize-none text-sm text-vetted-primary placeholder-vetted-text-muted focus:outline-none disabled:opacity-50 bg-transparent"
+      />
 
-          {/* Model selector */}
+      {/* Bottom toolbar */}
+      <div className="flex items-center justify-between pt-2 mt-1 border-t border-vetted-border">
+        {/* Left: file attach */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="p-1.5 rounded-lg border border-vetted-border text-vetted-text-muted hover:text-vetted-primary transition-colors"
+          title="Attach file"
+        >
+          {fileLoading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
+        </button>
+
+        {/* Right: model selector + send */}
+        <div className="flex items-center gap-2">
           <select
             value={selectedModel}
             onChange={e => {
@@ -292,70 +311,62 @@ export default function MainChatPage() {
               setSelectedModel(val);
               localStorage.setItem('selectedModel', val);
             }}
-            className="h-9 rounded-xl border border-vetted-border px-2 text-xs text-vetted-text-secondary bg-white focus:outline-none cursor-pointer shrink-0"
+            className="text-xs border border-vetted-border rounded-lg px-2 py-1 text-vetted-text-secondary bg-white focus:outline-none cursor-pointer"
           >
             <option value="gemini">Gemini 3.1</option>
             <option value="claude">Opus 4.6</option>
           </select>
-
-          {/* File chip */}
-          {pendingFile && (
-            <div className="flex items-center gap-1 px-2 py-1 bg-vetted-surface border border-vetted-border rounded-lg text-xs text-vetted-text-secondary shrink-0">
-              <Paperclip size={11} />
-              <span className="max-w-[120px] truncate">{pendingFile.name}</span>
-              <button onClick={() => setPendingFile(null)} className="hover:text-vetted-danger transition-colors">
-                <X size={11} />
-              </button>
-            </div>
-          )}
-
-          {/* Textarea */}
-          <textarea
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder="Ask anything…"
-            disabled={chatting}
-            rows={2}
-            className="flex-1 resize-none rounded-xl border border-vetted-border px-4 py-2.5 text-sm text-vetted-primary placeholder-vetted-text-muted focus:outline-none disabled:opacity-50 disabled:bg-gray-50"
-          />
-
-          {/* Paperclip */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={fileLoading}
-            className="p-2.5 rounded-xl border border-vetted-border text-vetted-text-muted hover:text-vetted-primary transition-colors disabled:opacity-40"
-            title="Attach file"
-          >
-            {fileLoading ? <Loader2 size={18} className="animate-spin" /> : <Paperclip size={18} />}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            onChange={e => {
-              const f = e.target.files?.[0];
-              if (f) handleFileSelect(f);
-              e.target.value = '';
-            }}
-          />
-
-          {/* Send */}
           <button
             onClick={handleSend}
             disabled={!input.trim() || chatting}
-            className="p-2.5 rounded-xl bg-vetted-primary text-white disabled:opacity-40 hover:bg-opacity-80 transition-colors"
+            className="p-1.5 rounded-lg bg-vetted-primary text-white disabled:opacity-40 hover:bg-opacity-80 transition-colors"
           >
-            {chatting ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+            {chatting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </button>
-
         </div>
       </div>
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={e => {
+          const f = e.target.files?.[0];
+          if (f) handleFileSelect(f);
+          e.target.value = '';
+        }}
+      />
+    </div>
+  );
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {messages.length === 0 ? (
+        /* State 1: empty — centered column */
+        <div className="flex-1 flex flex-col items-center justify-center gap-6 px-4 pb-16">
+          <div className="text-center">
+            <h2 className="text-3xl font-playfair text-vetted-primary mb-2">
+              Good to see you, {firstName}!
+            </h2>
+            <p className="text-sm text-vetted-text-muted">Ask me anything, or attach a file to get started.</p>
+          </div>
+          <div className="w-full max-w-[560px]">
+            {inputCard}
+          </div>
+        </div>
+      ) : (
+        /* State 2: active — messages + bottom-docked input */
+        <>
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {messages.map((msg, i) => <ChatBubble key={i} msg={msg} />)}
+            <div ref={messagesEndRef} />
+          </div>
+          <div className="border-t border-vetted-border p-4">
+            {inputCard}
+          </div>
+        </>
+      )}
     </div>
   );
 }

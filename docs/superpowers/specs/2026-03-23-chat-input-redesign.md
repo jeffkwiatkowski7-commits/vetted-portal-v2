@@ -17,104 +17,148 @@ No new files, no API changes, no backend changes.
 
 ---
 
+## Data Model Change
+
+Add an optional `attachedFileName` field to the `ChatMessage` interface:
+
+```ts
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  steps?: string[];
+  attachedFileName?: string; // filename of attached file, if any
+}
+```
+
+In `handleSend`, when building the user message object, set `attachedFileName: pendingFile?.name ?? undefined`.
+
+---
+
 ## Layout States
 
 ### State 1 — Empty (new chat)
 
-When `messages.length === 0`:
+When `messages.length === 0`, render a single centered column using `flex-1 flex flex-col items-center justify-center gap-6 px-4 pb-16`:
 
-- The greeting (`Good to see you, {firstName}!`) and subtitle are vertically centered in the available space.
-- The chat input box is centered below the greeting, `max-width: 560px`, with a subtle box shadow.
-- The input box contains:
-  - Top: `<textarea>` (placeholder `Ask anything…`, `rows={2}`, auto-grows)
-  - Bottom toolbar (inside the box, separated by a thin top border):
-    - **Left:** 📎 file attach icon button
-    - **Right:** model selector `<select>` → send button
+```
+┌─ flex-1 flex flex-col items-center justify-center gap-6 ─┐
+│  Greeting + subtitle (text-center)                        │
+│  Input card (max-w-[560px] w-full shadow-md)              │
+└──────────────────────────────────────────────────────────┘
+```
+
+Both the greeting and the input card are children of this centered column — the input card is **inside** the centering container, not below it.
 
 ### State 2 — Active (messages present)
 
 When `messages.length > 0`:
 
-- Messages area occupies the top, filling available height, scrollable.
-- Input box is bottom-docked, full width, inside a `border-t` container — same internal layout as State 1.
-- Transition is immediate (no animation needed) — the state switches on the first send.
+- Messages area: `flex-1 overflow-y-auto p-6 space-y-4` (same as current).
+- Input box is bottom-docked inside a `border-t border-vetted-border p-4` container, `w-full` (no max-width cap).
+- Transition is immediate — no animation.
 
 ---
 
 ## Input Box Internals
 
-The input box is a rounded card (`border-radius: 16px`, `border: 1.5px solid #ddd`) containing:
+**This is a structural refactor.** The current code lays out the file chip, textarea, paperclip button, and send button as siblings in a single horizontal `flex` row. Replace that entire structure with a white rounded card (`rounded-2xl border border-vetted-border p-3`) whose children stack vertically:
 
-1. `<textarea>` — full width, no resize, placeholder `Ask anything…`, disabled + dimmed while `chatting === true`.
-2. Bottom toolbar row (`display: flex; justify-content: space-between`):
-   - **Left side:** file attach icon button (`Paperclip` icon, grey). Clicking triggers the hidden `<input type="file">`. Shows `Loader2` spinner while uploading.
-   - **Right side:** model `<select>` (existing options: Gemini 3.1 / Opus 4.6) → send button (`Send` icon, `bg-vetted-primary`). Both disabled while `chatting`.
+Internal layout (top to bottom):
 
-If a file is pending (`pendingFile !== null`), a file chip appears **above** the textarea (inside the input box, above the text area):
-- Small pill: `📎 filename.pdf  ✕`
-- Clicking ✕ clears `pendingFile`
-- All grey / muted styling — no color
+1. **File chip row** — only rendered when `pendingFile !== null`:
+   - `flex items-center gap-1.5 px-2 py-1 bg-vetted-surface border border-vetted-border rounded-lg text-xs text-vetted-text-muted mb-2 w-fit`
+   - Content: `<Paperclip size={11} />  filename.pdf  <X size={11} />` (clicking X clears `pendingFile`)
+
+2. **Textarea** — full width, `resize-none`, placeholder `Ask anything…`, `rows={2}`, `disabled` while `chatting`.
+
+3. **Bottom toolbar** — `flex items-center justify-between pt-2 mt-1 border-t border-vetted-border`:
+   - **Left:** `<Paperclip>` icon button — triggers `fileInputRef.current?.click()`. Shows `<Loader2 className="animate-spin">` while `fileLoading`. Styling: `p-1.5 rounded-lg border border-vetted-border text-vetted-text-muted hover:text-vetted-primary disabled:opacity-40`.
+   - **Right:** `flex items-center gap-2`:
+     - Model `<select>` — existing options (Gemini 3.1 / Opus 4.6), persisted in localStorage. Styling: `text-xs border border-vetted-border rounded-lg px-2 py-1 text-vetted-text-secondary bg-white focus:outline-none`.
+     - Send button — `<Send size={16}>` / `<Loader2 size={16} className="animate-spin">`. Styling: `p-1.5 rounded-lg bg-vetted-primary text-white disabled:opacity-40`.
+
+**Send button disabled condition:** `!input.trim() || chatting` — a file alone without text does NOT enable send.
 
 The hidden `<input type="file" ref={fileInputRef}>` stays in the DOM as before.
 
 ---
 
-## Document in User Bubble
+## Disabled State While Chatting
 
-When a message is sent with a file attached, the user bubble shows the filename above the message text:
+While `chatting === true`, the entire input card wrapper gets `opacity-60 pointer-events-none` to visually dim and block interaction. The textarea also keeps its `disabled` prop for correct accessibility semantics and to prevent focus. Other individual `disabled` props are not needed beyond the textarea.
 
+---
+
+## User Bubble — Filename Chip
+
+When `msg.attachedFileName` is set on a user message, render a small chip above the message text inside the bubble:
+
+```tsx
+{msg.attachedFileName && (
+  <div className="flex items-center gap-1 opacity-50 mb-1 text-[11px]">
+    <Paperclip size={10} />
+    <span>{msg.attachedFileName}</span>
+  </div>
+)}
+<div>{msg.content}</div>
 ```
-┌─────────────────────────────────────┐
-│ 📎 Q3_Lease_Portfolio.pdf           │  ← 50% opacity, small
-│ Summarize the key financial risks… │
-└─────────────────────────────────────┘
-```
 
-This is a display-only change to `ChatBubble` — the content string already contains `[Attached: filename]` prepended by `handleSend`. Parse this prefix out of the displayed text and render it as the chip, showing only the user's actual message text in the bubble body.
-
-**Parsing rule:** if `msg.content` starts with `[Attached: ` parse out the filename (between `[Attached: ` and `]`) and strip everything up to and including the `---\n\n` separator before displaying the message text.
+`msg.content` for user messages is always the raw user text (no `[Attached: ...]` prefix — that prefix only exists in `userContent` which is sent to the API, never stored in state). No parsing is needed.
 
 ---
 
 ## Thinking / Streaming State
 
-While `chatting === true` and the assistant placeholder message is present:
+### Animated dots
 
-### Dots
-The assistant bubble body shows three animated bouncing dots (grey, `#ccc`) while `msg.content === ''`. Once content arrives, the dots are replaced by the rendered markdown.
+While the assistant placeholder message has `msg.content === ''`, render three bouncing grey dots instead of the markdown area:
+
+```tsx
+<div className="flex items-center gap-1 py-2">
+  <span className="w-2 h-2 bg-vetted-text-muted rounded-full animate-bounce [animation-delay:0ms]" />
+  <span className="w-2 h-2 bg-vetted-text-muted rounded-full animate-bounce [animation-delay:150ms]" />
+  <span className="w-2 h-2 bg-vetted-text-muted rounded-full animate-bounce [animation-delay:300ms]" />
+</div>
+```
+
+Use Tailwind's built-in `animate-bounce` with staggered delays via arbitrary `[animation-delay:Xms]` values. Once `msg.content` is non-empty, show the markdown instead.
 
 ### Steps panel
-Shown above the dots (or above the response bubble once content arrives):
 
-- Collapsed by default to `▸ N steps` toggle once `msg.content` is non-empty.
-- Expanded automatically while content is still empty (i.e. while thinking).
-- Each step is a monochrome dash line: `– Step text here`
-- Tavily web search steps show a plain grey pill badge: `Tavily` (background `#f2f2f2`, color `#aaa`)
-  - Detect Tavily steps by checking if the step string contains `"Web search:"` — these come from the existing SSE step events.
-- Toggle click flips open/closed.
+The existing `stepsOpen` state and collapse behavior is preserved exactly as-is (`useState(!msg.content)` + `useEffect` that sets to `false` when content arrives — already in the code, do not reimplement).
 
-Steps panel styling: white background, `border: 1px solid #e8e8e8`, `border-radius: 12px`, monospace font, grey text (`#999`).
+**Styling changes to the steps panel:**
+
+Current code renders raw step strings in a `bg-gray-50 border-vetted-border rounded-lg font-mono` div. Update to:
+- Background: `white` instead of `bg-gray-50`
+- Border: keep `border-vetted-border`
+- Border radius: `rounded-xl`
+- Each step: prepend `– ` in the render loop (the step strings themselves do not contain dashes)
+- If the step string starts with `Web search:` (e.g. `Web search: "commercial lease risk"`), append a grey pill badge: `<span className="ml-1.5 text-[10px] bg-vetted-surface text-vetted-text-muted px-1.5 py-0.5 rounded">Tavily</span>`
+
+**Toggle button:** Keep the existing `<ChevronDown size={12}>` / `<ChevronUp size={12}>` lucide icons with `{msg.steps.length} steps` label text. No change needed.
 
 ---
 
-## Disabled State While Chatting
+## ChatBubble Changes Summary
 
-While `chatting === true`:
-- Textarea: `disabled`, `opacity-50`, `bg-gray-50`
-- File attach button: `disabled`, muted
-- Model select: `disabled`, muted
-- Send button: `disabled`, `opacity-40`
-- The entire input box wrapper gets `opacity-60` or equivalent to visually dim it
+The `ChatBubble` component needs these targeted changes (markdown rendering and `normalizeMarkdown` are untouched):
+
+1. Add animated dots when `msg.content === ''`
+2. Update steps panel styling (white bg, dash prefix, Tavily badge)
+3. Render `msg.attachedFileName` chip in user bubbles
 
 ---
 
 ## What Does NOT Change
 
-- `handleSend` logic — no changes
-- `handleFileSelect` logic — no changes
-- `ChatBubble` markdown rendering — no changes (only adds dot animation + step display tweak + user bubble filename chip)
-- Backend / API — no changes
-- Model persistence in `localStorage` — no changes
+- `handleSend` logic (except setting `attachedFileName` on the user message object)
+- `handleFileSelect` logic
+- Markdown rendering components inside `ChatBubble`
+- `normalizeMarkdown` function
+- Model persistence in `localStorage`
+- Backend / API
+- `attachedFileName` is intentionally not persisted to the backend. When a chat is reloaded from history, user bubbles will not show the filename chip — this is acceptable.
 
 ---
 

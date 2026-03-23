@@ -254,6 +254,24 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_library_files_user_id ON library_files(user_id);
     CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
     CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
+
+    CREATE TABLE IF NOT EXISTS usage_log (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      source TEXT NOT NULL,
+      prompt TEXT,
+      model TEXT,
+      input_tokens INTEGER DEFAULT 0,
+      output_tokens INTEGER DEFAULT 0,
+      total_tokens INTEGER DEFAULT 0,
+      estimated_cost REAL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_usage_log_created_at ON usage_log(created_at);
+    CREATE INDEX IF NOT EXISTS idx_usage_log_user_id ON usage_log(user_id);
+    CREATE INDEX IF NOT EXISTS idx_usage_log_source ON usage_log(source);
+    CREATE INDEX IF NOT EXISTS idx_usage_log_model ON usage_log(model);
   `);
 
   dbInstance = db;
@@ -263,6 +281,34 @@ export async function initializeDatabase() {
 // Get current database instance
 export function getDatabase() {
   return dbInstance;
+}
+
+const COST_RATES = [
+  { prefix: 'gemini-2.0-flash', input: 0.075, output: 0.30 },
+  { prefix: 'gemini-1.5-flash', input: 0.075, output: 0.30 },
+  { prefix: 'gemini-1.5-pro',   input: 1.25,  output: 5.00 },
+  { prefix: 'gpt-4o',           input: 2.50,  output: 10.00 },
+  { prefix: 'claude-sonnet',    input: 3.00,  output: 15.00 },
+];
+const DEFAULT_RATE = { input: 1.00, output: 4.00 };
+
+function computeCost(model, inputTokens, outputTokens) {
+  const rate = COST_RATES.find(r => (model || '').startsWith(r.prefix)) || DEFAULT_RATE;
+  return (inputTokens / 1_000_000) * rate.input + (outputTokens / 1_000_000) * rate.output;
+}
+
+export function logUsage(db, { userId, source, prompt, model, inputTokens, outputTokens }) {
+  if (!db) return;
+  const totalTokens = (inputTokens || 0) + (outputTokens || 0);
+  const estimatedCost = computeCost(model, inputTokens || 0, outputTokens || 0);
+  const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  dbRun(db, `
+    INSERT INTO usage_log (id, user_id, source, prompt, model, input_tokens, output_tokens, total_tokens, estimated_cost, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [id, userId || null, source, prompt || null, model || null,
+      inputTokens || 0, outputTokens || 0, totalTokens,
+      Math.round(estimatedCost * 100000) / 100000,
+      new Date().toISOString()]);
 }
 
 // Save database to file

@@ -60,6 +60,36 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
+app.post('/api/chat/upload', requireAuth, upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+  const { originalname, mimetype, path: filePath } = req.file;
+  let textContent = null;
+  let base64Content = null;
+
+  const isPdf = mimetype === 'application/pdf' || originalname.toLowerCase().endsWith('.pdf');
+
+  if (isPdf) {
+    try {
+      const pdfParse = (await import('pdf-parse')).default;
+      const buffer = fs.readFileSync(filePath);
+      const parsed = await pdfParse(buffer);
+      textContent = parsed.text || null;
+    } catch {
+      const buffer = fs.readFileSync(filePath);
+      base64Content = buffer.toString('base64');
+    }
+  } else {
+    try {
+      textContent = fs.readFileSync(filePath, 'utf8');
+    } catch {
+      return res.status(422).json({ error: 'Could not read file as text' });
+    }
+  }
+
+  res.json({ name: originalname, mimeType: mimetype, textContent, base64Content });
+});
+
 async function runMigrations(db) {
   const cols = dbAll(db, "PRAGMA table_info('users')");
   const hasPwHash = cols.some(c => c.name === 'password_hash');

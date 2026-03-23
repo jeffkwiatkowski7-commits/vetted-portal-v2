@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 
-import { initializeDatabase, getDatabase, dbGet, dbAll, dbRun } from './database.js';
+import { initializeDatabase, getDatabase, dbGet, dbAll, dbRun, logUsage } from './database.js';
 import { getMockResponse } from './mock-responses.js';
 import { seedDatabase } from './seed.js';
 import leaseRoutes from './lease-routes.js';
@@ -524,6 +524,22 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     null,
     now
   ]);
+
+  // Log usage (skip if AI returned an error message)
+  const isErrorResponse = aiContent.startsWith('The AI service') ||
+    aiContent.startsWith('Sorry, I was unable') ||
+    aiContent.startsWith('The AI model');
+  if (!isErrorResponse) {
+    const tokenCount = Math.ceil(aiContent.split(/\s+/).length * 1.3);
+    logUsage(getDatabase(), {
+      userId: req.user?.id || null,
+      source: 'chat',
+      prompt: content,
+      model: chat.model,
+      inputTokens: 0,
+      outputTokens: tokenCount,
+    });
+  }
 
   // Update chat updated_at
   dbRun(db, 'UPDATE chats SET updated_at = ? WHERE id = ?', [now, req.params.id]);

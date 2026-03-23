@@ -107,7 +107,7 @@ router.post("/leases/ingest", pdfUpload.single("file"), async (req, res) => {
     // Step 2: OCR if scanned
     if (fullText.trim().length < OCR_THRESHOLD) {
       emit(`Step 2/4 — Scanned PDF detected (only ${fullText.trim().length} chars) — sending to Gemini OCR...`);
-      fullText = await ocrPdf(base64);
+      fullText = await ocrPdf(base64, req.headers['x-user-id'] || null);
       emit(`Gemini OCR complete: ${fullText.length.toLocaleString()} characters transcribed`);
     } else {
       emit("Step 2/4 — Text-based PDF, skipping OCR");
@@ -115,7 +115,7 @@ router.post("/leases/ingest", pdfUpload.single("file"), async (req, res) => {
 
     // Step 3: Structured extraction
     emit("Step 3/4 — Extracting structured lease data via Gemini...");
-    const leaseData = await extractLeaseData(fullText, filename);
+    const leaseData = await extractLeaseData(fullText, filename, req.headers['x-user-id'] || null);
     emit(`Extracted: tenant="${leaseData.tenantName}", suite="${leaseData.suiteNumber}", rent=$${leaseData.monthlyRent}`);
 
     // Step 4: Store in Firestore
@@ -239,7 +239,7 @@ router.post("/leases/chat", async (req, res) => {
       emit(`Building prompt — ${totalChars.toLocaleString()} chars of lease text`);
 
       emit(useClaude ? "Calling Claude..." : "Calling Gemini...");
-      const result = await chatFn(leaseTexts, message, history, useSearch, persona);
+      const result = await chatFn(leaseTexts, message, history, useSearch, persona, req.headers['x-user-id'] || null);
       for (const q of result.searchQueries) {
         emit(`Web search: "${q}"`);
       }
@@ -284,7 +284,7 @@ router.post("/leases/chat", async (req, res) => {
 
       emit("Building cross-portfolio prompt...");
       emit(useClaude ? "Calling Claude..." : "Calling Gemini...");
-      const result = await crossFn(summaries, message, history, useSearch);
+      const result = await crossFn(summaries, message, history, useSearch, req.headers['x-user-id'] || null);
       for (const q of result.searchQueries) {
         emit(`Web search: "${q}"`);
       }

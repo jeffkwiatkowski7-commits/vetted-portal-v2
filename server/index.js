@@ -485,7 +485,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     step(useClaude ? 'Calling Claude' : 'Calling Gemini');
 
     const chatWithDocuments = useClaude ? claudeChatWithDocuments : geminiChatWithDocuments;
-    const result = await chatWithDocuments(docs, content, history, systemPromptOverride);
+    const result = await chatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null);
     aiContent = result.text;
 
     if (result.searchQueries?.length > 0) {

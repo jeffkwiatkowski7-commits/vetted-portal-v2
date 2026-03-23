@@ -63,7 +63,8 @@ project_file_chunks/{chunkId}
 ```
 
 **Firestore Indexes:**
-- Composite index: `projectId` (equality) + `embedding` (vector) — scopes all searches to a single project
+- Composite index: `projectId` (equality) + `embedding` (vector, cosine distance, 768 dimensions) — scopes all searches to a single project
+- Must be created manually via Firebase CLI or console before first use
 
 **SQLite `library_files`:** Unchanged. Continues to track file metadata and project assignment. A new `index_status` column is added (`pending`, `indexing`, `ready`, `error`) to track ingestion state.
 
@@ -74,12 +75,12 @@ Triggered when a file is uploaded to a project or an existing library file is as
 ### Steps
 
 1. **Upload to GCS** — Store original blob at `projects/{projectId}/{fileId}-{originalName}`
-2. **Text extraction:**
+2. **Text extraction** (supported types: PDF, DOCX, TXT, MD — unsupported types are rejected with a 400 error at upload time):
    - PDF: `pdf-parse` for text extraction (fallback: Gemini OCR for scanned PDFs)
    - DOCX: `mammoth` for text extraction
    - TXT/MD: Read as UTF-8
-3. **Chunking** — Split extracted text into ~500 token chunks with ~50 token overlap. Track page boundaries for PDFs.
-4. **Embedding** — Call Vertex AI `text-embedding-005` in batches (up to 250 texts per request)
+3. **Chunking** — Split extracted text into ~2000 character chunks (~500 tokens) with ~200 character overlap. Track page boundaries for PDFs.
+4. **Embedding** — Call Vertex AI `text-embedding-005` in batches (up to 250 texts per request). Use task type `RETRIEVAL_DOCUMENT` for file chunks and `RETRIEVAL_QUERY` for chat queries.
 5. **Store in Firestore** — Write chunk documents with text, embedding vector, and source metadata
 6. **Update SQLite** — Set `index_status = 'ready'` on the `library_files` record
 

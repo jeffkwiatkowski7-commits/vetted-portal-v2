@@ -284,7 +284,7 @@ router.post("/leases/chat", async (req, res) => {
 
       emit("Building cross-portfolio prompt...");
       emit(useClaude ? "Calling Claude..." : "Calling Gemini...");
-      const result = await crossFn(summaries, message, history, useSearch, req.headers['x-user-id'] || null);
+      const result = await crossFn(summaries, message, history, useSearch, undefined, req.headers['x-user-id'] || null);
       for (const q of result.searchQueries) {
         emit(`Web search: "${q}"`);
       }

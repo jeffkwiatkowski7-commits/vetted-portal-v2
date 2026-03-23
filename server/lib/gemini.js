@@ -362,18 +362,6 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
   // Always enable Google Grounding — model decides when to search
   const result = await generate(contents, {}, [{ googleSearch: {} }]);
 
-  const usageMeta = result?.response?.usageMetadata;
-  if (usageMeta) {
-    logUsage(getDatabase(), {
-      userId,
-      source: 'lease',
-      prompt: userMessage,
-      model: config.modelId,
-      inputTokens: usageMeta.promptTokenCount || 0,
-      outputTokens: usageMeta.candidatesTokenCount || 0,
-    });
-  }
-
   for (const q of result.candidates?.[0]?.groundingMetadata?.webSearchQueries ?? []) {
     console.log("[gemini] web search:", q);
   }

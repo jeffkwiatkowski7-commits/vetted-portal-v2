@@ -1270,6 +1270,76 @@ app.post('/api/admin/client-errors', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/admin/usage/models', requireAuth, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const rows = dbAll(db, 'SELECT DISTINCT model FROM usage_log WHERE model IS NOT NULL ORDER BY model');
+  res.json(rows.map(r => r.model));
+});
+
+app.get('/api/admin/usage/summary', requireAuth, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999)).toISOString();
+
+  const row = dbGet(db, `
+    SELECT
+      COUNT(*) as total_prompts,
+      COALESCE(SUM(total_tokens), 0) as total_tokens,
+      COALESCE(SUM(estimated_cost), 0) as estimated_cost,
+      COUNT(DISTINCT user_id) as active_users
+    FROM usage_log
+    WHERE created_at >= ? AND created_at <= ?
+  `, [monthStart, monthEnd]);
+
+  res.json({
+    total_prompts: row?.total_prompts || 0,
+    total_tokens: row?.total_tokens || 0,
+    estimated_cost: row?.estimated_cost || 0,
+    active_users: row?.active_users || 0,
+  });
+});
+
+app.get('/api/admin/usage', requireAuth, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
+  const offset = (page - 1) * limit;
+
+  const conditions = [];
+  const params = [];
+
+  if (req.query.user_id) { conditions.push('ul.user_id = ?'); params.push(req.query.user_id); }
+  if (req.query.source) { conditions.push('ul.source = ?'); params.push(req.query.source); }
+  if (req.query.model) { conditions.push('ul.model = ?'); params.push(req.query.model); }
+  if (req.query.from) { conditions.push('ul.created_at >= ?'); params.push(req.query.from + 'T00:00:00.000Z'); }
+  if (req.query.to) { conditions.push('ul.created_at <= ?'); params.push(req.query.to + 'T23:59:59.999Z'); }
+  if (req.query.q) { conditions.push('ul.prompt LIKE ?'); params.push(`%${req.query.q}%`); }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const countRow = dbGet(db, `SELECT COUNT(*) as total FROM usage_log ul ${where}`, params);
+  const total = countRow?.total || 0;
+
+  const rows = dbAll(db, `
+    SELECT ul.*, u.display_name, u.department
+    FROM usage_log ul
+    LEFT JOIN users u ON ul.user_id = u.id
+    ${where}
+    ORDER BY ul.created_at DESC
+    LIMIT ? OFFSET ?
+  `, [...params, limit, offset]);
+
+  res.json({ rows, total, page, limit });
+});
+
 // ============================================================================
 // SETTINGS ROUTES
 // ============================================================================

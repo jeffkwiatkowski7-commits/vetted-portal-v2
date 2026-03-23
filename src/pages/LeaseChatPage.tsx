@@ -184,7 +184,11 @@ function LeaseCard({ lease, onDelete }: { lease: IngestedLease; onDelete: () => 
 // ── Chat message ──────────────────────────────────────────────────────────────
 
 function ChatBubble({ msg }: { msg: ChatMessage }) {
-  const [stepsOpen, setStepsOpen] = useState(false);
+  const [stepsOpen, setStepsOpen] = useState(!msg.content);
+
+  useEffect(() => {
+    if (msg.content) setStepsOpen(false);
+  }, [msg.content]);
 
   if (msg.role === 'user') {
     return (
@@ -331,7 +335,7 @@ export default function LeaseChatPage() {
 
     const history = messages.map(m => ({ role: m.role, content: m.content }));
 
-    const assistantMsg: ChatMessage = { role: 'assistant', content: '', steps: [] };
+    const assistantMsg: ChatMessage = { role: 'assistant', content: '', steps: ['Sending request…'] };
     setMessages(prev => [...prev, assistantMsg]);
 
     const res = await fetch('/api/leases/chat', {

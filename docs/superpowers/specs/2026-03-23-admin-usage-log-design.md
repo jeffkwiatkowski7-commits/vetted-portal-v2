@@ -71,7 +71,7 @@ function logUsage(db, { userId, source, prompt, model, inputTokens, outputTokens
 
 ### 2. Main chat logging (`server/index.js`)
 
-In `POST /api/chat`, after a real LLM response is received and saved to `messages`, call `logUsage`. Only fires when `DEMO_MODE` is `false` (the env flag already controls this path). The `model_used` and `token_count` values are already in scope as local variables at the point of the `messages` INSERT — read them from there (no db read-back needed). Since the main chat API does not return a split of input vs output tokens, use the approximation: `input_tokens = Math.round(token_count * 0.6)`, `output_tokens = Math.round(token_count * 0.4)`. If `token_count` is null or 0, skip the `logUsage` call.
+In `POST /api/chats/:id/messages` (the real chat route in `server/index.js`), after the AI response is saved to `messages`, call `logUsage`. This route always calls a real AI model — there is no DEMO_MODE guard. The `model_used` value is `chat.model` (already in scope). The `token_count` is computed as `Math.ceil(aiContent.split(/\s+/).length * 1.3)` — a word-count estimate of the response; this is also already in scope. Since it is an estimate of the output only, use: `input_tokens = 0`, `output_tokens = token_count`. If `token_count` is 0 or the AI returned an error message (detect by checking if `aiContent` starts with known error strings from the catch block), skip the `logUsage` call.
 
 Admin role check pattern: use the same inline check used in other admin endpoints — `if (req.user.role !== 'admin' && req.user.role !== 'super_admin') return res.status(403).json({ error: 'Forbidden' })`.
 
@@ -85,7 +85,7 @@ All five functions (`ocrPdf`, `extractLeaseData`, `chatWithLeases`, `chatWithDoc
 - `outputTokens` = `response.usageMetadata.candidatesTokenCount`
 - For `ocrPdf` and `extractLeaseData`, there is no `userMessage` — store the filename or a short descriptor (e.g. `"[OCR: filename.pdf]"`) as the `prompt` value.
 - **Missing usageMetadata:** If `response.usageMetadata` is absent or undefined (e.g. on a partial/error response), skip the `logUsage` call — do not insert a row with null token counts.
-- **Callers:** `POST /api/leases/ingest` and `POST /api/leases/chat` in `server/index.js` already use `requireAuth`. Pass `req.user.id` as the `userId` argument to all Gemini function calls. The ingestion route is authenticated, so `req.user.id` is available for `ocrPdf` and `extractLeaseData` calls too.
+- **Callers:** `POST /api/leases/ingest` and `POST /api/leases/chat` are in `server/lease-routes.js` (not `server/index.js`). These routes do **not** currently use `requireAuth`, so `req.user` is not available. Use `req.headers['x-user-id']` as the `userId` value instead — this header is always sent by the frontend for authenticated requests. Pass it through to all Gemini function calls.
 
 ### 4. Admin API endpoints
 
@@ -215,6 +215,7 @@ Add to `admin` namespace in `src/api/index.ts`. All four types (`UsageListParams
 usage: {
   list: (params?: UsageListParams): Promise<UsageListResponse> => ...,
   summary: (): Promise<UsageSummary> => ...,
+  models: (): Promise<string[]> => ...,
 }
 ```
 

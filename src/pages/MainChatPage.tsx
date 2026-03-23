@@ -309,7 +309,7 @@ export default function MainChatPage() {
         }}
         placeholder="Ask anything…"
         disabled={chatting}
-        rows={2}
+        rows={3}
         className="w-full resize-none text-sm text-vetted-primary placeholder-vetted-text-muted focus:outline-none disabled:opacity-50 bg-transparent"
       />
 
@@ -374,7 +374,7 @@ export default function MainChatPage() {
             </h2>
             <p className="text-sm text-vetted-text-muted">Ask me anything, or attach a file to get started.</p>
           </div>
-          <div className="w-full max-w-[560px]">
+          <div className="w-full max-w-[700px]">
             {inputCard}
           </div>
         </div>

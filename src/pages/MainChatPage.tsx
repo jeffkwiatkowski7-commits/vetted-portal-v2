@@ -296,7 +296,8 @@ export default function MainChatPage() {
         {/* Left: file attach */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="p-1.5 rounded-lg border border-vetted-border text-vetted-text-muted hover:text-vetted-primary transition-colors"
+          disabled={fileLoading}
+          className="p-1.5 rounded-lg border border-vetted-border text-vetted-text-muted hover:text-vetted-primary transition-colors disabled:opacity-40"
           title="Attach file"
         >
           {fileLoading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}

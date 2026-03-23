@@ -10,6 +10,7 @@
  */
 import { GoogleGenAI } from "@google/genai";
 import { config } from "./config.js";
+import { logUsage, getDatabase } from "../database.js";
 
 // Singleton client
 let _client = null;
@@ -33,7 +34,7 @@ async function generate(contents, genConfig = {}, tools = []) {
     contents,
     config: {
       temperature: 0.3,
-      maxOutputTokens: 4096,
+      maxOutputTokens: 8192,
       ...genConfig,
     },
   };
@@ -77,7 +78,7 @@ Return the complete text content, preserving the structure and order of the docu
 Include all text: headings, paragraphs, clauses, signatures, dates, addresses, amounts, etc.
 If there are handwritten annotations, transcribe those too and mark them as [handwritten: ...].`;
 
-export async function ocrPdf(pdfBase64) {
+export async function ocrPdf(pdfBase64, userId = null) {
   const result = await generate(
     [
       {
@@ -90,6 +91,18 @@ export async function ocrPdf(pdfBase64) {
     ],
     { temperature: 0.1, maxOutputTokens: 8192 },
   );
+
+  const usageMeta = result?.response?.usageMetadata;
+  if (usageMeta) {
+    logUsage(getDatabase(), {
+      userId,
+      source: 'lease',
+      prompt: '[OCR: PDF upload]',
+      model: config.modelId,
+      inputTokens: usageMeta.promptTokenCount || 0,
+      outputTokens: usageMeta.candidatesTokenCount || 0,
+    });
+  }
 
   return (
     result.candidates?.[0]?.content?.parts?.[0]?.text ||
@@ -129,13 +142,25 @@ Rules:
 LEASE DOCUMENT TEXT:
 `;
 
-export async function extractLeaseData(fullText, sourceFile) {
+export async function extractLeaseData(fullText, sourceFile, userId = null) {
   const truncated = fullText.slice(0, 100_000);
 
   const result = await generate(
     [{ role: "user", parts: [{ text: EXTRACTION_PROMPT + truncated }] }],
     { temperature: 0.1, maxOutputTokens: 4096, responseMimeType: "application/json" },
   );
+
+  const usageMeta = result?.response?.usageMetadata;
+  if (usageMeta) {
+    logUsage(getDatabase(), {
+      userId,
+      source: 'lease',
+      prompt: `[Extract: ${sourceFile || 'lease document'}]`,
+      model: config.modelId,
+      inputTokens: usageMeta.promptTokenCount || 0,
+      outputTokens: usageMeta.candidatesTokenCount || 0,
+    });
+  }
 
   let rawJson =
     result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
@@ -218,7 +243,7 @@ CRITICAL table formatting rules — FOLLOW EXACTLY:
 
 // ── Per-project Q&A ──────────────────────────────────────────────────
 
-export async function chatWithLeases(leaseTexts, userMessage, chatHistory, useSearch = false, persona) {
+export async function chatWithLeases(leaseTexts, userMessage, chatHistory, useSearch = false, persona, userId = null) {
   const leaseContext = leaseTexts
     .map((l, i) => `\n--- LEASE ${i + 1}: ${l.tenantName} (Suite ${l.suiteNumber}) ---\n${l.text}\n`)
     .join("\n");
@@ -243,6 +268,18 @@ export async function chatWithLeases(leaseTexts, userMessage, chatHistory, useSe
 
   const tools = useSearch ? [{ googleSearch: {} }] : [];
   const result = await generate(contents, {}, tools);
+
+  const usageMeta = result?.response?.usageMetadata;
+  if (usageMeta) {
+    logUsage(getDatabase(), {
+      userId,
+      source: 'lease',
+      prompt: userMessage,
+      model: config.modelId,
+      inputTokens: usageMeta.promptTokenCount || 0,
+      outputTokens: usageMeta.candidatesTokenCount || 0,
+    });
+  }
 
   for (const q of result.candidates?.[0]?.groundingMetadata?.webSearchQueries ?? []) {
     console.log("[gemini] web search:", q);
@@ -288,7 +325,7 @@ Today's date is ${today}.
 
 // ── General document Q&A / project chat ─────────────────────────────
 
-export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null) {
+export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null) {
   const textDocs = docs.filter((d) => d.text !== undefined);
   const pdfDocs = docs.filter((d) => d.base64 !== undefined);
 
@@ -325,6 +362,18 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
   // Always enable Google Grounding — model decides when to search
   const result = await generate(contents, {}, [{ googleSearch: {} }]);
 
+  const usageMeta = result?.response?.usageMetadata;
+  if (usageMeta) {
+    logUsage(getDatabase(), {
+      userId,
+      source: 'lease',
+      prompt: userMessage,
+      model: config.modelId,
+      inputTokens: usageMeta.promptTokenCount || 0,
+      outputTokens: usageMeta.candidatesTokenCount || 0,
+    });
+  }
+
   for (const q of result.candidates?.[0]?.groundingMetadata?.webSearchQueries ?? []) {
     console.log("[gemini] web search:", q);
   }
@@ -334,7 +383,7 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
 
 // ── Cross-portfolio Q&A ──────────────────────────────────────────────
 
-export async function chatCrossPortfolio(leaseSummaries, userMessage, chatHistory = [], useSearch = false, persona) {
+export async function chatCrossPortfolio(leaseSummaries, userMessage, chatHistory = [], useSearch = false, persona, userId = null) {
   const summaryContext = leaseSummaries
     .map((l, i) =>
       `Lease ${i + 1}: ${l.tenantName} | Suite ${l.suiteNumber} | ${l.propertyAddress} | ` +
@@ -370,5 +419,18 @@ Answer questions using this portfolio data. If you need the full lease text to a
 
   const tools = useSearch ? [{ googleSearch: {} }] : [];
   const result = await generate(contents, {}, tools);
+
+  const usageMeta = result?.response?.usageMetadata;
+  if (usageMeta) {
+    logUsage(getDatabase(), {
+      userId,
+      source: 'lease',
+      prompt: userMessage,
+      model: config.modelId,
+      inputTokens: usageMeta.promptTokenCount || 0,
+      outputTokens: usageMeta.candidatesTokenCount || 0,
+    });
+  }
+
   return extractGroundedResponse(result);
 }

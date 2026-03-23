@@ -82,42 +82,58 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
         </button>
       )}
       {stepsOpen && msg.steps && (
-        <div className="bg-gray-50 border border-vetted-border rounded-lg px-3 py-2 text-xs text-vetted-text-muted space-y-0.5 font-mono">
-          {msg.steps.map((s, i) => <div key={i}>{s}</div>)}
+        <div className="bg-white border border-vetted-border rounded-xl px-3 py-2 text-xs text-vetted-text-muted space-y-0.5 font-mono">
+          {msg.steps.map((s, i) => (
+            <div key={i} className="flex items-center gap-1">
+              <span>–</span>
+              <span>{s}</span>
+              {s.startsWith('Web search:') && (
+                <span className="ml-1 text-[10px] bg-vetted-surface text-vetted-text-muted px-1.5 py-0.5 rounded">Tavily</span>
+              )}
+            </div>
+          ))}
         </div>
       )}
       <div className="bg-vetted-bg border border-vetted-border rounded-2xl rounded-tl-sm px-4 py-3 overflow-x-auto">
-        <div className="text-[15px]">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              table: ({ children }) => (
-                <div className="my-3 overflow-x-auto rounded-xl border border-vetted-border">
-                  <table className="w-full text-sm border-collapse">{children}</table>
-                </div>
-              ),
-              thead: ({ children }) => (
-                <thead className="bg-vetted-surface border-b border-vetted-border">{children}</thead>
-              ),
-              tbody: ({ children }) => (
-                <tbody className="divide-y divide-vetted-border">{children}</tbody>
-              ),
-              tr: ({ children }) => (
-                <tr className="hover:bg-vetted-surface/60 transition-colors">{children}</tr>
-              ),
-              th: ({ children }) => (
-                <th className="px-4 py-2.5 text-left text-xs font-semibold text-vetted-text-secondary uppercase tracking-wide whitespace-nowrap">
-                  {children}
-                </th>
-              ),
-              td: ({ children }) => (
-                <td className="px-4 py-2.5 text-[14px] text-vetted-text-primary align-top">{children}</td>
-              ),
-            }}
-          >
-            {normalizeMarkdown(msg.content)}
-          </ReactMarkdown>
-        </div>
+        {msg.content === '' ? (
+          <div className="flex items-center gap-1 py-1">
+            <span className="w-2 h-2 bg-vetted-text-muted rounded-full animate-bounce [animation-delay:0ms]" />
+            <span className="w-2 h-2 bg-vetted-text-muted rounded-full animate-bounce [animation-delay:150ms]" />
+            <span className="w-2 h-2 bg-vetted-text-muted rounded-full animate-bounce [animation-delay:300ms]" />
+          </div>
+        ) : (
+          <div className="text-[15px]">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                table: ({ children }) => (
+                  <div className="my-3 overflow-x-auto rounded-xl border border-vetted-border">
+                    <table className="w-full text-sm border-collapse">{children}</table>
+                  </div>
+                ),
+                thead: ({ children }) => (
+                  <thead className="bg-vetted-surface border-b border-vetted-border">{children}</thead>
+                ),
+                tbody: ({ children }) => (
+                  <tbody className="divide-y divide-vetted-border">{children}</tbody>
+                ),
+                tr: ({ children }) => (
+                  <tr className="hover:bg-vetted-surface/60 transition-colors">{children}</tr>
+                ),
+                th: ({ children }) => (
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-vetted-text-secondary uppercase tracking-wide whitespace-nowrap">
+                    {children}
+                  </th>
+                ),
+                td: ({ children }) => (
+                  <td className="px-4 py-2.5 text-[14px] text-vetted-text-primary align-top">{children}</td>
+                ),
+              }}
+            >
+              {normalizeMarkdown(msg.content)}
+            </ReactMarkdown>
+          </div>
+        )}
       </div>
     </div>
   );

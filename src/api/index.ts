@@ -1,3 +1,43 @@
+export interface UsageListParams {
+  page?: number;
+  limit?: number;
+  user_id?: string;
+  source?: 'chat' | 'lease';
+  model?: string;
+  from?: string;
+  to?: string;
+  q?: string;
+}
+
+export interface UsageRow {
+  id: string;
+  user_id: string;
+  display_name: string;
+  department: string | null;
+  source: 'chat' | 'lease';
+  prompt: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost: number;
+  created_at: string;
+}
+
+export interface UsageListResponse {
+  rows: UsageRow[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface UsageSummary {
+  total_prompts: number;
+  total_tokens: number;
+  estimated_cost: number;
+  active_users: number;
+}
+
 const BASE = '/api';
 
 async function request(path: string, options: RequestInit = {}) {
@@ -156,6 +196,23 @@ export const admin = {
   errors: () => request('/admin/errors').then((d: any) => d.errors || []),
   reportClientError: (payload: { message: string; stack?: string; url?: string; userAgent?: string }) =>
     request('/admin/client-errors', { method: 'POST', body: JSON.stringify(payload) }).catch(() => {}),
+  usage: {
+    list: (params?: UsageListParams): Promise<UsageListResponse> => {
+      const qs = new URLSearchParams();
+      if (params?.page) qs.set('page', String(params.page));
+      if (params?.limit) qs.set('limit', String(params.limit));
+      if (params?.user_id) qs.set('user_id', params.user_id);
+      if (params?.source) qs.set('source', params.source);
+      if (params?.model) qs.set('model', params.model);
+      if (params?.from) qs.set('from', params.from);
+      if (params?.to) qs.set('to', params.to);
+      if (params?.q) qs.set('q', params.q);
+      const query = qs.toString();
+      return request(`/admin/usage${query ? '?' + query : ''}`);
+    },
+    summary: (): Promise<UsageSummary> => request('/admin/usage/summary'),
+    models: (): Promise<string[]> => request('/admin/usage/models'),
+  },
 };
 
 // Settings - unwrap

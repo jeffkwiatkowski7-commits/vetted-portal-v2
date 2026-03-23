@@ -43,6 +43,7 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   steps?: string[];
+  attachedFileName?: string;
 }
 
 // ── ChatBubble (copied from LeaseChatPage) ────────────────────────────────────
@@ -172,7 +173,7 @@ export default function MainChatPage() {
       : text;
 
     // Show user message and clear inputs immediately
-    setMessages(prev => [...prev, { role: 'user', content: text }]);
+    setMessages(prev => [...prev, { role: 'user', content: text, attachedFileName: pendingFile?.name }]);
     setInput('');
     setPendingFile(null);
     setChatting(true);

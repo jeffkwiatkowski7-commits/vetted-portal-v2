@@ -284,6 +284,7 @@ export function getDatabase() {
 }
 
 const COST_RATES = [
+  { prefix: 'gemini-3-flash', input: 0.075, output: 0.30 },
   { prefix: 'gemini-2.0-flash', input: 0.075, output: 0.30 },
   { prefix: 'gemini-1.5-flash', input: 0.075, output: 0.30 },
   { prefix: 'gemini-1.5-pro',   input: 1.25,  output: 5.00 },

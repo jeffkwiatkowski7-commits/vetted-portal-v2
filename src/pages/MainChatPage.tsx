@@ -1,6 +1,31 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, Loader2, Paperclip, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Send, Loader2, Paperclip, X, ChevronDown, ChevronUp, Check } from 'lucide-react';
+
+// ── Model logos ────────────────────────────────────────────────────────────────
+const GeminiIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path d="M8 1C8 4.866 4.866 8 1 8C4.866 8 8 11.134 8 15C8 11.134 11.134 8 15 8C11.134 8 8 4.866 8 1Z" fill="url(#gem-grad)"/>
+    <defs>
+      <linearGradient id="gem-grad" x1="1" y1="1" x2="15" y2="15" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#4285F4"/>
+        <stop offset="100%" stopColor="#8B5CF6"/>
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
+const ClaudeIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path d="M8 1.5L13.5 13H10.5L8 7.5L5.5 13H2.5L8 1.5Z" fill="#D97706"/>
+    <path d="M5 10H11" stroke="#D97706" strokeWidth="1.2" strokeLinecap="round"/>
+  </svg>
+);
+
+const MODEL_OPTIONS = [
+  { value: 'gemini' as const, label: 'Gemini 3.1', Icon: GeminiIcon },
+  { value: 'claude' as const, label: 'Opus 4.6',   Icon: ClaudeIcon },
+];
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useStore } from '../store';
@@ -156,8 +181,21 @@ export default function MainChatPage() {
     return saved === 'claude' ? 'claude' : 'gemini';
   });
 
+  const [modelOpen, setModelOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close model dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setModelOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -327,18 +365,30 @@ export default function MainChatPage() {
 
         {/* Right: model selector + send */}
         <div className="flex items-center gap-2">
-          <select
-            value={selectedModel}
-            onChange={e => {
-              const val = e.target.value as 'gemini' | 'claude';
-              setSelectedModel(val);
-              localStorage.setItem('selectedModel', val);
-            }}
-            className="text-xs border border-vetted-border rounded-lg px-2 py-1 text-vetted-text-secondary bg-white focus:outline-none cursor-pointer"
-          >
-            <option value="gemini">Gemini 3.1</option>
-            <option value="claude">Opus 4.6</option>
-          </select>
+          {/* Custom model selector */}
+          <div className="relative" ref={modelDropdownRef}>
+            <button
+              onClick={() => setModelOpen(o => !o)}
+              className="flex items-center gap-1.5 text-xs border border-vetted-border rounded-lg px-2 py-1 text-vetted-text-secondary bg-white hover:border-vetted-primary transition-colors"
+            >
+              {(() => { const m = MODEL_OPTIONS.find(o => o.value === selectedModel)!; return <><m.Icon />{m.label}<ChevronDown size={11} className="opacity-50" /></>; })()}
+            </button>
+            {modelOpen && (
+              <div className="absolute bottom-full mb-1.5 right-0 bg-white border border-vetted-border rounded-xl shadow-lg py-1 min-w-[140px] z-10">
+                {MODEL_OPTIONS.map(({ value, label, Icon }) => (
+                  <button
+                    key={value}
+                    onClick={() => { setSelectedModel(value); localStorage.setItem('selectedModel', value); setModelOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
+                  >
+                    <Icon />
+                    <span className="flex-1 text-left">{label}</span>
+                    {selectedModel === value && <Check size={11} className="text-vetted-primary" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             onClick={handleSend}
             disabled={!input.trim() || chatting}

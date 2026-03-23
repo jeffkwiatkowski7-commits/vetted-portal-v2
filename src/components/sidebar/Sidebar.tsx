@@ -160,7 +160,7 @@ export default function Sidebar() {
         {!sidebarCollapsed && projectChats.length > 0 && (
           <div>
             <p className="text-xs font-medium text-vetted-text-muted px-2 mb-2">PROJECT CHATS</p>
-            <div className="space-y-1">
+            <div className="space-y-1 max-h-[168px] overflow-y-auto">
               {projectChats.map((chat) => (
                 <ChatItem
                   key={chat.id}
@@ -245,7 +245,7 @@ export default function Sidebar() {
             </div>
           </div>
         )}
-        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.1.1</p>
+        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.2.0</p>
       </div>
 
       {/* Context Menu */}

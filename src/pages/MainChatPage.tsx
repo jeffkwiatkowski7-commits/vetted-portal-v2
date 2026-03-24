@@ -30,6 +30,7 @@ const MODEL_OPTIONS = [
 ];
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
 import { useStore } from '../store';
 import * as api from '../api';
 
@@ -167,10 +168,89 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
             <span className="w-2 h-2 bg-vetted-text-muted rounded-full animate-bounce [animation-delay:300ms]" />
           </div>
         ) : (
-          <div className="text-[15px]">
+          <div className="text-[15px] leading-relaxed text-vetted-text-primary">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
               components={{
+                // Headings
+                h1: ({ children }) => (
+                  <h1 className="text-xl font-semibold text-vetted-primary mt-5 mb-2 first:mt-0">{children}</h1>
+                ),
+                h2: ({ children }) => (
+                  <h2 className="text-lg font-semibold text-vetted-primary mt-4 mb-2 first:mt-0">{children}</h2>
+                ),
+                h3: ({ children }) => (
+                  <h3 className="text-base font-semibold text-vetted-primary mt-3 mb-1.5 first:mt-0">{children}</h3>
+                ),
+                h4: ({ children }) => (
+                  <h4 className="text-sm font-semibold text-vetted-primary mt-3 mb-1 first:mt-0">{children}</h4>
+                ),
+                // Paragraphs
+                p: ({ children }) => (
+                  <p className="mb-3 last:mb-0">{children}</p>
+                ),
+                // Bold & italic
+                strong: ({ children }) => (
+                  <strong className="font-semibold text-vetted-primary">{children}</strong>
+                ),
+                em: ({ children }) => (
+                  <em className="italic text-vetted-text-secondary">{children}</em>
+                ),
+                // Lists
+                ul: ({ children }) => (
+                  <ul className="mb-3 ml-1 space-y-1 list-none">{children}</ul>
+                ),
+                ol: ({ children }) => (
+                  <ol className="mb-3 ml-1 space-y-1 list-none counter-reset-item">{children}</ol>
+                ),
+                li: ({ children, ordered, index }: any) => (
+                  <li className="flex gap-2 text-[14px]">
+                    <span className="text-vetted-accent mt-0.5 shrink-0 text-[13px]">
+                      {ordered ? `${(index ?? 0) + 1}.` : '•'}
+                    </span>
+                    <span className="flex-1">{children}</span>
+                  </li>
+                ),
+                // Blockquote
+                blockquote: ({ children }) => (
+                  <blockquote className="border-l-3 border-vetted-accent pl-4 py-1 my-3 bg-vetted-surface/50 rounded-r-lg text-vetted-text-secondary italic">
+                    {children}
+                  </blockquote>
+                ),
+                // Code
+                code: ({ className, children }) => {
+                  const isBlock = className?.includes('language-');
+                  if (isBlock) {
+                    return (
+                      <div className="my-3 rounded-xl bg-[#1a1a1a] overflow-hidden">
+                        {className && (
+                          <div className="px-4 py-1.5 bg-[#2a2a2a] text-[10px] text-white/40 uppercase tracking-wider font-mono">
+                            {className.replace('language-', '')}
+                          </div>
+                        )}
+                        <pre className="px-4 py-3 overflow-x-auto text-[13px] leading-relaxed">
+                          <code className="text-green-300 font-mono">{children}</code>
+                        </pre>
+                      </div>
+                    );
+                  }
+                  return (
+                    <code className="px-1.5 py-0.5 bg-vetted-surface rounded text-[13px] font-mono text-vetted-accent">
+                      {children}
+                    </code>
+                  );
+                },
+                pre: ({ children }) => <>{children}</>,
+                // Horizontal rule
+                hr: () => <hr className="my-4 border-vetted-border" />,
+                // Links
+                a: ({ href, children }) => (
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-vetted-accent hover:underline">
+                    {children}
+                  </a>
+                ),
+                // Tables
                 table: ({ children }) => (
                   <div className="my-3 overflow-x-auto rounded-xl border border-vetted-border">
                     <table className="w-full text-sm border-collapse">{children}</table>

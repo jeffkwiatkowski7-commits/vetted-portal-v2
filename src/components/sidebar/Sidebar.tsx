@@ -6,6 +6,7 @@ import {
   Plus,
   FolderOpen,
   BookOpen,
+  Sparkles,
   Grid3X3,
   Shield,
   ChevronLeft,
@@ -134,6 +135,7 @@ export default function Sidebar() {
         {[
           { path: '/projects', icon: FolderOpen, label: 'Projects' },
           { path: '/library', icon: BookOpen, label: 'Library' },
+          { path: '/skills', icon: Sparkles, label: 'Skills' },
           { path: '/apps', icon: Grid3X3, label: 'Apps' },
           ...(user?.role === 'admin' || user?.role === 'super_admin'
             ? [{ path: '/admin', icon: Shield, label: 'Admin' }]
@@ -245,7 +247,7 @@ export default function Sidebar() {
             </div>
           </div>
         )}
-        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.2.2</p>
+        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.4.0</p>
       </div>
 
       {/* Context Menu */}

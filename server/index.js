@@ -1545,6 +1545,18 @@ app.get('/api/admin/models', requireAuth, requireAdmin, (req, res) => {
   res.json({ models });
 });
 
+app.post('/api/admin/models', requireAuth, requireAdmin, (req, res) => {
+  const { model_name, provider, display_name, icon_color, is_default, is_enabled, max_tokens, rate_limit } = req.body;
+  if (!model_name || !display_name) return res.status(400).json({ error: 'model_name and display_name required' });
+  const id = uuidv4();
+  const now = new Date().toISOString();
+  dbRun(db, `INSERT INTO model_configs (id, model_name, provider, display_name, icon_color, is_default, is_enabled, max_tokens, rate_limit, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, model_name, provider || 'Google', display_name, icon_color || '#888', is_default ? 1 : 0, is_enabled !== false ? 1 : 0, max_tokens || 4096, rate_limit || 60, now, now]);
+  const model = dbGet(db, 'SELECT * FROM model_configs WHERE id = ?', [id]);
+  res.status(201).json({ model });
+});
+
 app.put('/api/admin/models/:id', requireAuth, requireAdmin, (req, res) => {
   const { is_enabled, is_default, max_tokens, rate_limit, display_name, model_name, provider, icon_color } = req.body;
 

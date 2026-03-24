@@ -116,9 +116,16 @@ export async function initializeDatabase() {
       mime_type TEXT NOT NULL,
       project_id TEXT,
       uploaded_at TEXT NOT NULL,
+      index_status TEXT DEFAULT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id),
       FOREIGN KEY (project_id) REFERENCES projects(id)
     );
+
+    try {
+      db.run(\`ALTER TABLE library_files ADD COLUMN index_status TEXT DEFAULT NULL\`);
+    } catch (e) {
+      // Column already exists, ignore
+    }
 
     CREATE TABLE IF NOT EXISTS apps (
       id TEXT PRIMARY KEY,
@@ -272,6 +279,39 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_usage_log_user_id ON usage_log(user_id);
     CREATE INDEX IF NOT EXISTS idx_usage_log_source ON usage_log(source);
     CREATE INDEX IF NOT EXISTS idx_usage_log_model ON usage_log(model);
+
+    CREATE TABLE IF NOT EXISTS skills (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      instructions TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS skill_files (
+      id TEXT PRIMARY KEY,
+      skill_id TEXT NOT NULL,
+      library_file_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (skill_id) REFERENCES skills(id),
+      FOREIGN KEY (library_file_id) REFERENCES library_files(id),
+      UNIQUE(skill_id, library_file_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS project_skills (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      skill_id TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id),
+      FOREIGN KEY (skill_id) REFERENCES skills(id),
+      UNIQUE(project_id, skill_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_skill_files_skill_id ON skill_files(skill_id);
+    CREATE INDEX IF NOT EXISTS idx_project_skills_project_id ON project_skills(project_id);
   `);
 
   dbInstance = db;

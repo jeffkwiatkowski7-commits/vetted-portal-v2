@@ -81,6 +81,7 @@ export interface LibraryFile {
   mime_type: string;
   project_id?: string;
   uploaded_at: string;
+  index_status?: 'pending' | 'indexing' | 'ready' | 'error' | null;
 }
 
 export interface App {
@@ -202,6 +203,28 @@ export interface DemoStep {
   duration: number;
   target?: string;
   navigate?: string;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Skills Types
+// ════════════════════════════════════════════════════════════════════
+
+export interface Skill {
+  id: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  created_at: string;
+  updated_at: string;
+  file_count?: number;
+  files?: LibraryFile[];
+}
+
+export interface ProjectSkill {
+  skill_id: string;
+  skill_name: string;
+  skill_description?: string;
+  enabled: boolean;
 }
 
 // ════════════════════════════════════════════════════════════════════

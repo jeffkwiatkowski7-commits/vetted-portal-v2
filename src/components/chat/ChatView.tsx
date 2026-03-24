@@ -184,11 +184,13 @@ function AssistantMessage({
   reasoning,
   steps,
   modelUsed,
+  citations,
 }: {
   content: string;
   reasoning?: string;
   steps?: string[];
   modelUsed?: string;
+  citations?: { filename: string; pageNumber: number | null }[];
 }) {
   const [copied, setCopied] = React.useState(false);
   const [thumbs, setThumbs] = React.useState<'up' | 'down' | null>(null);
@@ -203,6 +205,18 @@ function AssistantMessage({
     <div className="space-y-3">
       {steps && steps.length > 0 && <StepsLog steps={steps} />}
       <MarkdownContent content={content} />
+      {citations && citations.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-white/10">
+          <div className="text-xs text-white/40 mb-1">Sources:</div>
+          <div className="flex flex-wrap gap-1">
+            {citations.map((c, i) => (
+              <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/5 rounded text-xs text-white/50">
+                {c.filename}{c.pageNumber ? ` (p. ${c.pageNumber})` : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       {reasoning && <ModelReasoning reasoning={reasoning} />}
       <div className="flex items-center gap-1">
         <button
@@ -358,6 +372,7 @@ export default function ChatView({ chatId: chatIdProp }: { chatId?: string } = {
                   reasoning={msg.reasoning}
                   steps={msg.steps}
                   modelUsed={msg.model_used}
+                  citations={msg.citations}
                 />
                 {msg.created_at && (
                   <span className="text-[10px] text-vetted-text-muted">

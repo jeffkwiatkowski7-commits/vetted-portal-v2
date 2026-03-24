@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Send, Loader2, Paperclip, X, ChevronDown, ChevronUp, Check } from 'lucide-react';
+import LibraryPickerModal from '../components/chat/LibraryPickerModal';
+import { LibraryFile } from '../types';
 
 // ── Model logos ────────────────────────────────────────────────────────────────
 const GeminiIcon = () => (
@@ -64,11 +66,17 @@ function normalizeMarkdown(content: string): string {
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
+interface SourceCitation {
+  filename: string;
+  pageNumber: number | null;
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   steps?: string[];
   attachedFileName?: string;
+  citations?: SourceCitation[];
 }
 
 // ── ChatBubble (copied from LeaseChatPage) ────────────────────────────────────
@@ -157,6 +165,18 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
             >
               {normalizeMarkdown(msg.content)}
             </ReactMarkdown>
+            {msg.citations && msg.citations.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-white/10">
+                <div className="text-xs text-white/40 mb-1">Sources:</div>
+                <div className="flex flex-wrap gap-1">
+                  {msg.citations.map((c, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/5 rounded text-xs text-white/50">
+                      {c.filename}{c.pageNumber ? ` (p. ${c.pageNumber})` : ''}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -174,8 +194,8 @@ export default function MainChatPage() {
   const [input, setInput] = useState('');
   const [chatting, setChatting] = useState(false);
   const [chatId, setChatId] = useState<string | null>(id ?? null);
-  const [pendingFile, setPendingFile] = useState<{ name: string; content: string } | null>(null);
-  const [fileLoading, setFileLoading] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<LibraryFile[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<'gemini' | 'claude'>(() => {
     const saved = localStorage.getItem('selectedModel');
     return saved === 'claude' ? 'claude' : 'gemini';
@@ -183,7 +203,7 @@ export default function MainChatPage() {
 
   const [modelOpen, setModelOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachButtonRef = useRef<HTMLButtonElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
 
   // Close model dropdown on outside click
@@ -227,15 +247,18 @@ export default function MainChatPage() {
     const text = input.trim();
     if (!text || chatting) return;
 
-    // Build content — prepend file text if attached
-    const userContent = pendingFile
-      ? `[Attached: ${pendingFile.name}]\n\n${pendingFile.content}\n\n---\n\n${text}`
-      : text;
+    // Capture attached file IDs before clearing
+    const attachmentIds = pendingFiles.map(f => f.id);
+    const attachedName = pendingFiles.length === 1
+      ? pendingFiles[0].original_name
+      : pendingFiles.length > 1
+      ? `${pendingFiles.length} files`
+      : undefined;
 
     // Show user message and clear inputs immediately
-    setMessages(prev => [...prev, { role: 'user', content: text, attachedFileName: pendingFile?.name }]);
+    setMessages(prev => [...prev, { role: 'user', content: text, attachedFileName: attachedName }]);
     setInput('');
-    setPendingFile(null);
+    setPendingFiles([]);
     setChatting(true);
 
     // Resolve or create chatId
@@ -260,7 +283,7 @@ export default function MainChatPage() {
     try {
       const result = await (api.chats as any).streamMessage(
         activeChatId!,
-        { content: userContent, model: selectedModel },
+        { content: text, model: selectedModel, attachments: attachmentIds.length > 0 ? attachmentIds : undefined },
         (step: { message: string }) => {
           setMessages(prev => {
             const updated = [...prev];
@@ -273,10 +296,16 @@ export default function MainChatPage() {
       );
 
       // result.messages[0] = user echo, result.messages[1] = assistant reply
-      const assistantContent = result.messages?.[1]?.content ?? '';
+      const assistantMsg = result.messages?.[1];
+      const assistantContent = assistantMsg?.content ?? '';
+      const assistantCitations = assistantMsg?.citations ?? undefined;
       setMessages(prev => {
         const updated = [...prev];
-        updated[updated.length - 1] = { ...updated[updated.length - 1], content: assistantContent };
+        updated[updated.length - 1] = {
+          ...updated[updated.length - 1],
+          content: assistantContent,
+          citations: assistantCitations,
+        };
         return updated;
       });
 
@@ -296,42 +325,26 @@ export default function MainChatPage() {
     }
   };
 
-  const handleFileSelect = async (file: File) => {
-    setFileLoading(true);
-    try {
-      const userId = localStorage.getItem('userId') || '';
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch('/api/chat/upload', {
-        method: 'POST',
-        headers: { 'X-User-Id': userId },
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      const data = await res.json();
-      setPendingFile({
-        name: file.name,
-        content: data.textContent ?? '[Binary file — content not extractable as text]',
-      });
-    } catch {
-      // silently fail — user can try again
-    } finally {
-      setFileLoading(false);
-    }
+  const handleLibraryAttach = (files: LibraryFile[]) => {
+    setPendingFiles(files);
   };
 
   const firstName = user?.display_name?.split(' ')[0] ?? 'there';
 
   const inputCard = (
     <div className={`rounded-2xl border border-vetted-border bg-white p-3 shadow-sm ${chatting ? 'opacity-60 pointer-events-none' : ''}`}>
-      {/* File chip — shown when a file is pending */}
-      {pendingFile && (
-        <div className="flex items-center gap-1.5 px-2 py-1 bg-vetted-surface border border-vetted-border rounded-lg text-xs text-vetted-text-muted mb-2 w-fit">
-          <Paperclip size={11} />
-          <span className="max-w-[160px] truncate">{pendingFile.name}</span>
-          <button onClick={() => setPendingFile(null)} className="hover:text-vetted-primary transition-colors ml-0.5">
-            <X size={11} />
-          </button>
+      {/* File chips — shown when files are pending */}
+      {pendingFiles.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {pendingFiles.map(f => (
+            <div key={f.id} className="flex items-center gap-1.5 px-2 py-1 bg-vetted-surface border border-vetted-border rounded-lg text-xs text-vetted-text-muted w-fit">
+              <Paperclip size={11} />
+              <span className="max-w-[160px] truncate">{f.original_name}</span>
+              <button onClick={() => setPendingFiles(prev => prev.filter(p => p.id !== f.id))} className="hover:text-vetted-primary transition-colors ml-0.5">
+                <X size={11} />
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -355,12 +368,12 @@ export default function MainChatPage() {
       <div className="flex items-center justify-between pt-2 mt-1 border-t border-vetted-border">
         {/* Left: file attach */}
         <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={fileLoading}
-          className="p-1.5 rounded-lg border border-vetted-border text-vetted-text-muted hover:text-vetted-primary transition-colors disabled:opacity-40"
+          ref={attachButtonRef}
+          onClick={() => setPickerOpen(true)}
+          className="p-1.5 rounded-lg border border-vetted-border text-vetted-text-muted hover:text-vetted-primary transition-colors"
           title="Attach file"
         >
-          {fileLoading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
+          <Paperclip size={16} />
         </button>
 
         {/* Right: model selector + send */}
@@ -399,22 +412,17 @@ export default function MainChatPage() {
         </div>
       </div>
 
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        onChange={e => {
-          const f = e.target.files?.[0];
-          if (f) handleFileSelect(f);
-          e.target.value = '';
-        }}
-      />
     </div>
   );
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      <LibraryPickerModal
+        isOpen={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onAttach={handleLibraryAttach}
+        returnFocusRef={attachButtonRef as React.RefObject<HTMLButtonElement>}
+      />
       {messages.length === 0 ? (
         /* State 1: empty — centered column */
         <div className="flex-1 flex flex-col items-center justify-center gap-6 px-4 pb-16">
@@ -431,12 +439,16 @@ export default function MainChatPage() {
       ) : (
         /* State 2: active — messages + bottom-docked input */
         <>
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {messages.map((msg, i) => <ChatBubble key={i} msg={msg} />)}
-            <div ref={messagesEndRef} />
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-[75%] mx-auto px-6 py-8 space-y-6">
+              {messages.map((msg, i) => <ChatBubble key={i} msg={msg} />)}
+              <div ref={messagesEndRef} />
+            </div>
           </div>
-          <div className="border-t border-vetted-border p-4">
-            {inputCard}
+          <div className="px-4 pb-4 pt-2">
+            <div className="max-w-[75%] mx-auto px-6">
+              {inputCard}
+            </div>
           </div>
         </>
       )}

@@ -182,48 +182,6 @@ export default function ProjectDetailPage() {
             <p className="text-sm text-vetted-text-secondary mb-6 max-w-md text-center">{project.description}</p>
           )}
 
-          {/* Files Section */}
-          <div className="w-full max-w-md mb-8">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-white/70 uppercase tracking-wider">Project Files</h3>
-              <label className="cursor-pointer px-3 py-1.5 bg-[#C4A962]/10 text-[#C4A962] text-sm rounded-lg hover:bg-[#C4A962]/20 transition-colors">
-                Upload File
-                <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.docx,.txt,.md" onChange={handleFileUpload} disabled={isUploading} />
-              </label>
-            </div>
-
-            {isUploading && uploadSteps.length > 0 && (
-              <div className="mb-3 p-3 bg-white/5 rounded-lg space-y-1">
-                {uploadSteps.map((s, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs text-white/50">
-                    <span className={i === uploadSteps.length - 1 ? 'text-[#C4A962]' : ''}>{s.message}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {projectFiles.length === 0 ? (
-              <p className="text-sm text-white/30">No files uploaded yet</p>
-            ) : (
-              <div className="space-y-2">
-                {projectFiles.map((file: any) => (
-                  <div key={file.id} className="flex items-center justify-between p-2 bg-white/5 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-white/80">{file.original_name}</span>
-                      <span className="text-xs text-white/30">{(file.file_size / 1024).toFixed(0)} KB</span>
-                    </div>
-                    <div>
-                      {file.index_status === 'ready' && <span className="text-green-400 text-xs">&#10003; Indexed</span>}
-                      {file.index_status === 'indexing' && <span className="text-[#C4A962] text-xs animate-pulse">Indexing...</span>}
-                      {file.index_status === 'error' && <span className="text-red-400 text-xs">Error</span>}
-                      {!file.index_status && <span className="text-white/30 text-xs">Not indexed</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           <div className="w-full max-w-3xl">
             <ChatInput centered projectId={id} />
           </div>

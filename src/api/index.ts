@@ -160,6 +160,20 @@ export const library = {
   stats: () => request('/library/stats').then(d => { const s = d.stats || d; return { totalSize: s.total_size || 0, fileCount: s.total_files || 0 }; }),
 };
 
+// Skills - unwrap
+export const skills = {
+  list: () => request('/skills').then(d => d.skills || d || []),
+  create: (data: any) => request('/skills', { method: 'POST', body: JSON.stringify(data) }).then(d => d.skill || d),
+  get: (id: string) => request(`/skills/${id}`).then(d => d.skill || d),
+  update: (id: string, data: any) => request(`/skills/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(d => d.skill || d),
+  delete: (id: string) => request(`/skills/${id}`, { method: 'DELETE' }),
+  attachFile: (id: string, libraryFileId: string) => request(`/skills/${id}/files`, { method: 'POST', body: JSON.stringify({ library_file_id: libraryFileId }) }),
+  detachFile: (id: string, fileId: string) => request(`/skills/${id}/files/${fileId}`, { method: 'DELETE' }),
+  forProject: (projectId: string) => request(`/projects/${projectId}/skills`).then(d => d.skills || d || []),
+  updateProjectSkills: (projectId: string, skills: { skill_id: string; enabled: boolean }[]) =>
+    request(`/projects/${projectId}/skills`, { method: 'PUT', body: JSON.stringify({ skills }) }),
+};
+
 // Apps - unwrap
 export const apps = {
   list: () => request('/apps').then(d => d.apps || d || []),
@@ -225,6 +239,53 @@ export const settings = {
   createApiKey: (data: any) => request('/settings/api-keys', { method: 'POST', body: JSON.stringify(data) }),
   deleteApiKey: (id: string) => request(`/settings/api-keys/${id}`, { method: 'DELETE' }),
   sessions: () => request('/settings/sessions').then(d => d.sessions || d || []),
+};
+
+// Project Files
+export const projectFiles = {
+  upload: (
+    projectId: string,
+    file: File,
+    onStep: (step: { message: string; ts: string }) => void,
+  ): Promise<any> =>
+    new Promise(async (resolve, reject) => {
+      try {
+        const userId = localStorage.getItem('userId') || '';
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch(`${BASE}/projects/${projectId}/files/upload`, {
+          method: 'POST',
+          headers: { 'X-User-Id': userId },
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+          return reject(new Error(err.error || `HTTP ${res.status}`));
+        }
+
+        const reader = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop()!;
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'step') onStep({ message: event.message, ts: event.ts });
+            else if (event.type === 'done') resolve(event);
+            else if (event.type === 'error') reject(new Error(event.message));
+          }
+        }
+      } catch (err) {
+        reject(err);
+      }
+    }),
 };
 
 // Search - unwrap

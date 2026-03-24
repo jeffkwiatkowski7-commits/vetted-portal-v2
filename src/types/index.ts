@@ -28,6 +28,11 @@ export interface Chat {
   permission?: string;
 }
 
+export interface SourceCitation {
+  filename: string;
+  pageNumber: number | null;
+}
+
 export interface Message {
   id: string;
   chat_id: string;
@@ -38,6 +43,7 @@ export interface Message {
   reasoning?: string;
   attachments?: string;
   steps?: string[];
+  citations?: SourceCitation[];
   created_at: string;
 }
 

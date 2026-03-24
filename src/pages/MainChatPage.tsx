@@ -428,19 +428,18 @@ export default function MainChatPage() {
         }
       );
 
-      // result.messages[0] = user echo, result.messages[1] = assistant reply
-      const assistantMsg = result.messages?.[1];
-      const assistantContent = assistantMsg?.content ?? '';
-      const assistantCitations = assistantMsg?.citations ?? undefined;
-      const assistantReasoning = assistantMsg?.reasoning ?? undefined;
+      // Done event is minimal — fetch full messages from API
+      const doneChatId = result.chatId || activeChatId;
+      const chat = await api.chats.get(doneChatId);
+      const lastMsg = (chat.messages ?? []).filter((m: any) => m.role === 'assistant').pop();
       setMessages(prev => {
         const updated = [...prev];
         updated[updated.length - 1] = {
           ...updated[updated.length - 1],
-          content: assistantContent,
-          citations: assistantCitations,
-          reasoning: assistantReasoning,
-          timestamp: new Date().toISOString(),
+          content: lastMsg?.content ?? '',
+          citations: lastMsg?.citations ?? undefined,
+          reasoning: lastMsg?.reasoning ?? undefined,
+          timestamp: lastMsg?.created_at ?? new Date().toISOString(),
         };
         return updated;
       });

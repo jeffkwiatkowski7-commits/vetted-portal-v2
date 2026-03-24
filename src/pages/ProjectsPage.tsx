@@ -41,7 +41,7 @@ export default function ProjectsPage() {
   const handleCreateProject = async (data: { name: string; description: string; system_prompt: string; tool_sets: string[] }) => {
     setSaving(true);
     try {
-      await api.projects.create({
+      const project = await api.projects.create({
         name: data.name,
         description: data.description,
         system_prompt: data.system_prompt,
@@ -52,6 +52,7 @@ export default function ProjectsPage() {
       setShowModal(false);
       loadProjects();
       addToast({ type: 'success', title: 'Project created' });
+      return project;
     } catch {
       addToast({ type: 'error', title: 'Failed to create project' });
     } finally {

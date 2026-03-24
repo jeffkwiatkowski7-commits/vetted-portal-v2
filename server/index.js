@@ -47,9 +47,16 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
+// Resolve a library_file's file_path to an absolute disk path.
+// file_path is stored as "/uploads/<filename>" but files live in uploadsDir.
+function resolveFilePath(filePathValue) {
+  const filename = path.basename(filePathValue);
+  return path.join(uploadsDir, filename);
+}
+
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Configure multer for file uploads
@@ -390,7 +397,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
   // PDFs → { name, mimeType, base64 } for native Gemini vision.
   // Other files → { name, text }.
   async function readLibraryFile(file) {
-    const filePath = path.join(__dirname, '..', file.file_path);
+    const filePath = resolveFilePath(file.file_path);
     if (file.file_type === 'pdf' || file.mime_type === 'application/pdf') {
       try {
         const buffer = fs.readFileSync(filePath);
@@ -511,7 +518,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
             const isText = !file.mime_type.startsWith('image/') && file.mime_type !== 'application/pdf';
             if (isDocx) {
               try {
-                const filePath = path.join(__dirname, '..', file.file_path);
+                const filePath = resolveFilePath(file.file_path);
                 const result = await mammoth.extractRawText({ path: filePath });
                 let content = result.value;
                 const TOKEN_LIMIT = 4000 * 4;
@@ -524,7 +531,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
               }
             } else if (isText) {
               try {
-                const filePath = path.join(__dirname, '..', file.file_path);
+                const filePath = resolveFilePath(file.file_path);
                 let content = fs.readFileSync(filePath, 'utf8');
                 const TOKEN_LIMIT = 4000 * 4;
                 if (content.length > TOKEN_LIMIT) {
@@ -609,54 +616,48 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     }
   }
 
-  // Save AI message
+  // Save AI message first, then send done event with chat ID for frontend to fetch
   const aiMessageId = uuidv4();
-  dbRun(db, `
-    INSERT INTO messages (id, chat_id, role, content, model_used, token_count, reasoning, attachments, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    aiMessageId,
-    req.params.id,
-    'assistant',
-    aiContent,
-    chat.model,
-    Math.ceil(aiContent.split(/\s+/).length * 1.3),
-    aiReasoning ? JSON.stringify(aiReasoning) : null,
-    null,
-    now
-  ]);
 
-  // Log usage (skip if AI returned an error message)
-  const isErrorResponse = aiContent.startsWith('The AI service') ||
-    aiContent.startsWith('Sorry, I was unable') ||
-    aiContent.startsWith('The AI model');
-  if (!isErrorResponse) {
-    const tokenCount = Math.ceil(aiContent.split(/\s+/).length * 1.3);
-    logUsage(getDatabase(), {
-      userId: req.user?.id || null,
-      source: 'chat',
-      prompt: content,
-      model: chat.model,
-      inputTokens: 0,
-      outputTokens: tokenCount,
-    });
+  // Save to DB after response is ended
+  try {
+    dbRun(db, `
+      INSERT INTO messages (id, chat_id, role, content, model_used, token_count, reasoning, attachments, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      aiMessageId,
+      req.params.id,
+      'assistant',
+      aiContent,
+      chat.model,
+      Math.ceil(aiContent.split(/\s+/).length * 1.3),
+      aiReasoning ? JSON.stringify(aiReasoning) : null,
+      null,
+      now
+    ]);
+
+    const isErrorResponse = aiContent.startsWith('The AI service') ||
+      aiContent.startsWith('Sorry, I was unable') ||
+      aiContent.startsWith('The AI model');
+    if (!isErrorResponse) {
+      const tokenCount = Math.ceil(aiContent.split(/\s+/).length * 1.3);
+      logUsage(getDatabase(), {
+        userId: req.user?.id || null,
+        source: 'chat',
+        prompt: content,
+        model: chat.model,
+        inputTokens: 0,
+        outputTokens: tokenCount,
+      });
+    }
+
+    dbRun(db, 'UPDATE chats SET updated_at = ? WHERE id = ?', [now, req.params.id]);
+  } catch (err) {
+    console.error('[chat] DB error after AI response:', err.message);
   }
 
-  // Update chat updated_at
-  dbRun(db, 'UPDATE chats SET updated_at = ? WHERE id = ?', [now, req.params.id]);
-
-  sendEvent({
-    type: 'done',
-    messages: [
-      { id: userMessageId, role: 'user', content, model_used: chat.model, created_at: now },
-      { id: aiMessageId, role: 'assistant', content: aiContent, model_used: chat.model, reasoning: aiReasoning, steps: steps.map(s => s.message), created_at: now, citations: citations.length > 0 ? citations : undefined }
-    ],
-    timing: {
-      processing_time_ms: 1200 + Math.random() * 800,
-      tokens_generated: Math.ceil(aiContent.split(/\s+/).length * 1.3),
-      response_time_ms: 2400 + Math.random() * 1200
-    }
-  });
+  // Send minimal done — frontend fetches full messages via API
+  res.write(`data: {"type":"done","chatId":"${req.params.id}"}\n\n`);
   res.end();
 });
 
@@ -905,7 +906,7 @@ app.get('/api/library/:id/download', requireAuth, (req, res) => {
     return res.status(404).json({ error: 'File not found' });
   }
 
-  const filePath = path.join(__dirname, '..', file.file_path);
+  const filePath = resolveFilePath(file.file_path);
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ error: 'File not found on disk' });
   }
@@ -963,7 +964,7 @@ app.delete('/api/library/:id', requireAuth, async (req, res) => {
     }
   }
 
-  const filePath = path.join(__dirname, '..', file.file_path);
+  const filePath = resolveFilePath(file.file_path);
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
   }

@@ -29,7 +29,7 @@ function ClaudeIcon() {
 
 const MODELS = [
   { name: 'Gemini 3.1', value: 'gemini', icon: <GeminiIcon /> },
-  { name: 'Claude Opus 4.6', value: 'claude', icon: <ClaudeIcon /> },
+  { name: 'Claude Sonnet 4.6', value: 'claude', icon: <ClaudeIcon /> },
 ];
 
 export default function ChatInput({ centered = false, projectId }: { centered?: boolean; projectId?: string }) {

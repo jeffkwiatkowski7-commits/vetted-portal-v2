@@ -1,35 +1,28 @@
 /**
- * Claude Opus 4.6 via Vertex AI rawPredict.
- * Uses google-auth-library for ADC tokens (same account as Gemini).
+ * Claude via Vertex AI — uses @anthropic-ai/vertex-sdk.
+ * Uses ADC for auth (same account as Gemini).
  *
  * Exports (identical signatures to gemini.js equivalents):
  *   chatWithDocuments(docs, userMessage, chatHistory, systemPromptOverride)
  *   chatWithLeases(leaseTexts, userMessage, chatHistory, useSearch, persona)
  *   chatCrossPortfolio(leaseSummaries, userMessage, chatHistory, useSearch, persona)
  */
-import { GoogleAuth } from "google-auth-library";
+import { AnthropicVertex } from "@anthropic-ai/vertex-sdk";
 import { config } from "./config.js";
 
-const VERTEX_ENDPOINT = `https://aiplatform.googleapis.com/v1/projects/${config.gcpProject}/locations/global/publishers/anthropic/models/${config.claudeModel}:rawPredict`;
 const MAX_TOKENS = 8192;
 const MAX_SEARCH_ITERATIONS = 5;
 
-// ── Auth ──────────────────────────────────────────────────────────────
-
-let _auth = null;
-function getAuth() {
-  if (!_auth) {
-    _auth = new GoogleAuth({
-      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+// Singleton client
+let _client = null;
+function getClient() {
+  if (!_client) {
+    _client = new AnthropicVertex({
+      region: "global",
+      projectId: config.gcpProject,
     });
   }
-  return _auth;
-}
-
-async function getAccessToken() {
-  const client = await getAuth().getClient();
-  const token = await client.getAccessToken();
-  return token.token;
+  return _client;
 }
 
 // ── Tavily search ─────────────────────────────────────────────────────
@@ -80,43 +73,29 @@ const TOOLS_DEF = process.env.TAVILY_API_KEY
  */
 async function runWithTools(system, messages, useSearch) {
   const searchQueries = [];
-  const body = {
-    anthropic_version: "vertex-2023-10-16",
+  const client = getClient();
+
+  const params = {
+    model: config.claudeModel,
     max_tokens: MAX_TOKENS,
     system,
     messages: [...messages],
   };
-  // Tools only added when useSearch=true AND TAVILY_API_KEY is set.
-  // chatWithDocuments always passes useSearch=true (matching Gemini's always-on grounding).
-  // chatWithLeases/chatCrossPortfolio pass useSearch from caller (off by default).
   if (useSearch && TOOLS_DEF) {
-    body.tools = TOOLS_DEF;
+    params.tools = TOOLS_DEF;
   }
 
-  const token = await getAccessToken();
   for (let i = 0; i < MAX_SEARCH_ITERATIONS; i++) {
-    const res = await fetch(VERTEX_ENDPOINT, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`Claude API error ${res.status}: ${text}`);
-    }
-    const data = await res.json();
+    const response = await client.messages.create(params);
 
     // Check for tool_use blocks
-    const toolUseBlocks = (data.content || []).filter(
+    const toolUseBlocks = (response.content || []).filter(
       (b) => b.type === "tool_use"
     );
 
-    if (toolUseBlocks.length === 0 || data.stop_reason !== "tool_use") {
+    if (toolUseBlocks.length === 0 || response.stop_reason !== "tool_use") {
       // Final text response
-      const text = (data.content || [])
+      const text = (response.content || [])
         .filter((b) => b.type === "text")
         .map((b) => b.text)
         .join("")
@@ -125,7 +104,7 @@ async function runWithTools(system, messages, useSearch) {
     }
 
     // Execute tool calls and append results
-    body.messages.push({ role: "assistant", content: data.content });
+    params.messages.push({ role: "assistant", content: response.content });
 
     const toolResults = [];
     for (const block of toolUseBlocks) {
@@ -141,7 +120,7 @@ async function runWithTools(system, messages, useSearch) {
         });
       }
     }
-    body.messages.push({ role: "user", content: toolResults });
+    params.messages.push({ role: "user", content: toolResults });
   }
 
   throw new Error("Claude exceeded max search iterations");

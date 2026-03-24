@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Upload, ChevronDown, ChevronUp, FileText, Check } from 'lucide-react';
+import { X, Upload, ChevronDown, ChevronUp, FileText, Check, Sparkles } from 'lucide-react';
 import * as api from '../../api';
-import type { LibraryFile } from '../../types';
+import type { LibraryFile, ProjectSkill } from '../../types';
 
 // Read admin-configured MCPs from localStorage, fall back to defaults
 function getAvailableMcps() {
@@ -41,15 +41,17 @@ export interface ProjectFormData {
   system_prompt: string;
   tool_sets: string[];
   default_model: string;
+  file_ids: string[];
 }
 
 interface Props {
   initialData?: Partial<ProjectFormData>;
-  onSave: (data: ProjectFormData) => Promise<void>;
+  onSave: (data: ProjectFormData) => Promise<{ id: string } | void>;
   onCancel: () => void;
   onDelete?: () => void;
   title: string;
   saving?: boolean;
+  projectId?: string;
 }
 
 // Library picker modal
@@ -107,7 +109,7 @@ function LibraryPicker({
   );
 }
 
-export default function ProjectForm({ initialData, onSave, onCancel, onDelete, title, saving }: Props) {
+export default function ProjectForm({ initialData, onSave, onCancel, onDelete, title, saving, projectId }: Props) {
   const models = getAvailableModels();
   const defaultModel = models.find((m) => m.isDefault)?.name ?? models[0]?.name ?? 'Sonnet 4.6';
 
@@ -120,11 +122,29 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
     try { return JSON.parse(initialData?.tool_sets as unknown as string ?? '[]'); }
     catch { return Array.isArray(initialData?.tool_sets) ? initialData.tool_sets : []; }
   });
-  const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
+  const [selectedFileIds, setSelectedFileIds] = useState<string[]>(initialData?.file_ids ?? []);
   const [allFiles, setAllFiles] = useState<LibraryFile[]>([]);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [projectSkills, setProjectSkills] = useState<ProjectSkill[]>([]);
 
   useEffect(() => { api.library.list().then(setAllFiles).catch(() => {}); }, []);
+
+  useEffect(() => {
+    if (projectId) {
+      api.skills.forProject(projectId).then(setProjectSkills).catch(() => {});
+    } else {
+      // For new projects, just load all skills as disabled
+      api.skills.list().then((skills: any[]) => {
+        setProjectSkills(skills.map((s) => ({ skill_id: s.id, skill_name: s.name, skill_description: s.description, enabled: false })));
+      }).catch(() => {});
+    }
+  }, [projectId]);
+
+  const toggleSkill = (skillId: string) => {
+    setProjectSkills((prev) =>
+      prev.map((s) => (s.skill_id === skillId ? { ...s, enabled: !s.enabled } : s)),
+    );
+  };
 
   const availableMcps = getAvailableMcps();
 
@@ -134,7 +154,15 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    await onSave({ name, description, system_prompt: systemPrompt, tool_sets: enabledMcps, default_model: selectedModel });
+    const result = await onSave({ name, description, system_prompt: systemPrompt, tool_sets: enabledMcps, default_model: selectedModel, file_ids: selectedFileIds });
+    // Save project skills — use existing projectId or the newly created one
+    const resolvedId = projectId || (result as any)?.id;
+    const enabledSkills = projectSkills.filter((s) => s.enabled);
+    if (resolvedId && enabledSkills.length > 0) {
+      try {
+        await api.skills.updateProjectSkills(resolvedId, projectSkills.map((s) => ({ skill_id: s.skill_id, enabled: s.enabled })));
+      } catch {}
+    }
   };
 
   const attachedFiles = allFiles.filter((f) => selectedFileIds.includes(f.id));
@@ -142,7 +170,7 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
   return (
     <>
       <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-vetted-border">
             <h2 className="text-lg font-medium text-vetted-primary">{title}</h2>
@@ -286,6 +314,35 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
                   })}
                 </div>
               </div>
+
+              {/* Skills */}
+              {projectSkills.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-vetted-primary mb-1">Skills</label>
+                  <p className="text-xs text-vetted-text-muted mb-2">Activate skills to inject custom instructions into the AI prompt.</p>
+                  <div className="space-y-2">
+                    {projectSkills.map((skill) => (
+                      <div
+                        key={skill.skill_id}
+                        onClick={() => toggleSkill(skill.skill_id)}
+                        className={`flex items-center justify-between px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                          skill.enabled ? 'border-vetted-accent bg-vetted-accent/5' : 'border-vetted-border hover:border-vetted-accent/50'
+                        }`}
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-vetted-primary">{skill.skill_name}</p>
+                          {skill.skill_description && (
+                            <p className="text-xs text-vetted-text-muted">{skill.skill_description}</p>
+                          )}
+                        </div>
+                        <div className={`w-9 h-5 rounded-full relative flex-shrink-0 transition-colors ${skill.enabled ? 'bg-vetted-accent' : 'bg-vetted-border'}`}>
+                          <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${skill.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Footer */}

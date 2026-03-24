@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
@@ -14,6 +15,10 @@ import leaseRoutes from './lease-routes.js';
 import { chatWithDocuments as geminiChatWithDocuments } from './lib/gemini.js';
 import { chatWithDocuments as claudeChatWithDocuments } from './lib/claude.js';
 import bcrypt from 'bcrypt';
+import mammoth from 'mammoth';
+import { indexFile, queryProject, deleteFileChunks, deleteProjectChunks, formatRetrievedContext, extractCitations, isSupportedType, extractText } from './lib/rag.js';
+import { deleteFile as gcsDeleteFile, deleteProjectFiles as gcsDeleteProjectFiles, downloadFile as gcsDownload } from './lib/gcs.js';
+import { chunkText, embedTexts } from './lib/embeddings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -59,6 +64,7 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+const memoryUpload = multer({ storage: multer.memoryStorage() });
 
 app.post('/api/chat/upload', requireAuth, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
@@ -69,6 +75,8 @@ app.post('/api/chat/upload', requireAuth, upload.single('file'), async (req, res
 
   const isPdf = mimetype === 'application/pdf' || originalname.toLowerCase().endsWith('.pdf');
 
+  const isDocx = mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || originalname.toLowerCase().endsWith('.docx');
+
   if (isPdf) {
     try {
       const pdfParse = (await import('pdf-parse')).default;
@@ -78,6 +86,13 @@ app.post('/api/chat/upload', requireAuth, upload.single('file'), async (req, res
     } catch {
       const buffer = fs.readFileSync(filePath);
       base64Content = buffer.toString('base64');
+    }
+  } else if (isDocx) {
+    try {
+      const result = await mammoth.extractRawText({ path: filePath });
+      textContent = result.value || null;
+    } catch {
+      return res.status(422).json({ error: 'Could not read DOCX file' });
     }
   } else {
     try {
@@ -383,6 +398,13 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       } catch {
         return { name: file.original_name, text: `[Could not read ${file.original_name}]` };
       }
+    } else if (file.file_type === 'docx' || file.mime_type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      try {
+        const result = await mammoth.extractRawText({ path: filePath });
+        return { name: file.original_name, text: result.value };
+      } catch {
+        return { name: file.original_name, text: `[Could not read ${file.original_name}]` };
+      }
     } else {
       try {
         const text = fs.readFileSync(filePath, 'utf8');
@@ -463,6 +485,61 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
             return `**${ts.name}**: ${ts.description || ''}\nTools: ${tools.join(', ')}`;
           }).join('\n\n');
           parts.push(`## Available Tools\n\n${toolBlock}`);
+        }
+      }
+    }
+
+    // Inject active skills for this project
+    if (project) {
+      const activeSkills = dbAll(db, `
+        SELECT s.id, s.name, s.instructions
+        FROM skills s
+        JOIN project_skills ps ON ps.skill_id = s.id
+        WHERE ps.project_id = ? AND ps.enabled = 1
+      `, [project.id]);
+      if (activeSkills.length > 0) {
+        step(`Loading ${activeSkills.length} skill${activeSkills.length !== 1 ? 's' : ''}: ${activeSkills.map(s => s.name).join(', ')}`);
+        for (const skill of activeSkills) {
+          let skillBlock = `<skill name="${skill.name}">\n${skill.instructions}`;
+          const skillFiles = dbAll(db, `
+            SELECT lf.* FROM library_files lf
+            JOIN skill_files sf ON sf.library_file_id = lf.id
+            WHERE sf.skill_id = ?
+          `, [skill.id]);
+          for (const file of skillFiles) {
+            const isDocx = file.file_type === 'docx' || file.mime_type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+            const isText = !file.mime_type.startsWith('image/') && file.mime_type !== 'application/pdf';
+            if (isDocx) {
+              try {
+                const filePath = path.join(__dirname, '..', file.file_path);
+                const result = await mammoth.extractRawText({ path: filePath });
+                let content = result.value;
+                const TOKEN_LIMIT = 4000 * 4;
+                if (content.length > TOKEN_LIMIT) {
+                  content = content.slice(0, TOKEN_LIMIT) + '\n\n[Content truncated — file exceeds 4000 token limit]';
+                }
+                skillBlock += `\n\n<file name="${file.original_name}">\n${content}\n</file>`;
+              } catch {
+                skillBlock += `\n\n<file name="${file.original_name}">\n[Could not read file]\n</file>`;
+              }
+            } else if (isText) {
+              try {
+                const filePath = path.join(__dirname, '..', file.file_path);
+                let content = fs.readFileSync(filePath, 'utf8');
+                const TOKEN_LIMIT = 4000 * 4;
+                if (content.length > TOKEN_LIMIT) {
+                  content = content.slice(0, TOKEN_LIMIT) + '\n\n[Content truncated — file exceeds 4000 token limit]';
+                }
+                skillBlock += `\n\n<file name="${file.original_name}">\n${content}\n</file>`;
+              } catch {
+                skillBlock += `\n\n<file name="${file.original_name}">\n[Could not read file]\n</file>`;
+              }
+            } else {
+              skillBlock += `\n\n<file name="${file.original_name}">[Non-text file — content not injected]</file>`;
+            }
+          }
+          skillBlock += '\n</skill>';
+          parts.push(skillBlock);
         }
       }
     }
@@ -858,6 +935,229 @@ app.get('/api/library/stats', requireAuth, (req, res) => {
   `, [req.user.id]);
 
   res.json({ stats });
+});
+
+// ============================================================================
+// SKILLS ROUTES
+// ============================================================================
+
+// List all skills (with file count)
+app.get('/api/skills', requireAuth, (req, res) => {
+  const skills = dbAll(db, `
+    SELECT s.*, COUNT(sf.id) as file_count
+    FROM skills s
+    LEFT JOIN skill_files sf ON sf.skill_id = s.id
+    GROUP BY s.id
+    ORDER BY s.created_at DESC
+  `);
+  res.json({ skills });
+});
+
+// Create a skill
+app.post('/api/skills', requireAuth, (req, res) => {
+  const { name, description, instructions } = req.body;
+  if (!name?.trim() || !instructions?.trim()) {
+    return res.status(400).json({ error: 'Name and instructions are required' });
+  }
+  const id = uuidv4();
+  const now = new Date().toISOString();
+  dbRun(db, `
+    INSERT INTO skills (id, name, description, instructions, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `, [id, name.trim(), description?.trim() || null, instructions.trim(), now, now]);
+  const skill = dbGet(db, 'SELECT * FROM skills WHERE id = ?', [id]);
+  res.status(201).json({ skill });
+});
+
+// Get a single skill with attached files
+app.get('/api/skills/:id', requireAuth, (req, res) => {
+  const skill = dbGet(db, 'SELECT * FROM skills WHERE id = ?', [req.params.id]);
+  if (!skill) return res.status(404).json({ error: 'Skill not found' });
+  const files = dbAll(db, `
+    SELECT lf.* FROM library_files lf
+    JOIN skill_files sf ON sf.library_file_id = lf.id
+    WHERE sf.skill_id = ?
+  `, [req.params.id]);
+  res.json({ skill: { ...skill, files } });
+});
+
+// Update a skill
+app.put('/api/skills/:id', requireAuth, (req, res) => {
+  const skill = dbGet(db, 'SELECT * FROM skills WHERE id = ?', [req.params.id]);
+  if (!skill) return res.status(404).json({ error: 'Skill not found' });
+  const { name, description, instructions } = req.body;
+  const now = new Date().toISOString();
+  dbRun(db, `
+    UPDATE skills SET name = ?, description = ?, instructions = ?, updated_at = ?
+    WHERE id = ?
+  `, [
+    name !== undefined ? name.trim() : skill.name,
+    description !== undefined ? (description?.trim() || null) : skill.description,
+    instructions !== undefined ? instructions.trim() : skill.instructions,
+    now,
+    req.params.id,
+  ]);
+  const updated = dbGet(db, 'SELECT * FROM skills WHERE id = ?', [req.params.id]);
+  res.json({ skill: updated });
+});
+
+// Delete a skill (cascade)
+app.delete('/api/skills/:id', requireAuth, (req, res) => {
+  const skill = dbGet(db, 'SELECT * FROM skills WHERE id = ?', [req.params.id]);
+  if (!skill) return res.status(404).json({ error: 'Skill not found' });
+  dbRun(db, 'DELETE FROM skill_files WHERE skill_id = ?', [req.params.id]);
+  dbRun(db, 'DELETE FROM project_skills WHERE skill_id = ?', [req.params.id]);
+  dbRun(db, 'DELETE FROM skills WHERE id = ?', [req.params.id]);
+  res.json({ success: true });
+});
+
+// Attach a library file to a skill
+app.post('/api/skills/:id/files', requireAuth, (req, res) => {
+  const skill = dbGet(db, 'SELECT * FROM skills WHERE id = ?', [req.params.id]);
+  if (!skill) return res.status(404).json({ error: 'Skill not found' });
+  const { library_file_id } = req.body;
+  if (!library_file_id) return res.status(400).json({ error: 'library_file_id is required' });
+  const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ?', [library_file_id]);
+  if (!file) return res.status(404).json({ error: 'Library file not found' });
+  const existing = dbGet(db, 'SELECT * FROM skill_files WHERE skill_id = ? AND library_file_id = ?', [req.params.id, library_file_id]);
+  if (existing) return res.status(409).json({ error: 'File already attached' });
+  const id = uuidv4();
+  dbRun(db, `
+    INSERT INTO skill_files (id, skill_id, library_file_id, created_at)
+    VALUES (?, ?, ?, ?)
+  `, [id, req.params.id, library_file_id, new Date().toISOString()]);
+  res.status(201).json({ success: true });
+});
+
+// Detach a library file from a skill
+app.delete('/api/skills/:id/files/:fileId', requireAuth, (req, res) => {
+  dbRun(db, 'DELETE FROM skill_files WHERE skill_id = ? AND library_file_id = ?', [req.params.id, req.params.fileId]);
+  res.json({ success: true });
+});
+
+// List all skills with enabled state for a project
+app.get('/api/projects/:id/skills', requireAuth, (req, res) => {
+  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [req.params.id]);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const skills = dbAll(db, `
+    SELECT s.id as skill_id, s.name as skill_name, s.description as skill_description,
+           COALESCE(ps.enabled, 0) as enabled
+    FROM skills s
+    LEFT JOIN project_skills ps ON ps.skill_id = s.id AND ps.project_id = ?
+    ORDER BY s.name
+  `, [req.params.id]);
+  res.json({ skills });
+});
+
+// Bulk update project skills
+app.put('/api/projects/:id/skills', requireAuth, (req, res) => {
+  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [req.params.id]);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const { skills } = req.body;
+  if (!Array.isArray(skills)) return res.status(400).json({ error: 'skills array is required' });
+  for (const { skill_id, enabled } of skills) {
+    const existing = dbGet(db, 'SELECT * FROM project_skills WHERE project_id = ? AND skill_id = ?', [req.params.id, skill_id]);
+    if (existing) {
+      dbRun(db, 'UPDATE project_skills SET enabled = ? WHERE project_id = ? AND skill_id = ?', [enabled ? 1 : 0, req.params.id, skill_id]);
+    } else {
+      const id = uuidv4();
+      dbRun(db, `
+        INSERT INTO project_skills (id, project_id, skill_id, enabled, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `, [id, req.params.id, skill_id, enabled ? 1 : 0, new Date().toISOString()]);
+    }
+  }
+  res.json({ success: true });
+});
+
+// ============================================================================
+// PROJECT FILE UPLOAD + RAG INDEXING
+// ============================================================================
+
+app.post('/api/projects/:id/files/upload', requireAuth, memoryUpload.single('file'), async (req, res) => {
+  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [req.params.id]);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: 'No file provided' });
+
+  if (!isSupportedType(file.mimetype)) {
+    return res.status(400).json({ error: `Unsupported file type: ${file.mimetype}. Supported: PDF, DOCX, TXT, MD` });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('Connection', 'keep-alive');
+
+  const sendEvent = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const step = (msg) => sendEvent({ type: 'step', message: msg, ts: new Date().toISOString() });
+
+  const fileId = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  try {
+    dbRun(db, `INSERT INTO library_files (id, user_id, filename, original_name, file_path, file_type, file_size, mime_type, project_id, uploaded_at, index_status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [fileId, req.user.id, file.originalname, file.originalname, `gcs://projects/${project.id}/${fileId}-${file.originalname}`,
+       path.extname(file.originalname).slice(1), file.size, file.mimetype, project.id, now, 'indexing']);
+
+    const result = await indexFile(project.id, fileId, file.originalname, file.buffer, file.mimetype, step);
+
+    dbRun(db, 'UPDATE library_files SET index_status = ? WHERE id = ?', ['ready', fileId]);
+
+    sendEvent({
+      type: 'done',
+      file: {
+        id: fileId,
+        original_name: file.originalname,
+        file_size: file.size,
+        mime_type: file.mimetype,
+        index_status: 'ready',
+        chunks: result.chunks,
+      },
+    });
+  } catch (err) {
+    console.error('File indexing error:', err);
+    dbRun(db, 'UPDATE library_files SET index_status = ? WHERE id = ?', ['error', fileId]);
+    sendEvent({ type: 'error', message: err.message || 'Indexing failed' });
+  }
+
+  res.end();
+});
+
+app.post('/api/projects/:id/files/:fileId/reindex', requireAuth, async (req, res) => {
+  const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ? AND project_id = ?', [req.params.fileId, req.params.id]);
+  if (!file) return res.status(404).json({ error: 'File not found' });
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('Connection', 'keep-alive');
+
+  const sendEvent = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const step = (msg) => sendEvent({ type: 'step', message: msg, ts: new Date().toISOString() });
+
+  try {
+    dbRun(db, 'UPDATE library_files SET index_status = ? WHERE id = ?', ['indexing', file.id]);
+
+    step('Removing old index...');
+    await deleteFileChunks(file.id);
+
+    step('Downloading file from storage...');
+    const buffer = await gcsDownload(req.params.id, file.id, file.original_name);
+
+    // Re-run full indexFile (will re-upload to same GCS path, idempotent)
+    const result = await indexFile(req.params.id, file.id, file.original_name, buffer, file.mime_type, step);
+
+    dbRun(db, 'UPDATE library_files SET index_status = ? WHERE id = ?', ['ready', file.id]);
+    sendEvent({ type: 'done', file: { id: file.id, index_status: 'ready', chunks: result.chunks } });
+  } catch (err) {
+    console.error('Re-index error:', err);
+    dbRun(db, 'UPDATE library_files SET index_status = ? WHERE id = ?', ['error', file.id]);
+    sendEvent({ type: 'error', message: err.message || 'Re-indexing failed' });
+  }
+  res.end();
 });
 
 // ============================================================================

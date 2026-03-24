@@ -544,6 +544,30 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       }
     }
 
+    // RAG retrieval for project files
+    let retrievedChunks = [];
+    let retrievedContext = '';
+    let citations = [];
+    if (project) {
+      try {
+        step('Searching project files...');
+        retrievedChunks = await queryProject(project.id, content);
+        if (retrievedChunks.length > 0) {
+          retrievedContext = formatRetrievedContext(retrievedChunks);
+          citations = extractCitations(retrievedChunks);
+          step(`Found ${retrievedChunks.length} relevant passages from ${citations.length} file${citations.length !== 1 ? 's' : ''}`);
+        }
+      } catch (err) {
+        console.error('RAG retrieval error:', err);
+        // Non-fatal — continue without RAG context
+      }
+    }
+
+    if (retrievedContext) {
+      parts.push('\n\nThe following context was retrieved from project files. Use it to answer the user\'s question. When using information from these sources, cite them by filename and page number.\n');
+      parts.push(retrievedContext);
+    }
+
     // Always append context (user + date/time) at the end so model always sees it
     parts.push(`## Session Context\n\n${contextHeader}`);
 
@@ -625,7 +649,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     type: 'done',
     messages: [
       { id: userMessageId, role: 'user', content, model_used: chat.model, created_at: now },
-      { id: aiMessageId, role: 'assistant', content: aiContent, model_used: chat.model, reasoning: aiReasoning, steps: steps.map(s => s.message), created_at: now }
+      { id: aiMessageId, role: 'assistant', content: aiContent, model_used: chat.model, reasoning: aiReasoning, steps: steps.map(s => s.message), created_at: now, citations: citations.length > 0 ? citations : undefined }
     ],
     timing: {
       processing_time_ms: 1200 + Math.random() * 800,
@@ -889,12 +913,27 @@ app.get('/api/library/:id/download', requireAuth, (req, res) => {
   res.download(filePath, file.original_name);
 });
 
-app.put('/api/library/:id', requireAuth, (req, res) => {
+app.put('/api/library/:id', requireAuth, async (req, res) => {
   const { original_name, project_id } = req.body;
 
   const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
   if (!file) {
     return res.status(404).json({ error: 'File not found' });
+  }
+
+  // If project_id is changing and file was indexed, clean up old chunks
+  if (project_id !== undefined && file.project_id && file.index_status) {
+    try {
+      await deleteFileChunks(file.id);
+      await gcsDeleteFile(file.project_id, file.id, file.original_name);
+    } catch (err) {
+      console.error('Error cleaning up old index:', err);
+    }
+  }
+
+  // If assigning to a new project, mark for indexing
+  if (project_id && project_id !== file.project_id) {
+    dbRun(db, 'UPDATE library_files SET index_status = ? WHERE id = ?', ['pending', file.id]);
   }
 
   dbRun(db, 'UPDATE library_files SET original_name = ?, project_id = ? WHERE id = ?', [
@@ -907,11 +946,21 @@ app.put('/api/library/:id', requireAuth, (req, res) => {
   res.json({ file: updated });
 });
 
-app.delete('/api/library/:id', requireAuth, (req, res) => {
+app.delete('/api/library/:id', requireAuth, async (req, res) => {
   const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
   if (!file) {
     return res.status(404).json({ error: 'File not found' });
+  }
+
+  // Clean up RAG chunks and GCS blob if file was indexed
+  if (file.project_id && file.index_status) {
+    try {
+      await deleteFileChunks(file.id);
+      await gcsDeleteFile(file.project_id, file.id, file.original_name);
+    } catch (err) {
+      console.error('Error cleaning up indexed file:', err);
+    }
   }
 
   const filePath = path.join(__dirname, '..', file.file_path);

@@ -121,12 +121,6 @@ export async function initializeDatabase() {
       FOREIGN KEY (project_id) REFERENCES projects(id)
     );
 
-    try {
-      db.run(\`ALTER TABLE library_files ADD COLUMN index_status TEXT DEFAULT NULL\`);
-    } catch (e) {
-      // Column already exists, ignore
-    }
-
     CREATE TABLE IF NOT EXISTS apps (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -313,6 +307,13 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_skill_files_skill_id ON skill_files(skill_id);
     CREATE INDEX IF NOT EXISTS idx_project_skills_project_id ON project_skills(project_id);
   `);
+
+  // Add index_status column to existing databases (ignore if already exists)
+  try {
+    db.run(`ALTER TABLE library_files ADD COLUMN index_status TEXT DEFAULT NULL`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
 
   dbInstance = db;
   return db;

@@ -116,7 +116,15 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
   const formatTime = (ts?: string) => {
     if (!ts) return null;
     const d = new Date(ts);
-    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+    const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (isToday) return time;
+    if (isYesterday) return `Yesterday ${time}`;
+    return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
   };
 
   if (msg.role === 'user') {

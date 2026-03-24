@@ -301,10 +301,13 @@ function ThinkingIndicator({ steps }: { steps: Array<{ message: string; ts: stri
 
 function formatMessageTime(isoStr: string) {
   const d = new Date(isoStr);
-  const today = new Date();
-  const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  if (d.toDateString() === today.toDateString()) return timePart;
-  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${timePart}`;
+  const now = new Date();
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return time;
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return `Yesterday ${time}`;
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
 }
 
 // ── Main ChatView ─────────────────────────────────────────────────────────────

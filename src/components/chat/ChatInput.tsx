@@ -95,9 +95,16 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
   }, [message]);
 
   const handleSendMessage = async (overrides?: { msg?: string; files?: LibraryFile[]; hidden?: boolean }) => {
-    const content = overrides?.msg ?? message;
+    let content = overrides?.msg ?? message;
     const files = overrides?.files ?? chatAttachedFiles;
     const hidden = overrides?.hidden ?? false;
+
+    // Auto-inject summary prompt when files attached with no text
+    if (!content.trim() && files.length > 0) {
+      const names = files.map(f => f.original_name).join(', ');
+      content = `Please summarize the following document${files.length > 1 ? 's' : ''}: ${names}`;
+    }
+
     if (!content.trim()) return;
 
     setLoading(true);

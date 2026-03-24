@@ -369,11 +369,19 @@ export default function MainChatPage() {
   }, [id]);
 
   const handleSend = async () => {
-    const text = input.trim();
-    if (!text || chatting) return;
+    let text = input.trim();
+    if (chatting) return;
 
     // Capture attached file IDs before clearing
     const attachmentIds = pendingFiles.map(f => f.id);
+
+    // Auto-inject summary prompt when files attached with no text
+    if (!text && attachmentIds.length > 0) {
+      const names = pendingFiles.map(f => f.original_name).join(', ');
+      text = `Please summarize the following document${pendingFiles.length > 1 ? 's' : ''}: ${names}`;
+    }
+
+    if (!text) return;
     const attachedName = pendingFiles.length === 1
       ? pendingFiles[0].original_name
       : pendingFiles.length > 1

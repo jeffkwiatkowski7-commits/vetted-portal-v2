@@ -77,6 +77,31 @@ interface ChatMessage {
   steps?: string[];
   attachedFileName?: string;
   citations?: SourceCitation[];
+  timestamp?: string;
+  reasoning?: string;
+}
+
+// ── ReasoningSummary ─────────────────────────────────────────────────────────
+function ReasoningSummary({ reasoning }: { reasoning: string }) {
+  const [open, setOpen] = useState(false);
+  // Show first ~100 chars as summary
+  const summary = reasoning.length > 120 ? reasoning.slice(0, 120).trim() + '…' : reasoning;
+  return (
+    <div className="mt-2 pt-2 border-t border-vetted-border">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1 text-[11px] text-vetted-text-muted hover:text-vetted-primary transition-colors"
+      >
+        {open ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+        Thinking
+      </button>
+      {open ? (
+        <p className="mt-1 text-xs text-vetted-text-muted whitespace-pre-wrap leading-relaxed">{reasoning}</p>
+      ) : (
+        <p className="mt-0.5 text-[11px] text-vetted-text-muted/60 truncate">{summary}</p>
+      )}
+    </div>
+  );
 }
 
 // ── ChatBubble (copied from LeaseChatPage) ────────────────────────────────────
@@ -87,9 +112,15 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
     if (msg.content) setStepsOpen(false);
   }, [msg.content]);
 
+  const formatTime = (ts?: string) => {
+    if (!ts) return null;
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  };
+
   if (msg.role === 'user') {
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-0.5">
         <div className="max-w-[75%] bg-vetted-primary text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm whitespace-pre-wrap">
           {msg.attachedFileName && (
             <div className="flex items-center gap-1 opacity-50 mb-1.5 text-[11px]">
@@ -99,6 +130,7 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
           )}
           {msg.content}
         </div>
+        {msg.timestamp && <span className="text-[10px] text-vetted-text-muted px-1">{formatTime(msg.timestamp)}</span>}
       </div>
     );
   }
@@ -166,19 +198,21 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
               {normalizeMarkdown(msg.content)}
             </ReactMarkdown>
             {msg.citations && msg.citations.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-white/10">
-                <div className="text-xs text-white/40 mb-1">Sources:</div>
+              <div className="mt-2 pt-2 border-t border-vetted-border">
+                <div className="text-xs text-vetted-text-muted mb-1">Sources:</div>
                 <div className="flex flex-wrap gap-1">
                   {msg.citations.map((c, i) => (
-                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/5 rounded text-xs text-white/50">
+                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-vetted-surface rounded text-xs text-vetted-text-muted">
                       {c.filename}{c.pageNumber ? ` (p. ${c.pageNumber})` : ''}
                     </span>
                   ))}
                 </div>
               </div>
             )}
+            {msg.reasoning && <ReasoningSummary reasoning={msg.reasoning} />}
           </div>
         )}
+      {msg.timestamp && <span className="text-[10px] text-vetted-text-muted px-1">{formatTime(msg.timestamp)}</span>}
       </div>
     </div>
   );
@@ -223,12 +257,14 @@ export default function MainChatPage() {
   }, [messages]);
 
   // Load existing chat when navigating to /chat/:id
+  // Skip if we already have this chatId (e.g. just created it)
   useEffect(() => {
     if (!id) {
       setMessages([]);
       setChatId(null);
       return;
     }
+    if (chatId === id) return; // already active, don't overwrite local state
     setChatId(id);
     api.chats.get(id)
       .then((chat: any) => {
@@ -237,6 +273,7 @@ export default function MainChatPage() {
             role: m.role,
             content: m.content,
             steps: [],
+            timestamp: m.created_at,
           }))
         );
       })
@@ -256,7 +293,7 @@ export default function MainChatPage() {
       : undefined;
 
     // Show user message and clear inputs immediately
-    setMessages(prev => [...prev, { role: 'user', content: text, attachedFileName: attachedName }]);
+    setMessages(prev => [...prev, { role: 'user', content: text, attachedFileName: attachedName, timestamp: new Date().toISOString() }]);
     setInput('');
     setPendingFiles([]);
     setChatting(true);
@@ -299,12 +336,15 @@ export default function MainChatPage() {
       const assistantMsg = result.messages?.[1];
       const assistantContent = assistantMsg?.content ?? '';
       const assistantCitations = assistantMsg?.citations ?? undefined;
+      const assistantReasoning = assistantMsg?.reasoning ?? undefined;
       setMessages(prev => {
         const updated = [...prev];
         updated[updated.length - 1] = {
           ...updated[updated.length - 1],
           content: assistantContent,
           citations: assistantCitations,
+          reasoning: assistantReasoning,
+          timestamp: new Date().toISOString(),
         };
         return updated;
       });

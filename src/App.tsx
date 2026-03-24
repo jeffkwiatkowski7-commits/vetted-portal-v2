@@ -17,11 +17,14 @@ import AdminMcpPage from './pages/AdminMcpPage';
 import AdminUsagePage from './pages/AdminUsagePage';
 import SettingsPage from './pages/SettingsPage';
 import NotFoundPage from './pages/NotFoundPage';
+import SkillsPage from './pages/SkillsPage';
+import SkillEditPage from './pages/SkillEditPage';
 import LeaseChatPage from './pages/LeaseChatPage';
 import ToastContainer from './components/notifications/ToastContainer';
 import GlobalSearch from './components/search/GlobalSearch';
 import DemoMode from './components/demo/DemoMode';
 import RightPanel from './components/RightPanel';
+import UserMenu from './components/UserMenu';
 
 function RedirectToLogin() {
   const location = useLocation();
@@ -104,12 +107,18 @@ function App() {
 <Sidebar />
 
         <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+          <div className="flex items-center justify-end px-4 py-1.5 border-b border-vetted-border shrink-0">
+            <UserMenu />
+          </div>
           <Routes>
             <Route path="/" element={<MainChatPage />} />
             <Route path="/chat/:id" element={<MainChatPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/projects/:id" element={<ProjectDetailPage />} />
             <Route path="/library" element={<LibraryPage />} />
+            <Route path="/skills" element={<SkillsPage />} />
+            <Route path="/skills/new" element={<SkillEditPage />} />
+            <Route path="/skills/:id/edit" element={<SkillEditPage />} />
             <Route path="/apps" element={<AppsPage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin/users" element={<AdminUsersPage />} />

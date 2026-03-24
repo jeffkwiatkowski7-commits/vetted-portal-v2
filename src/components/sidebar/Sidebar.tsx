@@ -11,8 +11,6 @@ import {
   Shield,
   ChevronLeft,
   ChevronRight,
-  LogOut,
-  Settings,
   MoreHorizontal,
   Trash2,
   Pencil,
@@ -50,14 +48,6 @@ export default function Sidebar() {
     setChatAttachedFiles([]);
     setActiveChat(null);
     navigate('/');
-  };
-
-  const handleLogout = () => {
-    api.auth.logout().finally(() => {
-      localStorage.removeItem('userId');
-      setUser(null);
-      navigate('/login');
-    });
   };
 
   const handleRenameChat = async (chatId: string) => {
@@ -218,35 +208,6 @@ export default function Sidebar() {
 
       {/* User Footer */}
       <div className="p-3 border-t border-vetted-border">
-        {!sidebarCollapsed && user && (
-          <div className="mb-3 pb-3 border-b border-vetted-border">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-full bg-vetted-accent flex items-center justify-center text-vetted-primary font-medium text-sm">
-                {user.display_name[0]?.toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-vetted-primary truncate">{user.display_name}</p>
-                <p className="text-xs text-vetted-text-muted truncate">{user.email}</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => navigate('/settings')}
-                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-sm hover:bg-white rounded transition-colors"
-                title="Settings"
-              >
-                <Settings size={16} />
-              </button>
-              <button
-                onClick={handleLogout}
-                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-sm hover:bg-white rounded transition-colors text-vetted-danger"
-                title="Sign Out"
-              >
-                <LogOut size={16} />
-              </button>
-            </div>
-          </div>
-        )}
         <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.4.0</p>
       </div>
 

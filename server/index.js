@@ -14,7 +14,7 @@ import { seedDatabase } from './seed.js';
 import leaseRoutes from './lease-routes.js';
 import { chatWithDocuments as geminiChatWithDocuments } from './lib/gemini.js';
 import { chatWithDocuments as claudeChatWithDocuments } from './lib/claude.js';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import mammoth from 'mammoth';
 import { indexFile, queryProject, deleteFileChunks, deleteProjectChunks, formatRetrievedContext, extractCitations, isSupportedType, extractText } from './lib/rag.js';
 import { deleteFile as gcsDeleteFile, deleteProjectFiles as gcsDeleteProjectFiles, downloadFile as gcsDownload } from './lib/gcs.js';
@@ -244,17 +244,30 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 // ============================================================================
 
 app.get('/api/chats', requireAuth, (req, res) => {
-  const chats = dbAll(db, `
-    SELECT
-      c.id, c.user_id, c.project_id, c.title, c.model, c.temperature,
-      c.system_prompt, c.is_shared, c.created_at, c.updated_at,
-      COUNT(m.id) as message_count
-    FROM chats c
-    LEFT JOIN messages m ON c.id = m.chat_id
-    WHERE c.user_id = ?
-    GROUP BY c.id
-    ORDER BY c.updated_at DESC
-  `, [req.user.id]);
+  const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
+  const chats = isAdmin
+    ? dbAll(db, `
+      SELECT
+        c.id, c.user_id, c.project_id, c.title, c.model, c.temperature,
+        c.system_prompt, c.is_shared, c.created_at, c.updated_at,
+        COUNT(m.id) as message_count, u.display_name as owner_name
+      FROM chats c
+      LEFT JOIN messages m ON c.id = m.chat_id
+      LEFT JOIN users u ON c.user_id = u.id
+      GROUP BY c.id
+      ORDER BY c.updated_at DESC
+    `)
+    : dbAll(db, `
+      SELECT
+        c.id, c.user_id, c.project_id, c.title, c.model, c.temperature,
+        c.system_prompt, c.is_shared, c.created_at, c.updated_at,
+        COUNT(m.id) as message_count
+      FROM chats c
+      LEFT JOIN messages m ON c.id = m.chat_id
+      WHERE c.user_id = ?
+      GROUP BY c.id
+      ORDER BY c.updated_at DESC
+    `, [req.user.id]);
 
   res.json({ chats });
 });
@@ -286,7 +299,10 @@ app.post('/api/chats', requireAuth, (req, res) => {
 });
 
 app.get('/api/chats/:id', requireAuth, (req, res) => {
-  const chat = dbGet(db, 'SELECT * FROM chats WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+  const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
+  const chat = isAdmin
+    ? dbGet(db, 'SELECT * FROM chats WHERE id = ?', [req.params.id])
+    : dbGet(db, 'SELECT * FROM chats WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
   if (!chat) {
     return res.status(404).json({ error: 'Chat not found' });
@@ -711,13 +727,16 @@ app.get('/api/chats/shared/with-me', requireAuth, (req, res) => {
 // ============================================================================
 
 app.get('/api/projects', requireAuth, (req, res) => {
-  const projects = dbAll(db, `
-    SELECT DISTINCT p.* FROM projects p
-    WHERE p.owner_id = ? OR p.id IN (
-      SELECT project_id FROM project_members WHERE user_id = ?
-    )
-    ORDER BY p.updated_at DESC
-  `, [req.user.id, req.user.id]);
+  const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
+  const projects = isAdmin
+    ? dbAll(db, `SELECT p.*, u.display_name as owner_name FROM projects p LEFT JOIN users u ON p.owner_id = u.id ORDER BY p.updated_at DESC`)
+    : dbAll(db, `
+      SELECT DISTINCT p.* FROM projects p
+      WHERE p.owner_id = ? OR p.id IN (
+        SELECT project_id FROM project_members WHERE user_id = ?
+      )
+      ORDER BY p.updated_at DESC
+    `, [req.user.id, req.user.id]);
 
   const result = projects.map(p => ({
     ...p,
@@ -862,9 +881,17 @@ app.delete('/api/projects/:id/members/:userId', requireAuth, (req, res) => {
 
 app.get('/api/library', requireAuth, (req, res) => {
   const { project_id } = req.query;
-  const files = project_id
-    ? dbAll(db, 'SELECT * FROM library_files WHERE user_id = ? AND project_id = ? ORDER BY uploaded_at DESC', [req.user.id, project_id])
-    : dbAll(db, 'SELECT * FROM library_files WHERE user_id = ? ORDER BY uploaded_at DESC', [req.user.id]);
+  const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
+  let files;
+  if (isAdmin) {
+    files = project_id
+      ? dbAll(db, 'SELECT lf.*, u.display_name as owner_name FROM library_files lf LEFT JOIN users u ON lf.user_id = u.id WHERE lf.project_id = ? ORDER BY lf.uploaded_at DESC', [project_id])
+      : dbAll(db, 'SELECT lf.*, u.display_name as owner_name FROM library_files lf LEFT JOIN users u ON lf.user_id = u.id ORDER BY lf.uploaded_at DESC');
+  } else {
+    files = project_id
+      ? dbAll(db, 'SELECT * FROM library_files WHERE user_id = ? AND project_id = ? ORDER BY uploaded_at DESC', [req.user.id, project_id])
+      : dbAll(db, 'SELECT * FROM library_files WHERE user_id = ? ORDER BY uploaded_at DESC', [req.user.id]);
+  }
 
   res.json({ files });
 });

@@ -8,29 +8,21 @@ import LibraryPickerModal from './LibraryPickerModal';
 import FileTypeBadge from './FileTypeBadge';
 
 
-function GeminiIcon() {
+interface ModelOption {
+  name: string;
+  value: string;
+  provider: string;
+  iconColor: string;
+}
+
+function ModelIcon({ color }: { color: string }) {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path d="M7 1L9.5 6.5L7 13L4.5 6.5Z" fill="#3B82F6" opacity="0.9"/>
-      <path d="M1 7L6.5 4.5L13 7L6.5 9.5Z" fill="#3B82F6" opacity="0.6"/>
+      <circle cx="7" cy="7" r="5.5" stroke={color} strokeWidth="1.5" fill="none"/>
+      <circle cx="7" cy="7" r="2" fill={color} opacity="0.6"/>
     </svg>
   );
 }
-
-function ClaudeIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <circle cx="7" cy="7" r="5.5" stroke="#D97706" strokeWidth="1.5" fill="none"/>
-      <path d="M4.5 9.5L7 4.5L9.5 9.5" stroke="#D97706" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M5.5 7.5h3" stroke="#D97706" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>
-  );
-}
-
-const MODELS = [
-  { name: 'Gemini 3.1', value: 'gemini', icon: <GeminiIcon /> },
-  { name: 'Claude Sonnet 4.6', value: 'claude', icon: <ClaudeIcon /> },
-];
 
 export default function ChatInput({ centered = false, projectId }: { centered?: boolean; projectId?: string }) {
   const { id: urlId } = useParams<{ id: string }>();
@@ -48,10 +40,23 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
   const [message, setMessage] = useState('');
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(() => {
-    const saved = localStorage.getItem('selectedModel');
-    return MODELS.find((m) => m.value === saved) ?? MODELS[0];
-  });
+  const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
+  const [selectedModel, setSelectedModel] = useState<ModelOption | null>(null);
+
+  useEffect(() => {
+    api.models.list().then((models: any[]) => {
+      const mapped: ModelOption[] = models.map((m) => ({
+        name: m.display_name,
+        value: m.provider?.toLowerCase().includes('anthropic') ? 'claude' : 'gemini',
+        provider: m.provider,
+        iconColor: m.icon_color || '#888',
+      }));
+      setAvailableModels(mapped);
+      const saved = localStorage.getItem('selectedModel');
+      const match = mapped.find((m) => m.value === saved) ?? mapped.find((m) => m) ?? null;
+      setSelectedModel(match);
+    }).catch(() => {});
+  }, []);
   const [temperature, setTemperature] = useState(0.7);
   const [showModelSelect, setShowModelSelect] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -114,7 +119,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
       if (!chatId) {
         const newChat = await api.chats.create({
           title: content.slice(0, 50),
-          model: selectedModel.value,
+          model: selectedModel?.value || 'gemini',
           temperature,
           ...(projectId && { project_id: projectId }),
         });
@@ -140,9 +145,10 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
       }
 
       if (!hidden) { clearLiveSteps(); setAiThinking(true); }
+      const modelValue = selectedModel?.value || 'gemini';
       const sendResult = await api.chats.streamMessage(
-        chatId,
-        { content, model: selectedModel.value, temperature, attachments: files.map((f) => f.id) },
+        chatId!,
+        { content, model: modelValue, temperature, attachments: files.map((f) => f.id) },
         hidden ? () => {} : (step) => addLiveStep(step),
       );
       if (!hidden) { setAiThinking(false); clearLiveSteps(); }
@@ -298,8 +304,8 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
                         : 'border-vetted-border text-vetted-text-secondary hover:bg-vetted-surface'
                     }`}
                   >
-                    {selectedModel.icon}
-                    {selectedModel.name}
+                    {selectedModel && <ModelIcon color={selectedModel.iconColor} />}
+                    {selectedModel?.name || 'Select model'}
                     <ChevronDown size={12} />
                   </button>
                   {showModelSelect && (
@@ -307,7 +313,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
                       <div className="px-3 py-2 border-b border-vetted-border">
                         <p className="text-[11px] font-medium text-vetted-text-muted uppercase tracking-wider">Model</p>
                       </div>
-                      {MODELS.map((model) => (
+                      {availableModels.map((model) => (
                         <button
                           key={model.name}
                           onClick={() => {
@@ -316,12 +322,12 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
                             setShowModelSelect(false);
                           }}
                           className={`w-full text-left px-3 py-2.5 text-sm hover:bg-vetted-surface flex items-center gap-2.5 transition-colors ${
-                            selectedModel.value === model.value ? 'bg-vetted-surface font-medium' : ''
+                            selectedModel?.value === model.value ? 'bg-vetted-surface font-medium' : ''
                           }`}
                         >
-                          {model.icon}
+                          <ModelIcon color={model.iconColor} />
                           {model.name}
-                          {selectedModel.value === model.value && (
+                          {selectedModel?.value === model.value && (
                             <span className="ml-auto text-vetted-accent text-xs">&#10003;</span>
                           )}
                         </button>

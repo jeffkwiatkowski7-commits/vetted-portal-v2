@@ -19,21 +19,7 @@ function getAvailableMcps() {
   ];
 }
 
-function getAvailableModels() {
-  try {
-    const stored = localStorage.getItem('admin_models');
-    if (stored) {
-      const models = JSON.parse(stored) as { id: string; name: string; enabled: boolean; isDefault: boolean }[];
-      return models.filter((m) => m.enabled);
-    }
-  } catch {}
-  return [
-    { id: 'sonnet-4-6', name: 'Sonnet 4.6', isDefault: true },
-    { id: 'opus-4-6', name: 'Opus 4.6', isDefault: false },
-    { id: 'gemini-3', name: 'Gemini 3', isDefault: false },
-    { id: 'gemini-flash-3', name: 'Gemini Flash 3', isDefault: false },
-  ];
-}
+// Models are now loaded from the API in the component
 
 export interface ProjectFormData {
   name: string;
@@ -110,14 +96,31 @@ function LibraryPicker({
 }
 
 export default function ProjectForm({ initialData, onSave, onCancel, onDelete, title, saving, projectId }: Props) {
-  const models = getAvailableModels();
-  const defaultModel = models.find((m) => m.isDefault)?.name ?? models[0]?.name ?? 'Sonnet 4.6';
+  const [models, setModels] = useState<{ id: string; name: string; isDefault: boolean }[]>([]);
+
+  useEffect(() => {
+    api.models.list().then((data: any[]) => {
+      setModels(data.map((m) => ({
+        id: m.id,
+        name: m.display_name,
+        isDefault: !!m.is_default,
+      })));
+    }).catch(() => {});
+  }, []);
+
+  const defaultModel = models.find((m) => m.isDefault)?.name ?? models[0]?.name ?? '';
 
   const [name, setName] = useState(initialData?.name ?? '');
   const [description, setDescription] = useState(initialData?.description ?? '');
   const [systemPrompt, setSystemPrompt] = useState(initialData?.system_prompt ?? '');
   const [sysExpanded, setSysExpanded] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(initialData?.default_model ?? defaultModel);
+  const [selectedModel, setSelectedModel] = useState(initialData?.default_model ?? '');
+
+  // Set default model once models load
+  useEffect(() => {
+    if (!selectedModel && defaultModel) setSelectedModel(defaultModel);
+  }, [defaultModel]);
+
   const [enabledMcps, setEnabledMcps] = useState<string[]>(() => {
     try { return JSON.parse(initialData?.tool_sets as unknown as string ?? '[]'); }
     catch { return Array.isArray(initialData?.tool_sets) ? initialData.tool_sets : []; }

@@ -240,6 +240,15 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 });
 
 // ============================================================================
+// MODEL ROUTES (public — used by chat and project UIs)
+// ============================================================================
+
+app.get('/api/models', requireAuth, (req, res) => {
+  const models = dbAll(db, 'SELECT * FROM model_configs WHERE is_enabled = 1 ORDER BY is_default DESC, display_name ASC');
+  res.json({ models });
+});
+
+// ============================================================================
 // CHAT ROUTES
 // ============================================================================
 

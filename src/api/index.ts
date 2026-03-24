@@ -125,6 +125,11 @@ export const projects = {
   removeMember: (id: string, userId: string) => request(`/projects/${id}/members/${userId}`, { method: 'DELETE' }),
 };
 
+// Models - public endpoint for enabled models
+export const models = {
+  list: () => request('/models').then(d => d.models || d || []),
+};
+
 // Library - unwrap
 export const library = {
   list: (projectId?: string) => request(projectId ? `/library?project_id=${projectId}` : '/library').then(d => d.files || d || []),

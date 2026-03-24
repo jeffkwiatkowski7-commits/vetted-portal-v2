@@ -206,11 +206,11 @@ function AssistantMessage({
       {steps && steps.length > 0 && <StepsLog steps={steps} />}
       <MarkdownContent content={content} />
       {citations && citations.length > 0 && (
-        <div className="mt-2 pt-2 border-t border-white/10">
-          <div className="text-xs text-white/40 mb-1">Sources:</div>
+        <div className="mt-2 pt-2 border-t border-vetted-border">
+          <div className="text-xs text-vetted-text-muted mb-1">Sources:</div>
           <div className="flex flex-wrap gap-1">
             {citations.map((c, i) => (
-              <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/5 rounded text-xs text-white/50">
+              <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-vetted-surface rounded text-xs text-vetted-text-muted">
                 {c.filename}{c.pageNumber ? ` (p. ${c.pageNumber})` : ''}
               </span>
             ))}

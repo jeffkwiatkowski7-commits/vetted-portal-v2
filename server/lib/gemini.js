@@ -11,6 +11,22 @@
 import { GoogleGenAI } from "@google/genai";
 import { config } from "./config.js";
 import { logUsage, getDatabase } from "../database.js";
+import { tavilySearch, hasTavily } from "./tavily.js";
+
+// Map display model names to Vertex AI model IDs
+const MODEL_ID_MAP = {
+  'Gemini 3': 'gemini-3.0-pro-preview-0325',
+  'Gemini 3 Flash': 'gemini-3.0-flash-preview-0325',
+  'Gemini 3.1': 'gemini-3.1-pro-preview',
+  'Gemini 2.5 Flash': 'gemini-2.5-flash',
+  'Gemini 2.5 Pro': 'gemini-2.5-pro',
+  'Gemini 2.0 Flash': 'gemini-2.0-flash',
+};
+
+function resolveModelId(modelName) {
+  if (!modelName) return null;
+  return MODEL_ID_MAP[modelName] || null;
+}
 
 // Singleton client
 let _client = null;
@@ -27,19 +43,71 @@ function getClient() {
   return _client;
 }
 
-async function generate(contents, genConfig = {}, tools = []) {
+async function generate(contents, genConfig = {}, tools = [], modelOverride = null) {
   const client = getClient();
   const req = {
-    model: config.modelId,
+    model: resolveModelId(modelOverride) || config.modelId,
     contents,
     config: {
       temperature: 0.3,
-      maxOutputTokens: 8192,
+      maxOutputTokens: 65536,
       ...genConfig,
     },
   };
   if (tools.length) req.config.tools = tools;
   return client.models.generateContent(req);
+}
+
+/**
+ * Auto-continuation: if the model stops because of MAX_TOKENS,
+ * ask it to continue and concatenate the results (up to MAX_CONTINUATIONS).
+ */
+const MAX_CONTINUATIONS = 3;
+
+async function generateWithContinuation(contents, genConfig = {}, tools = [], modelOverride = null) {
+  let result = await generate(contents, genConfig, tools, modelOverride);
+  let fullText = "";
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let lastResult = result;
+
+  for (let i = 0; i <= MAX_CONTINUATIONS; i++) {
+    const candidate = result.candidates?.[0];
+    const chunk = (candidate?.content?.parts ?? []).map((p) => p.text ?? "").join("");
+    fullText += chunk;
+
+    const usage = result?.response?.usageMetadata;
+    if (usage) {
+      totalInputTokens += usage.promptTokenCount || 0;
+      totalOutputTokens += usage.candidatesTokenCount || 0;
+    }
+
+    if (candidate?.finishReason !== "MAX_TOKENS" || i === MAX_CONTINUATIONS) {
+      break;
+    }
+
+    console.log(`[gemini] Response truncated (MAX_TOKENS), continuing... (${i + 1}/${MAX_CONTINUATIONS})`);
+
+    // Build continuation request with the accumulated context
+    const continuationContents = [
+      ...contents,
+      { role: "model", parts: [{ text: fullText }] },
+      { role: "user", parts: [{ text: "Continue exactly where you left off. Do not repeat any content already provided." }] },
+    ];
+
+    result = await generate(continuationContents, genConfig, tools, modelOverride);
+    lastResult = result;
+  }
+
+  // Return a result-like object with the full concatenated text
+  return {
+    _fullText: fullText,
+    _totalInputTokens: totalInputTokens,
+    _totalOutputTokens: totalOutputTokens,
+    candidates: lastResult.candidates,
+    response: lastResult.response,
+    text: fullText,
+  };
 }
 
 // ── Response extraction ──────────────────────────────────────────────
@@ -50,15 +118,20 @@ function extractGroundedResponse(result) {
   const searchQueries = meta?.webSearchQueries ?? [];
   const chunks = meta?.groundingChunks ?? [];
 
-  const rawText = (candidate?.content?.parts ?? [])
-    .map((p) => p.text ?? "")
-    .join("")
-    .trim();
+  // Use pre-concatenated text from continuation if available
+  let text;
+  if (result._fullText) {
+    text = result._fullText.trim();
+  } else {
+    const rawText = (candidate?.content?.parts ?? [])
+      .map((p) => p.text ?? "")
+      .join("")
+      .trim();
+    text = rawText || result.text || "No response generated.";
+  }
 
   console.log("[gemini] finishReason:", candidate?.finishReason);
   console.log("[gemini] searchQueries:", searchQueries);
-
-  let text = rawText || result.text || "No response generated.";
 
   const sourceLines = chunks
     .filter((c) => c.web?.uri && c.web?.title)
@@ -89,7 +162,7 @@ export async function ocrPdf(pdfBase64, userId = null) {
         ],
       },
     ],
-    { temperature: 0.1, maxOutputTokens: 8192 },
+    { temperature: 0.1, maxOutputTokens: 65536 },
   );
 
   const usageMeta = result?.response?.usageMetadata;
@@ -266,23 +339,82 @@ export async function chatWithLeases(leaseTexts, userMessage, chatHistory, useSe
     contents.push({ role: "user", parts: [{ text: userMessage }] });
   }
 
-  const tools = useSearch ? [{ googleSearch: {} }] : [];
-  const result = await generate(contents, {}, tools);
+  // Use Tavily for web search if available and search is enabled
+  if (useSearch && hasTavily()) {
+    const tavilyTool = {
+      functionDeclarations: [{
+        name: "web_search",
+        description: "Search the web for current information. Use for market data, recent events, or anything requiring live information.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "The search query" },
+          },
+          required: ["query"],
+        },
+      }],
+    };
+
+    const searchQueries = [];
+    const MAX_ITERATIONS = 5;
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
+      const result = await generate(contents, {}, [tavilyTool]);
+      const candidate = result.candidates?.[0];
+      const parts = candidate?.content?.parts ?? [];
+
+      const fnCalls = parts.filter((p) => p.functionCall);
+      if (fnCalls.length === 0) {
+        const usageMeta = result?.response?.usageMetadata;
+        if (usageMeta) {
+          logUsage(getDatabase(), {
+            userId,
+            source: 'lease',
+            prompt: userMessage,
+            model: config.modelId,
+            inputTokens: usageMeta.promptTokenCount || 0,
+            outputTokens: usageMeta.candidatesTokenCount || 0,
+          });
+        }
+        return { text: extractGroundedResponse(result).text, searchQueries };
+      }
+
+      contents.push({ role: "model", parts });
+
+      const fnResponseParts = [];
+      for (const part of fnCalls) {
+        const query = part.functionCall.args?.query || "";
+        searchQueries.push(query);
+        console.log("[gemini] web search:", query);
+        const searchResult = await tavilySearch(query);
+        fnResponseParts.push({
+          functionResponse: {
+            name: "web_search",
+            response: { result: searchResult || "No results found." },
+          },
+        });
+      }
+      contents.push({ role: "user", parts: fnResponseParts });
+    }
+
+    // Fallback if max iterations hit
+    const result = await generate(contents, {}, []);
+    return { text: extractGroundedResponse(result).text, searchQueries };
+  }
+
+  const result = await generateWithContinuation(contents, {}, [], null);
 
   const usageMeta = result?.response?.usageMetadata;
-  if (usageMeta) {
+  const inputTokens = result._totalInputTokens || usageMeta?.promptTokenCount || 0;
+  const outputTokens = result._totalOutputTokens || usageMeta?.candidatesTokenCount || 0;
+  if (inputTokens || outputTokens) {
     logUsage(getDatabase(), {
       userId,
       source: 'lease',
       prompt: userMessage,
       model: config.modelId,
-      inputTokens: usageMeta.promptTokenCount || 0,
-      outputTokens: usageMeta.candidatesTokenCount || 0,
+      inputTokens,
+      outputTokens,
     });
-  }
-
-  for (const q of result.candidates?.[0]?.groundingMetadata?.webSearchQueries ?? []) {
-    console.log("[gemini] web search:", q);
   }
 
   return extractGroundedResponse(result);
@@ -302,8 +434,8 @@ Today's date is ${today}.
 ## Core Behavior
 
 - Answer questions directly and accurately
-- Use Google Search when questions require current information, recent events, live data, or anything likely beyond your training knowledge — search proactively, don't wait to be asked
-- When using grounded sources, cite them inline as [Source](URL)
+- Use the web_search tool when questions require current information, recent events, live data, or anything likely beyond your training knowledge — search proactively, don't wait to be asked
+- When using search results, cite sources inline as [Source Name](URL)
 - If you're uncertain about something, say so clearly rather than speculating
 - Never refuse a reasonable request — if you can't do exactly what's asked, do the closest useful thing and explain
 
@@ -325,7 +457,7 @@ Today's date is ${today}.
 
 // ── General document Q&A / project chat ─────────────────────────────
 
-export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null) {
+export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null, modelOverride = null) {
   const textDocs = docs.filter((d) => d.text !== undefined);
   const pdfDocs = docs.filter((d) => d.base64 !== undefined);
 
@@ -359,14 +491,62 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
     contents.push({ role: "user", parts: [{ text: userMessage }] });
   }
 
-  // Skip grounding for faster responses — no web search round-trip
-  const result = await generate(contents, {});
-
-  for (const q of result.candidates?.[0]?.groundingMetadata?.webSearchQueries ?? []) {
-    console.log("[gemini] web search:", q);
+  // Use Tavily web search via function calling if available
+  if (!hasTavily()) {
+    const result = await generateWithContinuation(contents, {}, [], modelOverride);
+    return extractGroundedResponse(result);
   }
 
-  return extractGroundedResponse(result);
+  const searchQueries = [];
+  const tavilyTool = {
+    functionDeclarations: [{
+      name: "web_search",
+      description: "Search the web for current information. Use for market data, recent events, or anything requiring live information.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "The search query" },
+        },
+        required: ["query"],
+      },
+    }],
+  };
+
+  const MAX_ITERATIONS = 5;
+  for (let i = 0; i < MAX_ITERATIONS; i++) {
+    const result = await generate(contents, {}, [tavilyTool], modelOverride);
+    const candidate = result.candidates?.[0];
+    const parts = candidate?.content?.parts ?? [];
+
+    const fnCalls = parts.filter((p) => p.functionCall);
+    if (fnCalls.length === 0) {
+      return { text: extractGroundedResponse(result).text, searchQueries };
+    }
+
+    // Add model response to conversation
+    contents.push({ role: "model", parts });
+
+    // Execute each function call and add results
+    const fnResponseParts = [];
+    for (const part of fnCalls) {
+      const query = part.functionCall.args?.query || "";
+      searchQueries.push(query);
+      console.log("[gemini] web search:", query);
+      if (onStep) onStep(`Web search: "${query}"`);
+      const searchResult = await tavilySearch(query);
+      fnResponseParts.push({
+        functionResponse: {
+          name: "web_search",
+          response: { result: searchResult || "No results found." },
+        },
+      });
+    }
+    contents.push({ role: "user", parts: fnResponseParts });
+  }
+
+  // Fallback if max iterations hit
+  const result = await generate(contents, {}, [], modelOverride);
+  return { text: extractGroundedResponse(result).text, searchQueries };
 }
 
 // ── Cross-portfolio Q&A ──────────────────────────────────────────────
@@ -405,18 +585,81 @@ Answer questions using this portfolio data. If you need the full lease text to a
     contents.push({ role: "user", parts: [{ text: userMessage }] });
   }
 
-  const tools = useSearch ? [{ googleSearch: {} }] : [];
-  const result = await generate(contents, {}, tools);
+  // Use Tavily for web search if available and search is enabled
+  if (useSearch && hasTavily()) {
+    const tavilyTool = {
+      functionDeclarations: [{
+        name: "web_search",
+        description: "Search the web for current information. Use for market data, recent events, or anything requiring live information.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "The search query" },
+          },
+          required: ["query"],
+        },
+      }],
+    };
+
+    const searchQueries = [];
+    const MAX_ITERATIONS = 5;
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
+      const result = await generate(contents, {}, [tavilyTool]);
+      const candidate = result.candidates?.[0];
+      const parts = candidate?.content?.parts ?? [];
+
+      const fnCalls = parts.filter((p) => p.functionCall);
+      if (fnCalls.length === 0) {
+        const usageMeta = result?.response?.usageMetadata;
+        if (usageMeta) {
+          logUsage(getDatabase(), {
+            userId,
+            source: 'lease',
+            prompt: userMessage,
+            model: config.modelId,
+            inputTokens: usageMeta.promptTokenCount || 0,
+            outputTokens: usageMeta.candidatesTokenCount || 0,
+          });
+        }
+        return { text: extractGroundedResponse(result).text, searchQueries };
+      }
+
+      contents.push({ role: "model", parts });
+
+      const fnResponseParts = [];
+      for (const part of fnCalls) {
+        const query = part.functionCall.args?.query || "";
+        searchQueries.push(query);
+        console.log("[gemini] web search:", query);
+        const searchResult = await tavilySearch(query);
+        fnResponseParts.push({
+          functionResponse: {
+            name: "web_search",
+            response: { result: searchResult || "No results found." },
+          },
+        });
+      }
+      contents.push({ role: "user", parts: fnResponseParts });
+    }
+
+    // Fallback if max iterations hit
+    const result = await generate(contents, {}, []);
+    return { text: extractGroundedResponse(result).text, searchQueries };
+  }
+
+  const result = await generateWithContinuation(contents, {}, [], null);
 
   const usageMeta = result?.response?.usageMetadata;
-  if (usageMeta) {
+  const inputTokens = result._totalInputTokens || usageMeta?.promptTokenCount || 0;
+  const outputTokens = result._totalOutputTokens || usageMeta?.candidatesTokenCount || 0;
+  if (inputTokens || outputTokens) {
     logUsage(getDatabase(), {
       userId,
       source: 'lease',
       prompt: userMessage,
       model: config.modelId,
-      inputTokens: usageMeta.promptTokenCount || 0,
-      outputTokens: usageMeta.candidatesTokenCount || 0,
+      inputTokens,
+      outputTokens,
     });
   }
 

@@ -11,6 +11,7 @@ import FileTypeBadge from './FileTypeBadge';
 interface ModelOption {
   name: string;
   value: string;
+  modelId: string;
   provider: string;
   iconColor: string;
 }
@@ -48,6 +49,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
       const mapped: ModelOption[] = models.map((m) => ({
         name: m.display_name,
         value: m.provider?.toLowerCase().includes('anthropic') ? 'claude' : 'gemini',
+        modelId: m.model_name,
         provider: m.provider,
         iconColor: m.icon_color || '#888',
       }));
@@ -148,7 +150,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
       const modelValue = selectedModel?.value || 'gemini';
       const sendResult = await api.chats.streamMessage(
         chatId!,
-        { content, model: modelValue, temperature, attachments: files.map((f) => f.id) },
+        { content, model: modelValue, modelId: selectedModel?.modelId, temperature, attachments: files.map((f) => f.id) },
         hidden ? () => {} : (step) => addLiveStep(step),
       );
       if (!hidden) { setAiThinking(false); clearLiveSteps(); }

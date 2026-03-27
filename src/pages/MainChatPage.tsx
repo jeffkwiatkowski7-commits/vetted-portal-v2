@@ -4,30 +4,24 @@ import { Send, Loader2, Paperclip, X, ChevronDown, ChevronUp, Check } from 'luci
 import LibraryPickerModal from '../components/chat/LibraryPickerModal';
 import { LibraryFile } from '../types';
 
-// ── Model logos ────────────────────────────────────────────────────────────────
-const GeminiIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <path d="M8 1C8 4.866 4.866 8 1 8C4.866 8 8 11.134 8 15C8 11.134 11.134 8 15 8C11.134 8 8 4.866 8 1Z" fill="url(#gem-grad)"/>
-    <defs>
-      <linearGradient id="gem-grad" x1="1" y1="1" x2="15" y2="15" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#4285F4"/>
-        <stop offset="100%" stopColor="#8B5CF6"/>
-      </linearGradient>
-    </defs>
-  </svg>
-);
+// ── Model icon (matches ChatInput) ───────────────────────────────────────────
+interface ModelOption {
+  name: string;
+  value: string;
+  modelId: string;
+  provider: string;
+  iconColor: string;
+}
 
-const ClaudeIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <path d="M8 1.5L13.5 13H10.5L8 7.5L5.5 13H2.5L8 1.5Z" fill="#D97706"/>
-    <path d="M5 10H11" stroke="#D97706" strokeWidth="1.2" strokeLinecap="round"/>
-  </svg>
-);
+function ModelIcon({ color }: { color: string }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <circle cx="7" cy="7" r="5.5" stroke={color} strokeWidth="1.5" fill="none"/>
+      <circle cx="7" cy="7" r="2" fill={color} opacity="0.6"/>
+    </svg>
+  );
+}
 
-const MODEL_OPTIONS = [
-  { value: 'gemini' as const, label: 'Gemini 3.1', Icon: GeminiIcon },
-  { value: 'claude' as const, label: 'Opus 4.6',   Icon: ClaudeIcon },
-];
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -318,10 +312,25 @@ export default function MainChatPage() {
   const [chatId, setChatId] = useState<string | null>(id ?? null);
   const [pendingFiles, setPendingFiles] = useState<LibraryFile[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'gemini' | 'claude'>(() => {
-    const saved = localStorage.getItem('selectedModel');
-    return saved === 'claude' ? 'claude' : 'gemini';
-  });
+  const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
+  const [selectedModel, setSelectedModel] = useState<ModelOption | null>(null);
+
+  // Fetch models from admin config
+  useEffect(() => {
+    api.models.list().then((models: any[]) => {
+      const mapped: ModelOption[] = models.map((m) => ({
+        name: m.display_name,
+        value: m.provider?.toLowerCase().includes('anthropic') ? 'claude' : 'gemini',
+        modelId: m.model_name,
+        provider: m.provider,
+        iconColor: m.icon_color || '#888',
+      }));
+      setAvailableModels(mapped);
+      const saved = localStorage.getItem('selectedModel');
+      const match = mapped.find((m) => m.value === saved) ?? mapped[0] ?? null;
+      setSelectedModel(match);
+    }).catch(() => {});
+  }, []);
 
   const [modelOpen, setModelOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -398,7 +407,7 @@ export default function MainChatPage() {
     let activeChatId = chatId;
     if (!activeChatId) {
       try {
-        const newChat = await api.chats.create({ title: text.slice(0, 60), model: selectedModel });
+        const newChat = await api.chats.create({ title: text.slice(0, 60), model: selectedModel?.value || 'gemini' });
         activeChatId = newChat.id;
         setChatId(activeChatId);
         navigate(`/chat/${activeChatId}`, { replace: true });
@@ -416,7 +425,7 @@ export default function MainChatPage() {
     try {
       const result = await (api.chats as any).streamMessage(
         activeChatId!,
-        { content: text, model: selectedModel, attachments: attachmentIds.length > 0 ? attachmentIds : undefined },
+        { content: text, model: selectedModel?.value || 'gemini', modelId: selectedModel?.modelId, attachments: attachmentIds.length > 0 ? attachmentIds : undefined },
         (step: { message: string }) => {
           setMessages(prev => {
             const updated = [...prev];
@@ -519,19 +528,21 @@ export default function MainChatPage() {
               onClick={() => setModelOpen(o => !o)}
               className="flex items-center gap-1.5 text-xs border border-vetted-border rounded-lg px-2 py-1 text-vetted-text-secondary bg-white hover:border-vetted-primary transition-colors"
             >
-              {(() => { const m = MODEL_OPTIONS.find(o => o.value === selectedModel)!; return <><m.Icon />{m.label}<ChevronDown size={11} className="opacity-50" /></>; })()}
+              {selectedModel && <ModelIcon color={selectedModel.iconColor} />}
+              {selectedModel?.name || 'Select model'}
+              <ChevronDown size={11} className="opacity-50" />
             </button>
             {modelOpen && (
-              <div className="absolute bottom-full mb-1.5 right-0 bg-white border border-vetted-border rounded-xl shadow-lg py-1 min-w-[140px] z-10">
-                {MODEL_OPTIONS.map(({ value, label, Icon }) => (
+              <div className="absolute bottom-full mb-1.5 right-0 bg-white border border-vetted-border rounded-xl shadow-lg py-1 min-w-[160px] z-10">
+                {availableModels.map((model) => (
                   <button
-                    key={value}
-                    onClick={() => { setSelectedModel(value); localStorage.setItem('selectedModel', value); setModelOpen(false); }}
+                    key={model.modelId}
+                    onClick={() => { setSelectedModel(model); localStorage.setItem('selectedModel', model.value); setModelOpen(false); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
                   >
-                    <Icon />
-                    <span className="flex-1 text-left">{label}</span>
-                    {selectedModel === value && <Check size={11} className="text-vetted-primary" />}
+                    <ModelIcon color={model.iconColor} />
+                    <span className="flex-1 text-left">{model.name}</span>
+                    {selectedModel?.modelId === model.modelId && <Check size={11} className="text-vetted-primary" />}
                   </button>
                 ))}
               </div>

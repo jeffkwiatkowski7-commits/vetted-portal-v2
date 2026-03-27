@@ -76,6 +76,32 @@ export async function seedDatabase() {
       rate_limit: 120,
       created_at: now,
       updated_at: now
+    },
+    {
+      id: 'gemini-2-5-flash',
+      model_name: 'Gemini 2.5 Flash',
+      provider: 'Google',
+      display_name: 'Gemini 2.5 Flash',
+      icon_color: '#10B981',
+      is_default: 0,
+      is_enabled: 1,
+      max_tokens: 8192,
+      rate_limit: 120,
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: 'gemini-3-1-pro',
+      model_name: 'Gemini 3.1',
+      provider: 'Google',
+      display_name: 'Gemini 3.1',
+      icon_color: '#8B5CF6',
+      is_default: 0,
+      is_enabled: 1,
+      max_tokens: 8192,
+      rate_limit: 60,
+      created_at: now,
+      updated_at: now
     }
   ];
 

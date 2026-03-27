@@ -13,7 +13,6 @@ import { getMockResponse } from './mock-responses.js';
 import { seedDatabase } from './seed.js';
 import leaseRoutes from './lease-routes.js';
 import { chatWithDocuments as geminiChatWithDocuments } from './lib/gemini.js';
-import { chatWithDocuments as claudeChatWithDocuments } from './lib/claude.js';
 import bcrypt from 'bcryptjs';
 import mammoth from 'mammoth';
 import { indexFile, queryProject, deleteFileChunks, deleteProjectChunks, formatRetrievedContext, extractCitations, isSupportedType, extractText } from './lib/rag.js';
@@ -132,6 +131,47 @@ async function runMigrations(db) {
     const hash = await bcrypt.hash('Vetted@3:16', 10);
     dbRun(db, "UPDATE users SET password_hash = ? WHERE email = 'jeffk@vettedbot.com'", [hash]);
     console.log('Migration: set jeffk password');
+  }
+
+  // Disable Claude models if any exist (GCP doesn't support Claude)
+  dbRun(db, "UPDATE model_configs SET is_enabled = 0 WHERE provider = 'Anthropic'");
+
+  // Ensure Gemini 3.1 model exists in model_configs (check by id or display_name)
+  const g31Model = dbGet(db, "SELECT id FROM model_configs WHERE id = 'gemini-3-1-pro' OR display_name = 'Gemini 3.1'");
+  if (!g31Model) {
+    const now = new Date().toISOString();
+    dbRun(db, `INSERT INTO model_configs (id, model_name, provider, display_name, icon_color, is_default, is_enabled, max_tokens, rate_limit, created_at, updated_at)
+      VALUES ('gemini-3-1-pro', 'Gemini 3.1', 'Google', 'Gemini 3.1', '#8B5CF6', 1, 1, 8192, 60, ?, ?)`, [now, now]);
+    console.log('Migration: added Gemini 3.1 model');
+  }
+
+  // Ensure Gemini 2.5 Flash model exists in model_configs
+  const flashModel = dbGet(db, "SELECT id FROM model_configs WHERE id = 'gemini-2-5-flash'");
+  if (!flashModel) {
+    const now = new Date().toISOString();
+    dbRun(db, `INSERT INTO model_configs (id, model_name, provider, display_name, icon_color, is_default, is_enabled, max_tokens, rate_limit, created_at, updated_at)
+      VALUES ('gemini-2-5-flash', 'Gemini 2.5 Flash', 'Google', 'Gemini 2.5 Flash', '#10B981', 0, 1, 8192, 120, ?, ?)`, [now, now]);
+    console.log('Migration: added Gemini 2.5 Flash model');
+  }
+
+  // Ensure jefffox@vettedconsultant.com exists
+  const jfox = dbGet(db, "SELECT id FROM users WHERE email = 'jefffox@vettedconsultant.com'");
+  if (!jfox) {
+    const hash = await bcrypt.hash('SalesRock$24', 10);
+    const newId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    dbRun(db, "INSERT INTO users (id, email, display_name, job_title, department, role, status, password_hash, created_at, updated_at) VALUES (?, 'jefffox@vettedconsultant.com', 'Jeff Fox', 'Sales', 'Sales', 'user', 'active', ?, ?, ?)", [newId, hash, now, now]);
+    console.log('Migration: created jefffox@vettedconsultant.com');
+  }
+
+  // Ensure wross@prepfunds.net exists
+  const wross = dbGet(db, "SELECT id FROM users WHERE email = 'wross@prepfunds.net'");
+  if (!wross) {
+    const hash = await bcrypt.hash('PrepOwner!77', 10);
+    const newId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    dbRun(db, "INSERT INTO users (id, email, display_name, job_title, role, status, password_hash, created_at, updated_at) VALUES (?, 'wross@prepfunds.net', 'Bill Ross', 'Owner', 'user', 'active', ?, ?, ?)", [newId, hash, now, now]);
+    console.log('Migration: created wross@prepfunds.net');
   }
 }
 
@@ -295,7 +335,7 @@ app.post('/api/chats', requireAuth, (req, res) => {
     req.user.id,
     project_id || null,
     title || 'New Chat',
-    model || 'claude-opus',
+    model || 'gemini',
     temperature || 0.7,
     system_prompt || null,
     0,
@@ -614,16 +654,11 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
 
     if (history.length > 0) step(`Loaded ${history.length} previous message${history.length !== 1 ? 's' : ''}`);
     if (docs.length > 0) step(`Building prompt with ${docs.length} document${docs.length !== 1 ? 's' : ''}`);
-    const useClaude = req.body.model === 'claude';
-    step(useClaude ? 'Calling Claude' : 'Calling Gemini');
+    const modelId = req.body.modelId || null;
+    step('Calling Gemini');
 
-    const chatWithDocuments = useClaude ? claudeChatWithDocuments : geminiChatWithDocuments;
-    const result = await chatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null);
+    const result = await geminiChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId);
     aiContent = result.text;
-
-    if (result.searchQueries?.length > 0) {
-      result.searchQueries.forEach(q => step(`Web search: "${q}"`));
-    }
     step('Response received');
   } catch (err) {
     console.error('[chat] AI error:', err.message);
@@ -769,7 +804,7 @@ app.post('/api/projects', requireAuth, (req, res) => {
     req.user.id,
     name,
     description || null,
-    default_model || 'claude-opus',
+    default_model || 'gemini',
     system_prompt || null,
     temperature || 0.7,
     tool_sets ? JSON.stringify(tool_sets) : JSON.stringify([]),
@@ -1587,6 +1622,13 @@ app.put('/api/admin/models/:id', requireAuth, requireAdmin, (req, res) => {
   res.json({ model: updated });
 });
 
+app.delete('/api/admin/models/:id', requireAuth, requireAdmin, (req, res) => {
+  const model = dbGet(db, 'SELECT * FROM model_configs WHERE id = ?', [req.params.id]);
+  if (!model) return res.status(404).json({ error: 'Model not found' });
+  dbRun(db, 'DELETE FROM model_configs WHERE id = ?', [req.params.id]);
+  res.json({ success: true });
+});
+
 app.get('/api/admin/system-prompts', requireAuth, requireAdmin, (req, res) => {
   const prompts = dbAll(db, 'SELECT * FROM system_prompts ORDER BY created_at DESC');
 
@@ -1779,7 +1821,7 @@ app.get('/api/settings/preferences', requireAuth, (req, res) => {
     dbRun(db, `
       INSERT INTO user_preferences (id, user_id, default_model, default_temperature, show_reasoning, auto_scroll, compact_view, code_theme, notify_shared_chat, notify_project_updates, notify_system, notify_weekly_summary)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [prefId, req.user.id, 'claude-opus', 0.7, 0, 1, 0, 'light', 1, 1, 1, 0]);
+    `, [prefId, req.user.id, 'gemini', 0.7, 0, 1, 0, 'light', 1, 1, 1, 0]);
 
     const newPrefs = dbGet(db, 'SELECT * FROM user_preferences WHERE user_id = ?', [req.user.id]);
     return res.json({ preferences: newPrefs });
@@ -1799,7 +1841,7 @@ app.put('/api/settings/preferences', requireAuth, (req, res) => {
     dbRun(db, `
       INSERT INTO user_preferences (id, user_id, default_model, default_temperature, show_reasoning, auto_scroll, compact_view, code_theme, notify_shared_chat, notify_project_updates, notify_system, notify_weekly_summary)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [prefId, req.user.id, 'claude-opus', 0.7, 0, 1, 0, 'light', 1, 1, 1, 0]);
+    `, [prefId, req.user.id, 'gemini', 0.7, 0, 1, 0, 'light', 1, 1, 1, 0]);
 
     prefs = dbGet(db, 'SELECT * FROM user_preferences WHERE user_id = ?', [req.user.id]);
   }

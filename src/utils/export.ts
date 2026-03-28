@@ -189,6 +189,22 @@ export async function exportToWord(
   }
 
   const doc = new Document({
+    numbering: {
+      config: [
+        {
+          reference: 'default-numbering',
+          levels: [
+            {
+              level: 0,
+              format: 'decimal' as any,
+              text: '%1.',
+              alignment: 'start' as any,
+              style: { paragraph: { indent: { left: 720, hanging: 360 } } },
+            },
+          ],
+        },
+      ],
+    },
     sections: [{ children }],
   });
 

@@ -137,7 +137,7 @@ export default function ProjectDetailPage() {
       <ExportModal
         isOpen={exportOpen}
         onClose={() => setExportOpen(false)}
-        messages={(activeChat?.messages || []) as any}
+        messages={activeChat?.messages || []}
         chatTitle={activeChat?.title || project?.name || 'Project Export'}
       />
       {/* Slim project header */}

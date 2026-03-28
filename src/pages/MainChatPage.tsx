@@ -593,8 +593,8 @@ export default function MainChatPage() {
             messages={messages}
             chatTitle={chats.find(c => c.id === chatId)?.title || 'Chat Export'}
           />
-          <div className="flex-1 overflow-y-auto relative">
-            {/* Export button — top-right of messages area */}
+          <div className="flex-1 relative">
+            {/* Export button — fixed over messages area */}
             <button
               onClick={() => setExportOpen(true)}
               className="absolute top-3 right-3 z-10 p-1.5 rounded-lg border border-vetted-border bg-white/80 backdrop-blur-sm text-vetted-text-muted hover:text-vetted-primary hover:border-vetted-primary transition-colors"
@@ -602,9 +602,11 @@ export default function MainChatPage() {
             >
               <Download size={15} />
             </button>
-            <div className="max-w-[75%] mx-auto px-6 py-8 space-y-6">
-              {messages.map((msg, i) => <ChatBubble key={i} msg={msg} />)}
-              <div ref={messagesEndRef} />
+            <div className="h-full overflow-y-auto">
+              <div className="max-w-[75%] mx-auto px-6 py-8 space-y-6">
+                {messages.map((msg, i) => <ChatBubble key={i} msg={msg} />)}
+                <div ref={messagesEndRef} />
+              </div>
             </div>
           </div>
           <div className="px-4 pb-4 pt-2">

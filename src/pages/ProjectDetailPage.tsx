@@ -3,11 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import * as api from '../api';
 import { projectFiles as projectFilesApi } from '../api';
-import { ArrowLeft, Settings } from 'lucide-react';
+import { ArrowLeft, Settings, Download } from 'lucide-react';
 import type { Project } from '../types';
 import ChatInput from '../components/chat/ChatInput';
 import ChatView from '../components/chat/ChatView';
 import ProjectForm from '../components/projects/ProjectForm';
+import ExportModal from '../components/chat/ExportModal';
 
 
 export default function ProjectDetailPage() {
@@ -19,6 +20,7 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [uploadSteps, setUploadSteps] = useState<{message: string; ts: string}[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -132,6 +134,12 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      <ExportModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        messages={(activeChat?.messages || []) as any}
+        chatTitle={activeChat?.title || project?.name || 'Project Export'}
+      />
       {/* Slim project header */}
       <div className="flex items-center gap-3 px-6 py-3 border-b border-vetted-border">
         <button
@@ -141,6 +149,15 @@ export default function ProjectDetailPage() {
           <ArrowLeft size={15} className="text-vetted-text-secondary" />
         </button>
         <span className="text-sm font-medium text-vetted-primary flex-1">{project.name}</span>
+        {hasChat && activeChat?.messages && activeChat.messages.length > 0 && (
+          <button
+            onClick={() => setExportOpen(true)}
+            className="p-1 hover:bg-vetted-surface rounded transition-colors"
+            title="Export conversation"
+          >
+            <Download size={15} className="text-vetted-text-secondary" />
+          </button>
+        )}
         <button
           onClick={() => setShowSettings(!showSettings)}
           className="p-1 hover:bg-vetted-surface rounded transition-colors"

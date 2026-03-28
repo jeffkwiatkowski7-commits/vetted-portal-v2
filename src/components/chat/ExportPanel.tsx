@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { X, Download } from 'lucide-react';
+import DOMPurify from 'dompurify';
+import { X, Download, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
 import {
   ExportableMessage,
   ParsedTable,
@@ -19,30 +20,115 @@ interface ExportPanelProps {
 
 // ── Word Editor ──────────────────────────────────────────────────────────────
 
+/** Lightweight markdown to HTML for the word editor */
+function mdToHtml(md: string): string {
+  return md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^[\-\*]\s+(.+)$/gm, '<li>$1</li>')
+    .replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>')
+    .replace(/<\/ul>\s*<ul>/g, '')
+    .replace(/^---$/gm, '<hr>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+}
+
+/** Applies a document.execCommand for rich-text formatting */
+function applyFormat(command: string, value?: string) {
+  document.execCommand(command, false, value);
+}
+
+function ToolbarButton({ onClick, children, title }: {
+  onClick: () => void; children: React.ReactNode; title: string;
+}) {
+  return (
+    <button
+      onMouseDown={(e) => { e.preventDefault(); onClick(); }}
+      title={title}
+      className="p-1.5 rounded transition-colors text-vetted-text-muted hover:bg-vetted-surface hover:text-vetted-primary"
+    >
+      {children}
+    </button>
+  );
+}
+
 function WordEditor({ messages, scope }: { messages: ExportableMessage[]; scope: 'last' | 'all' }) {
-  const content = useMemo(() => {
+  const html = useMemo(() => {
     const msgs = scope === 'last'
       ? [messages.filter((m) => m.role === 'assistant').pop()].filter(Boolean) as ExportableMessage[]
       : messages;
 
-    return msgs.map((msg) => {
+    const md = msgs.map((msg) => {
       const roleLabel = msg.role === 'user' ? 'You' : 'Assistant';
       const time = msg.timestamp || msg.created_at || '';
       const timeStr = time ? ` — ${new Date(time).toLocaleString()}` : '';
-      const header = scope === 'all' ? `${roleLabel}${timeStr}\n` : '';
+      const header = scope === 'all' ? `**${roleLabel}**${timeStr}\n\n` : '';
       return header + msg.content;
-    }).join('\n\n');
+    }).join('\n\n---\n\n');
+
+    return DOMPurify.sanitize(mdToHtml(md));
   }, [messages, scope]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4">
-      <div
-        contentEditable
-        suppressContentEditableWarning
-        className="min-h-full p-4 bg-white border border-vetted-border rounded-lg text-sm text-vetted-primary leading-relaxed whitespace-pre-wrap focus:outline-none focus:border-accent"
-        data-editor="word"
-      >
-        {content}
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Formatting toolbar */}
+      <div className="flex items-center gap-0.5 px-4 py-2 border-b border-vetted-border bg-white flex-shrink-0">
+        <ToolbarButton onClick={() => applyFormat('bold')} title="Bold (Ctrl+B)">
+          <Bold size={15} />
+        </ToolbarButton>
+        <ToolbarButton onClick={() => applyFormat('italic')} title="Italic (Ctrl+I)">
+          <Italic size={15} />
+        </ToolbarButton>
+        <ToolbarButton onClick={() => applyFormat('underline')} title="Underline (Ctrl+U)">
+          <Underline size={15} />
+        </ToolbarButton>
+
+        <div className="w-px h-5 bg-vetted-border mx-1" />
+
+        <ToolbarButton onClick={() => applyFormat('formatBlock', '<h1>')} title="Heading 1">
+          <Heading1 size={15} />
+        </ToolbarButton>
+        <ToolbarButton onClick={() => applyFormat('formatBlock', '<h2>')} title="Heading 2">
+          <Heading2 size={15} />
+        </ToolbarButton>
+
+        <div className="w-px h-5 bg-vetted-border mx-1" />
+
+        <ToolbarButton onClick={() => applyFormat('insertUnorderedList')} title="Bullet List">
+          <List size={15} />
+        </ToolbarButton>
+        <ToolbarButton onClick={() => applyFormat('insertOrderedList')} title="Numbered List">
+          <ListOrdered size={15} />
+        </ToolbarButton>
+
+        <div className="w-px h-5 bg-vetted-border mx-1" />
+
+        <ToolbarButton onClick={() => applyFormat('justifyLeft')} title="Align Left">
+          <AlignLeft size={15} />
+        </ToolbarButton>
+        <ToolbarButton onClick={() => applyFormat('justifyCenter')} title="Align Center">
+          <AlignCenter size={15} />
+        </ToolbarButton>
+        <ToolbarButton onClick={() => applyFormat('justifyRight')} title="Align Right">
+          <AlignRight size={15} />
+        </ToolbarButton>
+      </div>
+
+      {/* Editable content area */}
+      <div className="flex-1 overflow-y-auto p-4">
+        <div
+          contentEditable
+          suppressContentEditableWarning
+          className="min-h-full p-6 bg-white border border-vetted-border rounded-lg text-sm text-vetted-primary leading-relaxed focus:outline-none focus:border-accent"
+          style={{ fontFamily: "'Inter', sans-serif" }}
+          data-editor="word"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
       </div>
     </div>
   );
@@ -161,6 +247,22 @@ export default function ExportPanel({ isOpen, onClose, format, scope, messages, 
         }
       }
     }
+
+    // Fallback: no markdown tables found — split text into a single-column table
+    if (extracted.length === 0) {
+      const msgs = scope === 'last'
+        ? [assistantMsgs[assistantMsgs.length - 1]].filter(Boolean)
+        : assistantMsgs;
+      const rows = msgs
+        .flatMap((m) => m.content.split(/\n\n+/))
+        .map((para) => para.trim())
+        .filter((para) => para.length > 0)
+        .map((para) => [para]);
+      if (rows.length > 0) {
+        extracted = [{ headers: ['Content'], rows }];
+      }
+    }
+
     setTables(extracted);
   }, [format, scope, messages, isOpen]);
 

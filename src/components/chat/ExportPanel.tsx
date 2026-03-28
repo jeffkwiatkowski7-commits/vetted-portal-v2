@@ -124,7 +124,7 @@ function WordEditor({ messages, scope }: { messages: ExportableMessage[]; scope:
         <div
           contentEditable
           suppressContentEditableWarning
-          className="min-h-full p-6 bg-white border border-vetted-border rounded-lg text-sm text-vetted-primary leading-relaxed focus:outline-none focus:border-accent"
+          className="min-h-full p-6 bg-white border border-vetted-border rounded-lg text-sm text-vetted-primary leading-relaxed focus:outline-none focus:border-vetted-accent"
           style={{ fontFamily: "'Inter', sans-serif" }}
           data-editor="word"
           dangerouslySetInnerHTML={{ __html: html }}
@@ -190,7 +190,7 @@ function ExcelEditor({
                         type="text"
                         value={h}
                         onChange={(e) => handleHeaderChange(tableIdx, colIdx, e.target.value)}
-                        className="w-full px-3 py-2 text-xs font-bold text-vetted-primary bg-transparent focus:outline-none focus:bg-accent/5"
+                        className="w-full px-3 py-2 text-xs font-bold text-vetted-primary bg-transparent focus:outline-none focus:bg-vetted-accent/5"
                       />
                     </th>
                   ))}
@@ -205,7 +205,7 @@ function ExcelEditor({
                           type="text"
                           value={cell}
                           onChange={(e) => handleCellChange(tableIdx, rowIdx, colIdx, e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs text-vetted-text-secondary bg-transparent focus:outline-none focus:bg-accent/5"
+                          className="w-full px-3 py-1.5 text-xs text-vetted-text-secondary bg-transparent focus:outline-none focus:bg-vetted-accent/5"
                         />
                       </td>
                     ))}
@@ -284,7 +284,7 @@ export default function ExportPanel({ isOpen, onClose, format, scope, messages, 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end">
+    <div className="fixed inset-0 z-50 flex justify-end">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/20" onClick={onClose} />
 
@@ -298,7 +298,7 @@ export default function ExportPanel({ isOpen, onClose, format, scope, messages, 
           <button
             onClick={handleExport}
             disabled={exporting}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent text-white text-xs font-medium hover:bg-accent/90 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-vetted-accent text-white text-xs font-medium hover:bg-vetted-accent-dark transition-colors disabled:opacity-50"
           >
             <Download size={14} />
             {exporting

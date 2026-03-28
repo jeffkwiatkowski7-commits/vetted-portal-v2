@@ -71,11 +71,11 @@ export default function ExportModal({ isOpen, onClose, messages, chatTitle }: Ex
               }}
               className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
                 format === 'word'
-                  ? 'border-accent bg-accent/5'
+                  ? 'border-vetted-accent bg-vetted-accent/5'
                   : 'border-vetted-border hover:border-vetted-text-muted'
               }`}
             >
-              <FileText size={20} className={format === 'word' ? 'text-accent' : 'text-vetted-text-muted'} />
+              <FileText size={20} className={format === 'word' ? 'text-vetted-accent' : 'text-vetted-text-muted'} />
               <div>
                 <div className="text-sm font-medium text-vetted-primary">Word Document</div>
                 <div className="text-xs text-vetted-text-muted">Edit and export as Word document</div>
@@ -90,11 +90,11 @@ export default function ExportModal({ isOpen, onClose, messages, chatTitle }: Ex
               }}
               className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
                 format === 'excel'
-                  ? 'border-accent bg-accent/5'
+                  ? 'border-vetted-accent bg-vetted-accent/5'
                   : 'border-vetted-border hover:border-vetted-text-muted'
               }`}
             >
-              <Sheet size={20} className={format === 'excel' ? 'text-accent' : 'text-vetted-text-muted'} />
+              <Sheet size={20} className={format === 'excel' ? 'text-vetted-accent' : 'text-vetted-text-muted'} />
               <div>
                 <div className="text-sm font-medium text-vetted-primary">Excel Spreadsheet</div>
                 <div className="text-xs text-vetted-text-muted">Edit tables and export as Excel</div>
@@ -112,7 +112,7 @@ export default function ExportModal({ isOpen, onClose, messages, chatTitle }: Ex
                   value={val}
                   checked={scope === val}
                   onChange={() => setScope(val)}
-                  className="accent-accent"
+                  className="accent-vetted-accent"
                 />
                 <span className="text-xs text-vetted-text-secondary">{scopeLabels[val]}</span>
               </label>
@@ -122,7 +122,7 @@ export default function ExportModal({ isOpen, onClose, messages, chatTitle }: Ex
           {/* Open editor button */}
           <button
             onClick={() => setPanelOpen(true)}
-            className="w-full py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
+            className="w-full py-2.5 rounded-lg bg-vetted-accent text-white text-sm font-medium hover:bg-vetted-accent-dark transition-colors"
           >
             Open Editor
           </button>

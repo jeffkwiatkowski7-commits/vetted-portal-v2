@@ -194,7 +194,8 @@ export async function exportTextToWord(
   }
 
   const doc = new Document({ sections: [{ children }] });
-  const blob = await Packer.toBlob(doc);
+  const rawBlob = await Packer.toBlob(doc);
+  const blob = new Blob([rawBlob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   downloadBlob(blob, `${sanitizeFilename(chatTitle)}-export.docx`);
 }
 
@@ -264,7 +265,8 @@ export async function exportToWord(
     sections: [{ children }],
   });
 
-  const blob = await Packer.toBlob(doc);
+  const rawBlob = await Packer.toBlob(doc);
+  const blob = new Blob([rawBlob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   downloadBlob(blob, `${sanitizeFilename(chatTitle)}-export.docx`);
 }
 

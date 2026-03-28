@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, Download } from 'lucide-react';
 import {
   ExportableMessage,
@@ -12,7 +12,6 @@ interface ExportPanelProps {
   isOpen: boolean;
   onClose: () => void;
   format: 'word' | 'excel';
-  scope: 'last' | 'all';
   messages: ExportableMessage[];
   chatTitle: string;
 }
@@ -20,9 +19,7 @@ interface ExportPanelProps {
 // ── Word Editor ──────────────────────────────────────────────────────────────
 
 function WordEditor({ messages, scope }: { messages: ExportableMessage[]; scope: 'last' | 'all' }) {
-  const editorRef = useRef<HTMLDivElement>(null);
-
-  const content = React.useMemo(() => {
+  const content = useMemo(() => {
     const msgs = scope === 'last'
       ? [messages.filter((m) => m.role === 'assistant').pop()].filter(Boolean) as ExportableMessage[]
       : messages;
@@ -39,7 +36,6 @@ function WordEditor({ messages, scope }: { messages: ExportableMessage[]; scope:
   return (
     <div className="flex-1 overflow-y-auto p-4">
       <div
-        ref={editorRef}
         contentEditable
         suppressContentEditableWarning
         className="min-h-full p-4 bg-white border border-vetted-border rounded-lg text-sm text-vetted-primary leading-relaxed whitespace-pre-wrap focus:outline-none focus:border-accent"
@@ -139,10 +135,11 @@ function ExcelEditor({
 
 // ── Main Panel ───────────────────────────────────────────────────────────────
 
-export default function ExportPanel({ isOpen, onClose, format, scope, messages, chatTitle }: ExportPanelProps) {
+export default function ExportPanel({ isOpen, onClose, format, messages, chatTitle }: ExportPanelProps) {
   const [exporting, setExporting] = useState(false);
+  const [scope, setScope] = useState<'last' | 'all'>('last');
   const [tables, setTables] = useState<ParsedTable[]>([]);
-  const editorRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // Build initial table data for Excel mode
   useEffect(() => {
@@ -171,8 +168,7 @@ export default function ExportPanel({ isOpen, onClose, format, scope, messages, 
     setExporting(true);
     try {
       if (format === 'word') {
-        // Get text from the contentEditable div
-        const editorEl = editorRef.current?.querySelector('[data-editor="word"]');
+        const editorEl = panelRef.current?.querySelector('[data-editor="word"]');
         const text = editorEl?.textContent || '';
         await exportTextToWord(text, chatTitle);
       } else {
@@ -185,6 +181,10 @@ export default function ExportPanel({ isOpen, onClose, format, scope, messages, 
 
   if (!isOpen) return null;
 
+  const wordScopeLabel = { last: 'Last AI response only', all: 'Entire conversation' };
+  const excelScopeLabel = { last: 'Last table only', all: 'All tables' };
+  const scopeLabels = format === 'word' ? wordScopeLabel : excelScopeLabel;
+
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       {/* Backdrop */}
@@ -192,7 +192,7 @@ export default function ExportPanel({ isOpen, onClose, format, scope, messages, 
 
       {/* Panel */}
       <div
-        ref={editorRef}
+        ref={panelRef}
         className="relative w-[520px] max-w-[90vw] h-full bg-vetted-surface flex flex-col shadow-xl animate-slide-in-right"
       >
         {/* Header */}
@@ -209,6 +209,24 @@ export default function ExportPanel({ isOpen, onClose, format, scope, messages, 
               ? 'Export to Word'
               : 'Export to Excel'}
           </button>
+
+          {/* Scope radio */}
+          <div className="flex items-center gap-3">
+            {(['last', 'all'] as const).map((val) => (
+              <label key={val} className="flex items-center gap-1 cursor-pointer">
+                <input
+                  type="radio"
+                  name="panel-scope"
+                  value={val}
+                  checked={scope === val}
+                  onChange={() => setScope(val)}
+                  className="accent-accent"
+                />
+                <span className="text-[11px] text-vetted-text-secondary">{scopeLabels[val]}</span>
+              </label>
+            ))}
+          </div>
+
           <button
             onClick={onClose}
             className="p-1.5 hover:bg-vetted-surface rounded-lg transition-colors"

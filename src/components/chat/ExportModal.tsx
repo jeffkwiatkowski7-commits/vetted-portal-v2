@@ -1,9 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { X, FileText, Sheet } from 'lucide-react';
-import {
-  ExportableMessage,
-  hasMarkdownTables,
-} from '../../utils/export';
+import { ExportableMessage } from '../../utils/export';
 import ExportPanel from './ExportPanel';
 
 interface ExportModalProps {
@@ -17,8 +14,6 @@ export default function ExportModal({ isOpen, onClose, messages, chatTitle }: Ex
   const [format, setFormat] = useState<'word' | 'excel'>('word');
   const [scope, setScope] = useState<'last' | 'all'>('last');
   const [panelOpen, setPanelOpen] = useState(false);
-
-  const hasTables = useMemo(() => hasMarkdownTables(messages), [messages]);
 
   if (!isOpen) return null;
 
@@ -70,7 +65,10 @@ export default function ExportModal({ isOpen, onClose, messages, chatTitle }: Ex
           <div className="space-y-2">
             {/* Word option */}
             <button
-              onClick={() => { setFormat('word'); setScope('last'); }}
+              onClick={() => {
+                if (format === 'word') { setPanelOpen(true); }
+                else { setFormat('word'); setScope('last'); }
+              }}
               className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
                 format === 'word'
                   ? 'border-accent bg-accent/5'
@@ -84,23 +82,24 @@ export default function ExportModal({ isOpen, onClose, messages, chatTitle }: Ex
               </div>
             </button>
 
-            {/* Excel option — only when tables exist */}
-            {hasTables && (
-              <button
-                onClick={() => { setFormat('excel'); setScope('last'); }}
-                className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
-                  format === 'excel'
-                    ? 'border-accent bg-accent/5'
-                    : 'border-vetted-border hover:border-vetted-text-muted'
-                }`}
-              >
-                <Sheet size={20} className={format === 'excel' ? 'text-accent' : 'text-vetted-text-muted'} />
-                <div>
-                  <div className="text-sm font-medium text-vetted-primary">Excel Spreadsheet</div>
-                  <div className="text-xs text-vetted-text-muted">Edit tables and export as Excel</div>
-                </div>
-              </button>
-            )}
+            {/* Excel option */}
+            <button
+              onClick={() => {
+                if (format === 'excel') { setPanelOpen(true); }
+                else { setFormat('excel'); setScope('last'); }
+              }}
+              className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
+                format === 'excel'
+                  ? 'border-accent bg-accent/5'
+                  : 'border-vetted-border hover:border-vetted-text-muted'
+              }`}
+            >
+              <Sheet size={20} className={format === 'excel' ? 'text-accent' : 'text-vetted-text-muted'} />
+              <div>
+                <div className="text-sm font-medium text-vetted-primary">Excel Spreadsheet</div>
+                <div className="text-xs text-vetted-text-muted">Edit tables and export as Excel</div>
+              </div>
+            </button>
           </div>
 
           {/* Scope radio */}

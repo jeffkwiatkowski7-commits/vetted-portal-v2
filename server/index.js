@@ -661,18 +661,16 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     aiContent = result.text;
     step('Response received');
   } catch (err) {
-    console.error('[chat] AI error:', err.message);
+    console.error('[chat] AI error:', err.message, err.stack);
     const msg = err.message || '';
-    if (msg.includes('invalid_grant') || msg.includes('invalid_rapt') || msg.includes('reauth') || msg.includes('Unable to authenticate')) {
-      aiContent = 'The AI service credentials have expired. Please ask your administrator to run `gcloud auth application-default login` on the server and restart the backend.';
+    if (msg.includes('invalid_grant') || msg.includes('invalid_rapt') || msg.includes('reauth') || msg.includes('Unable to authenticate') || msg.includes('401') || msg.includes('403')) {
+      aiContent = `The AI service could not authenticate. Check that the VM service account has the **Vertex AI User** role and the Vertex AI API is enabled on project \`${process.env.GCP_PROJECT || 'bill-leases'}\`.\n\nError: \`${msg.slice(0, 200)}\``;
     } else if (msg.includes('quota') || msg.includes('rate limit') || msg.includes('429')) {
       aiContent = 'The AI service is temporarily rate-limited. Please wait a moment and try again.';
-    } else if (msg.includes('not found') || msg.includes('404') || msg.includes('Claude API error 404')) {
-      aiContent = 'The AI model is not available in this environment. Please contact your administrator.';
-    } else if (msg.includes('Claude API error 401') || msg.includes('Claude API error 403')) {
-      aiContent = 'The AI service credentials have expired. Please ask your administrator to run `gcloud auth application-default login` on the server and restart the backend.';
+    } else if (msg.includes('not found') || msg.includes('404')) {
+      aiContent = `The AI model is not available. Check that \`${process.env.MODEL_ID || 'gemini-3.1-pro-preview'}\` exists in project \`${process.env.GCP_PROJECT || 'bill-leases'}\` (location: \`${process.env.GCP_LOCATION || 'global'}\`).\n\nError: \`${msg.slice(0, 200)}\``;
     } else {
-      aiContent = 'Sorry, I was unable to generate a response. Please try again.';
+      aiContent = `Sorry, I was unable to generate a response. Please try again.\n\nError: \`${msg.slice(0, 200)}\``;
     }
   }
 

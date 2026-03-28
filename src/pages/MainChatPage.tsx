@@ -593,20 +593,22 @@ export default function MainChatPage() {
             messages={messages}
             chatTitle={chats.find(c => c.id === chatId)?.title || 'Chat Export'}
           />
-          <div className="flex-1 relative">
-            {/* Export button — fixed over messages area */}
+          {/* Chat header bar */}
+          <div className="flex items-center justify-between px-6 py-2 border-b border-vetted-border">
+            <span className="text-sm font-medium text-vetted-primary">{firstName}</span>
             <button
               onClick={() => setExportOpen(true)}
-              className="absolute top-3 right-3 z-10 p-1.5 rounded-lg border border-vetted-border bg-white/80 backdrop-blur-sm text-vetted-text-muted hover:text-vetted-primary hover:border-vetted-primary transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-vetted-border bg-white text-xs text-vetted-text-secondary hover:text-vetted-primary hover:border-vetted-primary transition-colors"
               title="Export conversation"
             >
-              <Download size={15} />
+              <Download size={14} />
+              <span>Export</span>
             </button>
-            <div className="h-full overflow-y-auto">
-              <div className="max-w-[75%] mx-auto px-6 py-8 space-y-6">
-                {messages.map((msg, i) => <ChatBubble key={i} msg={msg} />)}
-                <div ref={messagesEndRef} />
-              </div>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-[75%] mx-auto px-6 py-8 space-y-6">
+              {messages.map((msg, i) => <ChatBubble key={i} msg={msg} />)}
+              <div ref={messagesEndRef} />
             </div>
           </div>
           <div className="px-4 pb-4 pt-2">

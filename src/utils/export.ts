@@ -1,4 +1,15 @@
 import ExcelJS from 'exceljs';
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  HeadingLevel,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+} from 'docx';
 
 // Minimal interface — works with both local ChatMessage and global Message types
 export interface ExportableMessage {
@@ -129,6 +140,255 @@ export async function exportToExcel(
     new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     `${sanitizeFilename(chatTitle)}-tables.xlsx`
   );
+}
+
+// ── Word export ──────────────────────────────────────────────────────────────
+
+/**
+ * Export messages as a .docx Word document.
+ * scope='last' -> only the last assistant message.
+ * scope='all'  -> entire conversation with role labels and timestamps.
+ */
+export async function exportToWord(
+  messages: ExportableMessage[],
+  scope: 'last' | 'all',
+  chatTitle: string
+): Promise<void> {
+  const children: (Paragraph | Table)[] = [];
+
+  // Title
+  children.push(
+    new Paragraph({
+      text: chatTitle,
+      heading: HeadingLevel.HEADING_1,
+      spacing: { after: 200 },
+    })
+  );
+
+  const exportMessages =
+    scope === 'last'
+      ? [messages.filter((m) => m.role === 'assistant').pop()].filter(Boolean) as ExportableMessage[]
+      : messages;
+
+  for (const msg of exportMessages) {
+    if (scope === 'all') {
+      const roleLabel = msg.role === 'user' ? 'You' : 'Assistant';
+      const time = msg.timestamp || msg.created_at || '';
+      const labelRuns: TextRun[] = [
+        new TextRun({ text: roleLabel, bold: true, size: 22 }),
+      ];
+      if (time) {
+        labelRuns.push(
+          new TextRun({ text: `  ${new Date(time).toLocaleString()}`, color: '888888', size: 18 })
+        );
+      }
+      children.push(new Paragraph({ children: labelRuns, spacing: { before: 300, after: 100 } }));
+    }
+
+    children.push(...markdownToDocx(msg.content));
+  }
+
+  const doc = new Document({
+    sections: [{ children }],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  downloadBlob(blob, `${sanitizeFilename(chatTitle)}-export.docx`);
+}
+
+/**
+ * Convert markdown text to an array of docx Paragraph/Table elements.
+ * Handles: headings, bold/italic, bullet lists, numbered lists, tables, code blocks, plain text.
+ */
+function markdownToDocx(text: string): (Paragraph | Table)[] {
+  const elements: (Paragraph | Table)[] = [];
+  const lines = text.split('\n');
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Code block
+    if (line.trim().startsWith('```')) {
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith('```')) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      i++; // skip closing ```
+      elements.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: codeLines.join('\n'),
+              font: 'JetBrains Mono',
+              size: 18,
+            }),
+          ],
+          shading: { type: 'clear' as any, color: 'auto', fill: 'F5F5F5' },
+          spacing: { before: 100, after: 100 },
+        })
+      );
+      continue;
+    }
+
+    // Markdown table block
+    if (line.trim().startsWith('|')) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith('|')) {
+        tableLines.push(lines[i]);
+        i++;
+      }
+      const parsed = parseTableBlock(tableLines);
+      if (parsed) {
+        elements.push(buildDocxTable(parsed));
+      }
+      continue;
+    }
+
+    // Heading
+    const headingMatch = line.match(/^(#{1,4})\s+(.*)/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const headingMap: Record<number, (typeof HeadingLevel)[keyof typeof HeadingLevel]> = {
+        1: HeadingLevel.HEADING_1,
+        2: HeadingLevel.HEADING_2,
+        3: HeadingLevel.HEADING_3,
+        4: HeadingLevel.HEADING_4,
+      };
+      elements.push(
+        new Paragraph({
+          text: headingMatch[2],
+          heading: headingMap[level] || HeadingLevel.HEADING_4,
+          spacing: { before: 200, after: 100 },
+        })
+      );
+      i++;
+      continue;
+    }
+
+    // Bullet list
+    if (/^\s*[-*]\s+/.test(line)) {
+      elements.push(
+        new Paragraph({
+          children: parseInlineFormatting(line.replace(/^\s*[-*]\s+/, '')),
+          bullet: { level: 0 },
+          spacing: { before: 40, after: 40 },
+        })
+      );
+      i++;
+      continue;
+    }
+
+    // Numbered list
+    const numberedMatch = line.match(/^\s*\d+\.\s+(.*)/);
+    if (numberedMatch) {
+      elements.push(
+        new Paragraph({
+          children: parseInlineFormatting(numberedMatch[1]),
+          numbering: { reference: 'default-numbering', level: 0 },
+          spacing: { before: 40, after: 40 },
+        })
+      );
+      i++;
+      continue;
+    }
+
+    // Empty line
+    if (line.trim() === '') {
+      i++;
+      continue;
+    }
+
+    // Plain text paragraph
+    elements.push(
+      new Paragraph({
+        children: parseInlineFormatting(line),
+        spacing: { before: 60, after: 60 },
+      })
+    );
+    i++;
+  }
+
+  return elements;
+}
+
+/**
+ * Parse inline markdown formatting (bold, italic, bold+italic, inline code) into TextRun[].
+ */
+function parseInlineFormatting(text: string): TextRun[] {
+  const runs: TextRun[] = [];
+  const regex = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|([^*`]+))/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match[2]) {
+      runs.push(new TextRun({ text: match[2], bold: true, italics: true }));
+    } else if (match[3]) {
+      runs.push(new TextRun({ text: match[3], bold: true }));
+    } else if (match[4]) {
+      runs.push(new TextRun({ text: match[4], italics: true }));
+    } else if (match[5]) {
+      runs.push(new TextRun({ text: match[5], font: 'JetBrains Mono', size: 18 }));
+    } else if (match[6]) {
+      runs.push(new TextRun({ text: match[6] }));
+    }
+  }
+
+  return runs.length > 0 ? runs : [new TextRun({ text })];
+}
+
+/**
+ * Parse a block of table lines into headers + rows.
+ */
+function parseTableBlock(lines: string[]): ParsedTable | null {
+  const sepIdx = lines.findIndex((l) => /^\|[\s\-:|]+\|$/.test(l.trim()));
+  if (sepIdx < 1) return null;
+
+  const parseRow = (line: string): string[] =>
+    line.split('|').slice(1, -1).map((c) => c.trim());
+
+  const headers = parseRow(lines[sepIdx - 1]);
+  const rows: string[][] = [];
+  for (let i = sepIdx + 1; i < lines.length; i++) {
+    const cells = parseRow(lines[i]);
+    if (cells.length > 0) rows.push(cells);
+  }
+  return headers.length > 0 && rows.length > 0 ? { headers, rows } : null;
+}
+
+/**
+ * Build a docx Table from parsed table data.
+ */
+function buildDocxTable(table: ParsedTable): Table {
+  const headerRow = new TableRow({
+    tableHeader: true,
+    children: table.headers.map(
+      (h) =>
+        new TableCell({
+          children: [new Paragraph({ children: [new TextRun({ text: h, bold: true })] })],
+          shading: { type: 'clear' as any, color: 'auto', fill: 'F5F0E6' },
+        })
+    ),
+  });
+
+  const dataRows = table.rows.map(
+    (row) =>
+      new TableRow({
+        children: row.map(
+          (cell) =>
+            new TableCell({
+              children: [new Paragraph({ text: cell })],
+            })
+        ),
+      })
+  );
+
+  return new Table({
+    rows: [headerRow, ...dataRows],
+    width: { size: 100, type: WidthType.PERCENTAGE },
+  });
 }
 
 // ── Shared helpers ───────────────────────────────────────────────────────────

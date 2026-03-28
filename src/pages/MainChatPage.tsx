@@ -355,15 +355,18 @@ export default function MainChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Track whether we're mid-send so navigation after chat creation doesn't clobber messages
+  const sendingRef = useRef(false);
+
   // Load existing chat when navigating to /chat/:id
-  // Skip if we already have this chatId (e.g. just created it)
   useEffect(() => {
     if (!id) {
       setMessages([]);
       setChatId(null);
       return;
     }
-    if (chatId === id) return; // already active, don't overwrite local state
+    // Skip re-fetch if we just created this chat via send
+    if (sendingRef.current && chatId === id) return;
     setChatId(id);
     api.chats.get(id)
       .then((chat: any) => {
@@ -404,6 +407,7 @@ export default function MainChatPage() {
     setInput('');
     setPendingFiles([]);
     setChatting(true);
+    sendingRef.current = true;
 
     // Resolve or create chatId
     let activeChatId = chatId;
@@ -468,6 +472,7 @@ export default function MainChatPage() {
       });
     } finally {
       setChatting(false);
+      sendingRef.current = false;
     }
   };
 

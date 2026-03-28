@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, Loader2, Paperclip, X, ChevronDown, ChevronUp, Check } from 'lucide-react';
+import { Send, Loader2, Paperclip, X, ChevronDown, ChevronUp, Check, Download } from 'lucide-react';
 import LibraryPickerModal from '../components/chat/LibraryPickerModal';
+import ExportModal from '../components/chat/ExportModal';
 import { LibraryFile } from '../types';
 
 // ── Model icon (matches ChatInput) ───────────────────────────────────────────
@@ -333,6 +334,7 @@ export default function MainChatPage() {
   }, []);
 
   const [modelOpen, setModelOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const attachButtonRef = useRef<HTMLButtonElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
@@ -585,7 +587,21 @@ export default function MainChatPage() {
       ) : (
         /* State 2: active — messages + bottom-docked input */
         <>
-          <div className="flex-1 overflow-y-auto">
+          <ExportModal
+            isOpen={exportOpen}
+            onClose={() => setExportOpen(false)}
+            messages={messages}
+            chatTitle={chats.find(c => c.id === chatId)?.title || 'Chat Export'}
+          />
+          <div className="flex-1 overflow-y-auto relative">
+            {/* Export button — top-right of messages area */}
+            <button
+              onClick={() => setExportOpen(true)}
+              className="absolute top-3 right-3 z-10 p-1.5 rounded-lg border border-vetted-border bg-white/80 backdrop-blur-sm text-vetted-text-muted hover:text-vetted-primary hover:border-vetted-primary transition-colors"
+              title="Export conversation"
+            >
+              <Download size={15} />
+            </button>
             <div className="max-w-[75%] mx-auto px-6 py-8 space-y-6">
               {messages.map((msg, i) => <ChatBubble key={i} msg={msg} />)}
               <div ref={messagesEndRef} />

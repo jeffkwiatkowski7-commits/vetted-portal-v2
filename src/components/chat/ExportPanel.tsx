@@ -12,6 +12,7 @@ interface ExportPanelProps {
   isOpen: boolean;
   onClose: () => void;
   format: 'word' | 'excel';
+  scope: 'last' | 'all';
   messages: ExportableMessage[];
   chatTitle: string;
 }
@@ -135,9 +136,8 @@ function ExcelEditor({
 
 // ── Main Panel ───────────────────────────────────────────────────────────────
 
-export default function ExportPanel({ isOpen, onClose, format, messages, chatTitle }: ExportPanelProps) {
+export default function ExportPanel({ isOpen, onClose, format, scope, messages, chatTitle }: ExportPanelProps) {
   const [exporting, setExporting] = useState(false);
-  const [scope, setScope] = useState<'last' | 'all'>('last');
   const [tables, setTables] = useState<ParsedTable[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -181,10 +181,6 @@ export default function ExportPanel({ isOpen, onClose, format, messages, chatTit
 
   if (!isOpen) return null;
 
-  const wordScopeLabel = { last: 'Last AI response only', all: 'Entire conversation' };
-  const excelScopeLabel = { last: 'Last table only', all: 'All tables' };
-  const scopeLabels = format === 'word' ? wordScopeLabel : excelScopeLabel;
-
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       {/* Backdrop */}
@@ -209,23 +205,6 @@ export default function ExportPanel({ isOpen, onClose, format, messages, chatTit
               ? 'Export to Word'
               : 'Export to Excel'}
           </button>
-
-          {/* Scope radio */}
-          <div className="flex items-center gap-3">
-            {(['last', 'all'] as const).map((val) => (
-              <label key={val} className="flex items-center gap-1 cursor-pointer">
-                <input
-                  type="radio"
-                  name="panel-scope"
-                  value={val}
-                  checked={scope === val}
-                  onChange={() => setScope(val)}
-                  className="accent-accent"
-                />
-                <span className="text-[11px] text-vetted-text-secondary">{scopeLabels[val]}</span>
-              </label>
-            ))}
-          </div>
 
           <button
             onClick={onClose}

@@ -14,27 +14,34 @@ interface ExportModalProps {
 }
 
 export default function ExportModal({ isOpen, onClose, messages, chatTitle }: ExportModalProps) {
-  const [panelFormat, setPanelFormat] = useState<'word' | 'excel' | null>(null);
+  const [format, setFormat] = useState<'word' | 'excel'>('word');
+  const [scope, setScope] = useState<'last' | 'all'>('last');
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const hasTables = useMemo(() => hasMarkdownTables(messages), [messages]);
 
   if (!isOpen) return null;
 
   // If panel is open, show the panel instead of the modal
-  if (panelFormat) {
+  if (panelOpen) {
     return (
       <ExportPanel
         isOpen
         onClose={() => {
-          setPanelFormat(null);
+          setPanelOpen(false);
           onClose();
         }}
-        format={panelFormat}
+        format={format}
+        scope={scope}
         messages={messages}
         chatTitle={chatTitle}
       />
     );
   }
+
+  const wordScopeLabel = { last: 'Last AI response only', all: 'Entire conversation' };
+  const excelScopeLabel = { last: 'Last table only', all: 'All tables' };
+  const scopeLabels = format === 'word' ? wordScopeLabel : excelScopeLabel;
 
   return (
     <div
@@ -47,7 +54,7 @@ export default function ExportModal({ isOpen, onClose, messages, chatTitle }: Ex
           <div>
             <h2 className="text-lg font-serif text-vetted-primary">Choose Export Format</h2>
             <p className="text-xs text-vetted-text-muted mt-0.5">
-              Select the format to open the editor
+              Select format and scope, then open the editor
             </p>
           </div>
           <button
@@ -58,32 +65,68 @@ export default function ExportModal({ isOpen, onClose, messages, chatTitle }: Ex
           </button>
         </div>
 
-        <div className="px-6 pb-5 space-y-2">
-          {/* Word option — click opens panel */}
-          <button
-            onClick={() => setPanelFormat('word')}
-            className="w-full flex items-center gap-3 p-3 rounded-lg border border-vetted-border hover:border-accent hover:bg-accent/5 transition-colors text-left"
-          >
-            <FileText size={20} className="text-vetted-text-muted" />
-            <div>
-              <div className="text-sm font-medium text-vetted-primary">Word Document</div>
-              <div className="text-xs text-vetted-text-muted">Edit and export as Word document</div>
-            </div>
-          </button>
-
-          {/* Excel option — click opens panel (only when tables exist) */}
-          {hasTables && (
+        <div className="px-6 pb-5 space-y-4">
+          {/* Format selection */}
+          <div className="space-y-2">
+            {/* Word option */}
             <button
-              onClick={() => setPanelFormat('excel')}
-              className="w-full flex items-center gap-3 p-3 rounded-lg border border-vetted-border hover:border-accent hover:bg-accent/5 transition-colors text-left"
+              onClick={() => { setFormat('word'); setScope('last'); }}
+              className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
+                format === 'word'
+                  ? 'border-accent bg-accent/5'
+                  : 'border-vetted-border hover:border-vetted-text-muted'
+              }`}
             >
-              <Sheet size={20} className="text-vetted-text-muted" />
+              <FileText size={20} className={format === 'word' ? 'text-accent' : 'text-vetted-text-muted'} />
               <div>
-                <div className="text-sm font-medium text-vetted-primary">Excel Spreadsheet</div>
-                <div className="text-xs text-vetted-text-muted">Edit tables and export as Excel</div>
+                <div className="text-sm font-medium text-vetted-primary">Word Document</div>
+                <div className="text-xs text-vetted-text-muted">Edit and export as Word document</div>
               </div>
             </button>
-          )}
+
+            {/* Excel option — only when tables exist */}
+            {hasTables && (
+              <button
+                onClick={() => { setFormat('excel'); setScope('last'); }}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
+                  format === 'excel'
+                    ? 'border-accent bg-accent/5'
+                    : 'border-vetted-border hover:border-vetted-text-muted'
+                }`}
+              >
+                <Sheet size={20} className={format === 'excel' ? 'text-accent' : 'text-vetted-text-muted'} />
+                <div>
+                  <div className="text-sm font-medium text-vetted-primary">Excel Spreadsheet</div>
+                  <div className="text-xs text-vetted-text-muted">Edit tables and export as Excel</div>
+                </div>
+              </button>
+            )}
+          </div>
+
+          {/* Scope radio */}
+          <div className="flex items-center gap-4 pl-1">
+            {(['last', 'all'] as const).map((val) => (
+              <label key={val} className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="scope"
+                  value={val}
+                  checked={scope === val}
+                  onChange={() => setScope(val)}
+                  className="accent-accent"
+                />
+                <span className="text-xs text-vetted-text-secondary">{scopeLabels[val]}</span>
+              </label>
+            ))}
+          </div>
+
+          {/* Open editor button */}
+          <button
+            onClick={() => setPanelOpen(true)}
+            className="w-full py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
+          >
+            Open Editor
+          </button>
         </div>
       </div>
     </div>

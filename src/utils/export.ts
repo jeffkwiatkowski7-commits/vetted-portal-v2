@@ -21,7 +21,7 @@ export interface ExportableMessage {
 
 // ── Table detection ──────────────────────────────────────────────────────────
 
-interface ParsedTable {
+export interface ParsedTable {
   headers: string[];
   rows: string[][];
 }
@@ -39,7 +39,7 @@ export function hasMarkdownTables(messages: ExportableMessage[]): boolean {
  * Extract all markdown tables from a string.
  * A table is consecutive lines starting with `|` that include a separator row (--|--).
  */
-function extractTables(text: string): ParsedTable[] {
+export function extractTables(text: string): ParsedTable[] {
   const lines = text.split('\n');
   const tables: ParsedTable[] = [];
   let block: string[] = [];
@@ -140,6 +140,62 @@ export async function exportToExcel(
     new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     `${sanitizeFilename(chatTitle)}-tables.xlsx`
   );
+}
+
+/**
+ * Export pre-built table data as .xlsx (used by ExportPanel with edited cells).
+ */
+export async function exportTablesToExcel(
+  tables: ParsedTable[],
+  chatTitle: string
+): Promise<void> {
+  if (tables.length === 0) return;
+  const workbook = new ExcelJS.Workbook();
+
+  tables.forEach((table, idx) => {
+    const sheet = workbook.addWorksheet(`Table ${idx + 1}`);
+    const headerRow = sheet.addRow(table.headers);
+    headerRow.font = { bold: true };
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F0E6' } };
+    });
+    for (const row of table.rows) { sheet.addRow(row); }
+    sheet.columns.forEach((col) => {
+      let maxLen = 10;
+      col.eachCell?.({ includeEmpty: false }, (cell) => {
+        const len = String(cell.value ?? '').length;
+        if (len > maxLen) maxLen = len;
+      });
+      col.width = Math.min(maxLen + 2, 50);
+    });
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  downloadBlob(
+    new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    `${sanitizeFilename(chatTitle)}-tables.xlsx`
+  );
+}
+
+/**
+ * Export plain text content as a .docx Word document (used by ExportPanel with edited content).
+ */
+export async function exportTextToWord(
+  text: string,
+  chatTitle: string
+): Promise<void> {
+  const children: (Paragraph | Table)[] = [];
+  children.push(new Paragraph({ text: chatTitle, heading: HeadingLevel.HEADING_1, spacing: { after: 200 } }));
+
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (line.trim() === '') continue;
+    children.push(new Paragraph({ text: line, spacing: { before: 60, after: 60 } }));
+  }
+
+  const doc = new Document({ sections: [{ children }] });
+  const blob = await Packer.toBlob(doc);
+  downloadBlob(blob, `${sanitizeFilename(chatTitle)}-export.docx`);
 }
 
 // ── Word export ──────────────────────────────────────────────────────────────

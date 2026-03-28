@@ -3,9 +3,8 @@ import { X, FileText, Sheet } from 'lucide-react';
 import {
   ExportableMessage,
   hasMarkdownTables,
-  exportToWord,
-  exportToExcel,
 } from '../../utils/export';
+import ExportPanel from './ExportPanel';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -17,24 +16,31 @@ interface ExportModalProps {
 export default function ExportModal({ isOpen, onClose, messages, chatTitle }: ExportModalProps) {
   const [format, setFormat] = useState<'word' | 'excel'>('word');
   const [scope, setScope] = useState<'last' | 'all'>('last');
-  const [exporting, setExporting] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const hasTables = useMemo(() => hasMarkdownTables(messages), [messages]);
 
   if (!isOpen) return null;
 
-  const handleExport = async () => {
-    setExporting(true);
-    try {
-      if (format === 'word') {
-        await exportToWord(messages, scope, chatTitle);
-      } else {
-        await exportToExcel(messages, scope, chatTitle);
-      }
-    } finally {
-      setExporting(false);
-      onClose();
-    }
+  // If panel is open, show the panel instead of the modal
+  if (panelOpen) {
+    return (
+      <ExportPanel
+        isOpen
+        onClose={() => {
+          setPanelOpen(false);
+          onClose();
+        }}
+        format={format}
+        scope={scope}
+        messages={messages}
+        chatTitle={chatTitle}
+      />
+    );
+  }
+
+  const handleOpen = () => {
+    setPanelOpen(true);
   };
 
   const wordScopeLabel = { last: 'Last AI response only', all: 'Entire conversation' };
@@ -118,13 +124,12 @@ export default function ExportModal({ isOpen, onClose, messages, chatTitle }: Ex
             ))}
           </div>
 
-          {/* Export button */}
+          {/* Open editor button */}
           <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="w-full py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors disabled:opacity-50"
+            onClick={handleOpen}
+            className="w-full py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
           >
-            {exporting ? 'Exporting...' : 'Export'}
+            Open Editor
           </button>
         </div>
       </div>

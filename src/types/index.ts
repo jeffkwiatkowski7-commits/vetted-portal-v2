@@ -23,6 +23,7 @@ export interface Chat {
   is_shared: number;
   created_at: string;
   updated_at: string;
+  mcp_servers?: string;  // JSON array of mcp_server IDs
   messages?: Message[];
   shared_by?: string;
   permission?: string;
@@ -56,6 +57,7 @@ export interface Project {
   system_prompt?: string;
   temperature: number;
   tool_sets?: string;
+  mcp_servers?: string;  // JSON array of mcp_server IDs
   status: string;
   created_at: string;
   updated_at: string;
@@ -295,6 +297,19 @@ export interface LeaseChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+}
+
+export interface McpServer {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  command: string;
+  args: string;      // JSON array
+  env_vars: string;  // JSON object
+  enabled: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface LeaseDashboardStats {

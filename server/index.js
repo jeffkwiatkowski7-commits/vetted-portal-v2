@@ -145,6 +145,15 @@ async function runMigrations(db) {
     console.log('Migration: added Gemini 3.1 model');
   }
 
+  // Ensure only Gemini 3.1 is the default model (fix duplicate defaults)
+  const defaultCount = dbGet(db, "SELECT COUNT(*) as cnt FROM model_configs WHERE is_default = 1");
+  if (defaultCount && defaultCount.cnt > 1) {
+    const now = new Date().toISOString();
+    dbRun(db, "UPDATE model_configs SET is_default = 0, updated_at = ? WHERE is_default = 1", [now]);
+    dbRun(db, "UPDATE model_configs SET is_default = 1, updated_at = ? WHERE id = 'gemini-3-1-pro' OR display_name = 'Gemini 3.1'", [now]);
+    console.log('Migration: fixed duplicate default models — set Gemini 3.1 as sole default');
+  }
+
   // Ensure Gemini 2.5 Flash model exists in model_configs
   const flashModel = dbGet(db, "SELECT id FROM model_configs WHERE id = 'gemini-2-5-flash'");
   if (!flashModel) {
@@ -1600,6 +1609,12 @@ app.put('/api/admin/models/:id', requireAuth, requireAdmin, (req, res) => {
   }
 
   const now = new Date().toISOString();
+
+  // If setting this model as default, unset all others first
+  if (is_default) {
+    dbRun(db, 'UPDATE model_configs SET is_default = 0, updated_at = ? WHERE is_default = 1', [now]);
+  }
+
   dbRun(db, `
     UPDATE model_configs
     SET is_enabled = ?, is_default = ?, max_tokens = ?, rate_limit = ?, display_name = ?, model_name = ?, provider = ?, icon_color = ?, updated_at = ?

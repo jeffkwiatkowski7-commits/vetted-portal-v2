@@ -354,6 +354,7 @@ export default function MainChatPage() {
   const attachButtonRef = useRef<HTMLButtonElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const mcpButtonRef = useRef<HTMLButtonElement>(null);
+  const mcpPopoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { api.mcpServers.list().then(setMcpServers).catch(() => {}); }, []);
 
@@ -379,7 +380,11 @@ export default function MainChatPage() {
   useEffect(() => {
     if (!showMcpPicker) return;
     const handler = (e: MouseEvent) => {
-      if (mcpButtonRef.current && !mcpButtonRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        mcpButtonRef.current && !mcpButtonRef.current.contains(target) &&
+        mcpPopoverRef.current && !mcpPopoverRef.current.contains(target)
+      ) {
         setShowMcpPicker(false);
       }
     };
@@ -583,7 +588,7 @@ export default function MainChatPage() {
             )}
           </button>
           {showMcpPicker && (
-            <div className="absolute bottom-full left-0 mb-2 w-80 bg-white border border-vetted-border rounded-xl shadow-lg z-50 overflow-hidden">
+            <div ref={mcpPopoverRef} className="absolute bottom-full left-0 mb-2 w-80 bg-white border border-vetted-border rounded-xl shadow-lg z-50 overflow-hidden">
               <div className="px-4 py-3 border-b border-vetted-border">
                 <p className="text-sm font-medium text-vetted-primary">AI Tools</p>
               </div>

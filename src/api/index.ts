@@ -78,16 +78,30 @@ export const chats = {
     onStep: (step: { message: string; ts: string }) => void,
   ): Promise<any> =>
     new Promise(async (resolve, reject) => {
+      const controller = new AbortController();
+      // 3-minute overall timeout for the entire stream
+      const timeout = setTimeout(() => {
+        controller.abort();
+        reject(new Error('Request timed out — the AI took too long to respond'));
+      }, 180000);
+      let settled = false;
+      const settle = (fn: typeof resolve, val: any) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        fn(val);
+      };
       try {
         const userId = localStorage.getItem('userId') || '';
         const res = await fetch(`${BASE}/chats/${id}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
           body: JSON.stringify(data),
+          signal: controller.signal,
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: 'Request failed' }));
-          return reject(new Error(err.error || `HTTP ${res.status}`));
+          return settle(reject, new Error(err.error || `HTTP ${res.status}`));
         }
         const reader = res.body!.getReader();
         const decoder = new TextDecoder();
@@ -100,14 +114,21 @@ export const chats = {
           buffer = lines.pop()!;
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
-            const event = JSON.parse(line.slice(6));
-            if (event.type === 'step') onStep({ message: event.message, ts: event.ts });
-            else if (event.type === 'done') resolve(event);
-            else if (event.type === 'error') reject(new Error(event.message));
+            try {
+              const event = JSON.parse(line.slice(6));
+              if (event.type === 'step') onStep({ message: event.message, ts: event.ts });
+              else if (event.type === 'done') return settle(resolve, event);
+              else if (event.type === 'error') return settle(reject, new Error(event.message));
+            } catch {
+              // skip malformed SSE lines
+            }
           }
         }
-      } catch (err) {
-        reject(err);
+        // Stream ended without a done event — connection was likely dropped
+        if (!settled) settle(reject, new Error('Connection lost — please try again'));
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return; // timeout already rejected
+        settle(reject, err);
       }
     }),
   share: (id: string, data: any) => request(`/chats/${id}/share`, { method: 'POST', body: JSON.stringify(data) }),
@@ -256,6 +277,18 @@ export const projectFiles = {
     onStep: (step: { message: string; ts: string }) => void,
   ): Promise<any> =>
     new Promise(async (resolve, reject) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => {
+        controller.abort();
+        reject(new Error('Upload timed out'));
+      }, 300000); // 5 min for file indexing
+      let settled = false;
+      const settle = (fn: typeof resolve, val: any) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        fn(val);
+      };
       try {
         const userId = localStorage.getItem('userId') || '';
         const formData = new FormData();
@@ -265,11 +298,12 @@ export const projectFiles = {
           method: 'POST',
           headers: { 'X-User-Id': userId },
           body: formData,
+          signal: controller.signal,
         });
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: 'Upload failed' }));
-          return reject(new Error(err.error || `HTTP ${res.status}`));
+          return settle(reject, new Error(err.error || `HTTP ${res.status}`));
         }
 
         const reader = res.body!.getReader();
@@ -283,14 +317,20 @@ export const projectFiles = {
           buffer = lines.pop()!;
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
-            const event = JSON.parse(line.slice(6));
-            if (event.type === 'step') onStep({ message: event.message, ts: event.ts });
-            else if (event.type === 'done') resolve(event);
-            else if (event.type === 'error') reject(new Error(event.message));
+            try {
+              const event = JSON.parse(line.slice(6));
+              if (event.type === 'step') onStep({ message: event.message, ts: event.ts });
+              else if (event.type === 'done') return settle(resolve, event);
+              else if (event.type === 'error') return settle(reject, new Error(event.message));
+            } catch {
+              // skip malformed SSE lines
+            }
           }
         }
-      } catch (err) {
-        reject(err);
+        if (!settled) settle(reject, new Error('Connection lost — please try again'));
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+        settle(reject, err);
       }
     }),
 };

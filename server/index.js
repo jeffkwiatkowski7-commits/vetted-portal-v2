@@ -434,6 +434,10 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
 
   const sendEvent = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
+  // Send a heartbeat comment every 15s to keep the SSE connection alive through proxies
+  const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 15000);
+  req.on('close', () => clearInterval(heartbeat));
+
   const now = new Date().toISOString();
 
   // Save user message
@@ -724,6 +728,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     console.error('[chat] DB error after AI response:', err.message);
   }
 
+  clearInterval(heartbeat);
   // Send minimal done — frontend fetches full messages via API
   res.write(`data: {"type":"done","chatId":"${req.params.id}"}\n\n`);
   res.end();
@@ -1221,6 +1226,8 @@ app.post('/api/projects/:id/files/upload', requireAuth, memoryUpload.single('fil
 
   const sendEvent = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
   const step = (msg) => sendEvent({ type: 'step', message: msg, ts: new Date().toISOString() });
+  const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 15000);
+  req.on('close', () => clearInterval(heartbeat));
 
   const fileId = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -1252,6 +1259,7 @@ app.post('/api/projects/:id/files/upload', requireAuth, memoryUpload.single('fil
     sendEvent({ type: 'error', message: err.message || 'Indexing failed' });
   }
 
+  clearInterval(heartbeat);
   res.end();
 });
 
@@ -1266,6 +1274,8 @@ app.post('/api/projects/:id/files/:fileId/reindex', requireAuth, async (req, res
 
   const sendEvent = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
   const step = (msg) => sendEvent({ type: 'step', message: msg, ts: new Date().toISOString() });
+  const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 15000);
+  req.on('close', () => clearInterval(heartbeat));
 
   try {
     dbRun(db, 'UPDATE library_files SET index_status = ? WHERE id = ?', ['indexing', file.id]);
@@ -1286,6 +1296,7 @@ app.post('/api/projects/:id/files/:fileId/reindex', requireAuth, async (req, res
     dbRun(db, 'UPDATE library_files SET index_status = ? WHERE id = ?', ['error', file.id]);
     sendEvent({ type: 'error', message: err.message || 'Re-indexing failed' });
   }
+  clearInterval(heartbeat);
   res.end();
 });
 

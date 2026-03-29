@@ -10,6 +10,7 @@ interface Stats {
   total_projects?: number;
   total_library_files?: number;
   tool_sets?: number;
+  mcp_servers?: number;
   models?: number;
   system_prompts?: number;
 }
@@ -65,7 +66,7 @@ export default function AdminPage() {
   const resourceCards = [
     {
       label: 'MCP Servers',
-      count: stats?.tool_sets || 0,
+      count: stats?.mcp_servers || 0,
       icon: Wrench,
       path: '/admin/tool-sets',
     },

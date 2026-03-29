@@ -33,6 +33,7 @@ export default function Sidebar() {
     demoActive,
     setDemoActive,
     setChatAttachedFiles,
+    setPendingProjectId,
   } = useStore();
   const [contextMenu, setContextMenu] = useState<{ chatId: string; x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -44,10 +45,29 @@ export default function Sidebar() {
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
 
+  // Detect project context: either viewing a project chat or on a /projects/:id page
+  const projectRouteMatch = location.pathname.match(/^\/projects\/([^/]+)/);
+  const currentProjectId = activeChat?.project_id || (projectRouteMatch ? projectRouteMatch[1] : null);
+  const isInProjectChat = !!currentProjectId;
+
   const handleNewChat = () => {
     setChatAttachedFiles([]);
     setActiveChat(null);
-    navigate('/');
+    if (isInProjectChat) {
+      // Stay on the project page — just clear the chat to start fresh
+      if (projectRouteMatch) {
+        // Already on /projects/:id, just clearing activeChat is enough
+        // Force re-render by navigating to the same project
+        navigate(`/projects/${currentProjectId}`, { replace: true });
+      } else {
+        // On /chat/:id with a project chat — go to the project page
+        setPendingProjectId(null);
+        navigate(`/projects/${currentProjectId}`);
+      }
+    } else {
+      setPendingProjectId(null);
+      navigate('/');
+    }
   };
 
   const handleRenameChat = async (chatId: string) => {
@@ -112,11 +132,11 @@ export default function Sidebar() {
       <div className="px-3 pb-1">
         <button
           onClick={handleNewChat}
-          title={sidebarCollapsed ? 'New Chat' : ''}
+          title={sidebarCollapsed ? (isInProjectChat ? 'New Chat (Projects)' : 'New Chat') : ''}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors border-l-4 border-l-transparent text-vetted-text-secondary hover:bg-white hover:bg-opacity-50"
         >
           <Plus size={16} />
-          {!sidebarCollapsed && <span className="text-sm">New Chat</span>}
+          {!sidebarCollapsed && <span className="text-sm">{isInProjectChat ? 'New Chat (Projects)' : 'New Chat'}</span>}
         </button>
       </div>
 

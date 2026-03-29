@@ -68,6 +68,10 @@ interface AppState {
   toggleRightPanel: () => void;
   setRightPanelOpen: (open: boolean) => void;
 
+  // Pending project context for "New Chat (Projects)"
+  pendingProjectId: string | null;
+  setPendingProjectId: (id: string | null) => void;
+
   // Chat attached files (queued for next message)
   chatAttachedFiles: LibraryFile[];
   setChatAttachedFiles: (files: LibraryFile[]) => void;
@@ -158,6 +162,10 @@ export const useStore = create<AppState>((set, get) => ({
   rightPanelOpen: false,
   toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
   setRightPanelOpen: (open) => set({ rightPanelOpen: open }),
+
+  // Pending project context
+  pendingProjectId: null,
+  setPendingProjectId: (id) => set({ pendingProjectId: id }),
 
   // Chat attached files
   chatAttachedFiles: [],

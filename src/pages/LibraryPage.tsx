@@ -23,6 +23,8 @@ export default function LibraryPage() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'date'>('date');
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadFileName, setUploadFileName] = useState('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -49,19 +51,28 @@ export default function LibraryPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setUploadFileName(file.name);
+    setUploadProgress(0);
+
     try {
-      await api.library.upload(file);
+      await api.library.upload(file, undefined, (percent) => {
+        setUploadProgress(percent);
+      });
+      setUploadProgress(100);
+      setTimeout(() => setUploadProgress(null), 1500);
       loadFiles();
       addToast({
         type: 'success',
         title: 'File uploaded',
       });
     } catch (err) {
+      setUploadProgress(null);
       addToast({
         type: 'error',
         title: 'Upload failed',
       });
     }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDelete = async (fileId: string) => {
@@ -168,7 +179,8 @@ export default function LibraryPage() {
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="btn-primary flex items-center gap-2"
+            disabled={uploadProgress !== null && uploadProgress < 100}
+            className="btn-primary flex items-center gap-2 disabled:opacity-50"
           >
             <Upload size={18} />
             Upload
@@ -180,6 +192,26 @@ export default function LibraryPage() {
             hidden
           />
         </div>
+
+        {/* Upload Progress */}
+        {uploadProgress !== null && (
+          <div className="bg-vetted-surface rounded-lg p-4 border border-vetted-border">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-vetted-primary truncate mr-4">
+                {uploadProgress < 100 ? 'Uploading' : 'Complete'}: {uploadFileName}
+              </span>
+              <span className="text-sm font-medium text-vetted-accent whitespace-nowrap">
+                {Math.round(uploadProgress)}%
+              </span>
+            </div>
+            <div className="bg-vetted-border rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-vetted-accent h-full rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bulk Actions */}

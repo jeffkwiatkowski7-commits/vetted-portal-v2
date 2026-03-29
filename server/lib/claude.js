@@ -9,6 +9,7 @@
  */
 import { AnthropicVertex } from "@anthropic-ai/vertex-sdk";
 import { config } from "./config.js";
+import { tavilySearch, hasTavily } from "./tavily.js";
 
 const MAX_TOKENS = 8192;
 const MAX_SEARCH_ITERATIONS = 5;
@@ -25,32 +26,9 @@ function getClient() {
   return _client;
 }
 
-// ── Tavily search ─────────────────────────────────────────────────────
-
-async function tavilySearch(query) {
-  const apiKey = process.env.TAVILY_API_KEY;
-  if (!apiKey) return null;
-  const res = await fetch("https://api.tavily.com/search", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      api_key: apiKey,
-      query,
-      search_depth: "basic",
-      max_results: 5,
-    }),
-  });
-  if (!res.ok) { console.warn("[claude] Tavily search failed:", res.status); return null; }
-  const data = await res.json();
-  const results = (data.results || [])
-    .map((r) => `**${r.title}** (${r.url})\n${r.content}`)
-    .join("\n\n");
-  return results || null;
-}
-
 // ── Agentic tool-use loop ─────────────────────────────────────────────
 
-const TOOLS_DEF = process.env.TAVILY_API_KEY
+const TOOLS_DEF = hasTavily()
   ? [
       {
         name: "web_search",
@@ -71,7 +49,7 @@ const TOOLS_DEF = process.env.TAVILY_API_KEY
  * Run Claude with optional tool-use loop.
  * Returns { text, searchQueries }.
  */
-async function runWithTools(system, messages, useSearch) {
+async function runWithTools(system, messages, useSearch, onStep = null) {
   const searchQueries = [];
   const client = getClient();
 
@@ -112,6 +90,7 @@ async function runWithTools(system, messages, useSearch) {
         const query = block.input?.query || "";
         searchQueries.push(query);
         console.log("[claude] web search:", query);
+        if (onStep) onStep(`Web search: "${query}"`);
         const result = await tavilySearch(query);
         toolResults.push({
           type: "tool_result",
@@ -209,7 +188,7 @@ CRITICAL table formatting rules:
  * General document Q&A / project chat.
  * Mirrors gemini.js chatWithDocuments signature.
  */
-export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null) {
+export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null) {
   const textDocs = docs.filter((d) => d.text !== undefined);
   const pdfDocs = docs.filter((d) => d.base64 !== undefined);
 
@@ -261,7 +240,7 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
     messages.push({ role: "user", content: userMessage });
   }
 
-  return runWithTools(system, messages, true);
+  return runWithTools(system, messages, true, onStep);
 }
 
 /**

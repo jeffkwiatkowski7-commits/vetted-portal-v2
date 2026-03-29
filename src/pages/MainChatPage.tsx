@@ -305,7 +305,7 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
 export default function MainChatPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, chats, setChats } = useStore();
+  const { user, chats, setChats, pendingProjectId, setPendingProjectId } = useStore();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -413,11 +413,14 @@ export default function MainChatPage() {
     let activeChatId = chatId;
     if (!activeChatId) {
       try {
-        const newChat = await api.chats.create({ title: text.slice(0, 60), model: selectedModel?.value || 'gemini' });
+        const createData: any = { title: text.slice(0, 60), model: selectedModel?.value || 'gemini' };
+        if (pendingProjectId) createData.project_id = pendingProjectId;
+        const newChat = await api.chats.create(createData);
         activeChatId = newChat.id;
         setChatId(activeChatId);
         navigate(`/chat/${activeChatId}`, { replace: true });
         setChats([newChat, ...chats]);
+        if (pendingProjectId) setPendingProjectId(null);
       } catch {
         setMessages(prev => [...prev, { role: 'assistant', content: 'Error: could not create chat.' }]);
         setChatting(false);

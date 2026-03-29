@@ -38,7 +38,7 @@ export default function ProjectsPage() {
     }
   };
 
-  const handleCreateProject = async (data: { name: string; description: string; system_prompt: string; tool_sets: string[] }) => {
+  const handleCreateProject = async (data: { name: string; description: string; system_prompt: string; tool_sets: string[]; default_model: string }) => {
     setSaving(true);
     try {
       const project = await api.projects.create({
@@ -46,7 +46,7 @@ export default function ProjectsPage() {
         description: data.description,
         system_prompt: data.system_prompt,
         tool_sets: JSON.stringify(data.tool_sets),
-        default_model: 'Sonnet 4.6',
+        default_model: data.default_model,
         temperature: 0.7,
       });
       setShowModal(false);

@@ -14,9 +14,17 @@ interface ModelOption {
   modelId: string;
   provider: string;
   iconColor: string;
+  isDefault: boolean;
 }
 
-function ModelIcon({ color }: { color: string }) {
+function ModelIcon({ color, isGemini }: { color: string; isGemini?: boolean }) {
+  if (isGemini) {
+    return (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path d="M7 0.5 C7 4.5 9.5 7 13.5 7 C9.5 7 7 9.5 7 13.5 C7 9.5 4.5 7 0.5 7 C4.5 7 7 4.5 7 0.5Z" fill={color}/>
+      </svg>
+    );
+  }
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
       <circle cx="7" cy="7" r="5.5" stroke={color} strokeWidth="1.5" fill="none"/>
@@ -52,10 +60,14 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
         modelId: m.model_name,
         provider: m.provider,
         iconColor: m.icon_color || '#888',
+        isDefault: !!m.is_default,
       }));
       setAvailableModels(mapped);
-      const saved = localStorage.getItem('selectedModel');
-      const match = mapped.find((m) => m.value === saved) ?? mapped.find((m) => m) ?? null;
+      const savedModelId = localStorage.getItem('selectedModelId');
+      const match = (savedModelId && mapped.find((m) => m.modelId === savedModelId))
+        ?? mapped.find((m) => m.isDefault)
+        ?? mapped[0]
+        ?? null;
       setSelectedModel(match);
     }).catch(() => {});
   }, []);
@@ -306,7 +318,7 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
                         : 'border-vetted-border text-vetted-text-secondary hover:bg-vetted-surface'
                     }`}
                   >
-                    {selectedModel && <ModelIcon color={selectedModel.iconColor} />}
+                    {selectedModel && <ModelIcon color={selectedModel.iconColor} isGemini={selectedModel.value === 'gemini'} />}
                     {selectedModel?.name || 'Select model'}
                     <ChevronDown size={12} />
                   </button>
@@ -320,16 +332,16 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
                           key={model.name}
                           onClick={() => {
                             setSelectedModel(model);
-                            localStorage.setItem('selectedModel', model.value);
+                            localStorage.setItem('selectedModelId', model.modelId);
                             setShowModelSelect(false);
                           }}
                           className={`w-full text-left px-3 py-2.5 text-sm hover:bg-vetted-surface flex items-center gap-2.5 transition-colors ${
-                            selectedModel?.value === model.value ? 'bg-vetted-surface font-medium' : ''
+                            selectedModel?.modelId === model.modelId ? 'bg-vetted-surface font-medium' : ''
                           }`}
                         >
-                          <ModelIcon color={model.iconColor} />
+                          <ModelIcon color={model.iconColor} isGemini={model.value === 'gemini'} />
                           {model.name}
-                          {selectedModel?.value === model.value && (
+                          {selectedModel?.modelId === model.modelId && (
                             <span className="ml-auto text-vetted-accent text-xs">&#10003;</span>
                           )}
                         </button>

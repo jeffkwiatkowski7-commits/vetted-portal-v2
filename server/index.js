@@ -18,6 +18,7 @@ import mammoth from 'mammoth';
 import { indexFile, queryProject, deleteFileChunks, deleteProjectChunks, formatRetrievedContext, extractCitations, isSupportedType, extractText } from './lib/rag.js';
 import { deleteFile as gcsDeleteFile, deleteProjectFiles as gcsDeleteProjectFiles, downloadFile as gcsDownload } from './lib/gcs.js';
 import { chunkText, embedTexts } from './lib/embeddings.js';
+import mcpManager from './lib/mcp-manager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -414,6 +415,16 @@ app.delete('/api/chats/:id', requireAuth, (req, res) => {
   dbRun(db, 'DELETE FROM messages WHERE chat_id = ?', [req.params.id]);
   dbRun(db, 'DELETE FROM chats WHERE id = ?', [req.params.id]);
 
+  res.json({ success: true });
+});
+
+// -- Chat MCP server selection -------------------------------------------
+app.put('/api/chats/:id/mcp-servers', requireAuth, (req, res) => {
+  const chat = dbGet(db, 'SELECT * FROM chats WHERE id = ?', [req.params.id]);
+  if (!chat) return res.status(404).json({ error: 'Chat not found' });
+  if (chat.user_id !== req.user.id) return res.status(403).json({ error: 'Not your chat' });
+  const { serverIds } = req.body;
+  dbRun(db, 'UPDATE chats SET mcp_servers = ? WHERE id = ?', [JSON.stringify(serverIds || []), req.params.id]);
   res.json({ success: true });
 });
 
@@ -849,7 +860,7 @@ app.get('/api/projects/:id', requireAuth, (req, res) => {
 });
 
 app.put('/api/projects/:id', requireAuth, (req, res) => {
-  const { name, description, default_model, system_prompt, temperature, tool_sets } = req.body;
+  const { name, description, default_model, system_prompt, temperature, tool_sets, mcp_servers } = req.body;
 
   const project = dbGet(db, 'SELECT * FROM projects WHERE id = ? AND owner_id = ?', [req.params.id, req.user.id]);
   if (!project) {
@@ -859,7 +870,7 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
   const now = new Date().toISOString();
   dbRun(db, `
     UPDATE projects
-    SET name = ?, description = ?, default_model = ?, system_prompt = ?, temperature = ?, tool_sets = ?, updated_at = ?
+    SET name = ?, description = ?, default_model = ?, system_prompt = ?, temperature = ?, tool_sets = ?, mcp_servers = ?, updated_at = ?
     WHERE id = ?
   `, [
     name !== undefined ? name : project.name,
@@ -868,6 +879,7 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
     system_prompt !== undefined ? system_prompt : project.system_prompt,
     temperature !== undefined ? temperature : project.temperature,
     tool_sets !== undefined ? JSON.stringify(tool_sets) : project.tool_sets,
+    mcp_servers !== undefined ? JSON.stringify(mcp_servers) : project.mcp_servers,
     now,
     req.params.id
   ]);
@@ -1427,6 +1439,7 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
   const today = new Date().toISOString().split('T')[0];
   const activeTodayCount = dbGet(db, "SELECT COUNT(*) as count FROM users WHERE last_login_at >= ?", [today]);
   const libraryFileCount = dbGet(db, 'SELECT COUNT(*) as count FROM library_files');
+  const mcpCount = dbGet(db, 'SELECT COUNT(*) as count FROM mcp_servers', []);
 
   res.json({
     stats: {
@@ -1440,6 +1453,7 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
       models: modelCount.count,
       system_prompts: promptCount.count,
       total_library_files: libraryFileCount.count,
+      mcp_servers: mcpCount?.count || 0,
       timestamp: new Date().toISOString()
     }
   });
@@ -1805,6 +1819,64 @@ app.get('/api/admin/usage', requireAuth, (req, res) => {
   res.json({ rows, total, page, limit });
 });
 
+// -- Admin MCP Servers ---------------------------------------------------
+app.get('/api/admin/mcp-servers', requireAuth, requireAdmin, (req, res) => {
+  const servers = dbAll(db, 'SELECT * FROM mcp_servers ORDER BY name', []);
+  res.json({ servers });
+});
+
+app.post('/api/admin/mcp-servers', requireAuth, requireAdmin, (req, res) => {
+  const { name, description, icon, command, args, env_vars, enabled } = req.body;
+  if (!name || !command) return res.status(400).json({ error: 'Name and command are required' });
+  const id = uuidv4();
+  const now = new Date().toISOString();
+  dbRun(db, `INSERT INTO mcp_servers (id, name, description, icon, command, args, env_vars, enabled, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, name, description || null, icon || null, command,
+     args || '[]', env_vars || '{}',
+     enabled !== undefined ? (enabled ? 1 : 0) : 1, now, now]);
+  const server = dbGet(db, 'SELECT * FROM mcp_servers WHERE id = ?', [id]);
+  res.status(201).json({ server });
+});
+
+app.put('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, async (req, res) => {
+  const existing = dbGet(db, 'SELECT * FROM mcp_servers WHERE id = ?', [req.params.id]);
+  if (!existing) return res.status(404).json({ error: 'MCP server not found' });
+  const { name, description, icon, command, args, env_vars, enabled } = req.body;
+  const now = new Date().toISOString();
+  dbRun(db, `UPDATE mcp_servers SET
+    name = ?, description = ?, icon = ?, command = ?, args = ?, env_vars = ?, enabled = ?, updated_at = ?
+    WHERE id = ?`,
+    [
+      name !== undefined ? name : existing.name,
+      description !== undefined ? description : existing.description,
+      icon !== undefined ? icon : existing.icon,
+      command !== undefined ? command : existing.command,
+      args !== undefined ? args : existing.args,
+      env_vars !== undefined ? env_vars : existing.env_vars,
+      enabled !== undefined ? (enabled ? 1 : 0) : existing.enabled,
+      now, req.params.id,
+    ]);
+  await mcpManager.stopServer(req.params.id);
+  const server = dbGet(db, 'SELECT * FROM mcp_servers WHERE id = ?', [req.params.id]);
+  res.json({ server });
+});
+
+app.delete('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, async (req, res) => {
+  const existing = dbGet(db, 'SELECT * FROM mcp_servers WHERE id = ?', [req.params.id]);
+  if (!existing) return res.status(404).json({ error: 'MCP server not found' });
+  await mcpManager.stopServer(req.params.id);
+  dbRun(db, 'DELETE FROM mcp_servers WHERE id = ?', [req.params.id]);
+  res.json({ success: true });
+});
+
+// -- User MCP Servers (enabled only, env_vars stripped) ------------------
+app.get('/api/mcp-servers', requireAuth, (req, res) => {
+  const servers = dbAll(db,
+    'SELECT id, name, description, icon, enabled, created_at FROM mcp_servers WHERE enabled = 1 ORDER BY name', []);
+  res.json({ servers });
+});
+
 // ============================================================================
 // SETTINGS ROUTES
 // ============================================================================
@@ -2087,8 +2159,15 @@ app.listen(PORT, () => {
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('\nShutting down gracefully...');
+  await mcpManager.stopAll();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down...');
+  await mcpManager.stopAll();
   process.exit(0);
 });
 

@@ -53,7 +53,7 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const handleUpdateProject = async (data: { name: string; description: string; system_prompt: string; tool_sets: string[]; file_ids: string[] }) => {
+  const handleUpdateProject = async (data: { name: string; description: string; system_prompt: string; tool_sets: string[]; mcp_servers: string[]; file_ids: string[] }) => {
     if (!project || !id) return;
     setSaving(true);
     try {
@@ -61,7 +61,7 @@ export default function ProjectDetailPage() {
         name: data.name,
         description: data.description,
         system_prompt: data.system_prompt,
-        tool_sets: JSON.stringify(data.tool_sets),
+        mcp_servers: JSON.stringify(data.mcp_servers || []),
       });
 
       // Sync file assignments
@@ -175,6 +175,7 @@ export default function ProjectDetailPage() {
             description: project.description,
             system_prompt: project.system_prompt,
             tool_sets: project.tool_sets as unknown as string[],
+            mcp_servers: project.mcp_servers as unknown as string[],
             file_ids: projectFiles.map((f) => f.id),
           }}
           projectId={project.id}

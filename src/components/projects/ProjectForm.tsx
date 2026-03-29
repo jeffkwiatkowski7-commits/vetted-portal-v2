@@ -3,29 +3,12 @@ import { X, Upload, ChevronDown, ChevronUp, FileText, Check, Sparkles } from 'lu
 import * as api from '../../api';
 import type { LibraryFile, ProjectSkill } from '../../types';
 
-// Read admin-configured MCPs from localStorage, fall back to defaults
-function getAvailableMcps() {
-  try {
-    const stored = localStorage.getItem('admin_mcps');
-    if (stored) return JSON.parse(stored) as { id: string; name: string; description: string; enabled: boolean }[];
-  } catch {}
-  return [
-    { id: 'web_search', name: 'Web Search', description: 'Search the web in real time', enabled: true },
-    { id: 'code_execution', name: 'Code Execution', description: 'Run code in a sandbox', enabled: true },
-    { id: 'file_browser', name: 'File Browser', description: 'Browse and read project files', enabled: true },
-    { id: 'database_query', name: 'Database Query', description: 'Query connected databases', enabled: false },
-    { id: 'email', name: 'Email', description: 'Send and read emails', enabled: false },
-    { id: 'calendar', name: 'Calendar', description: 'Access calendar events', enabled: false },
-  ];
-}
-
-// Models are now loaded from the API in the component
-
 export interface ProjectFormData {
   name: string;
   description: string;
   system_prompt: string;
   tool_sets: string[];
+  mcp_servers: string[];
   default_model: string;
   file_ids: string[];
 }
@@ -122,15 +105,17 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
   }, [defaultModel]);
 
   const [enabledMcps, setEnabledMcps] = useState<string[]>(() => {
-    try { return JSON.parse(initialData?.tool_sets as unknown as string ?? '[]'); }
-    catch { return Array.isArray(initialData?.tool_sets) ? initialData.tool_sets : []; }
+    try { return JSON.parse(initialData?.mcp_servers as unknown as string ?? '[]'); }
+    catch { return Array.isArray(initialData?.mcp_servers) ? (initialData.mcp_servers as unknown as string[]) : []; }
   });
+  const [availableMcps, setAvailableMcps] = useState<{ id: string; name: string; description: string; icon: string }[]>([]);
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>(initialData?.file_ids ?? []);
   const [allFiles, setAllFiles] = useState<LibraryFile[]>([]);
   const [showLibrary, setShowLibrary] = useState(false);
   const [projectSkills, setProjectSkills] = useState<ProjectSkill[]>([]);
 
   useEffect(() => { api.library.list().then(setAllFiles).catch(() => {}); }, []);
+  useEffect(() => { api.mcpServers.list().then(setAvailableMcps).catch(() => {}); }, []);
 
   useEffect(() => {
     if (projectId) {
@@ -149,15 +134,13 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
     );
   };
 
-  const availableMcps = getAvailableMcps();
-
   const toggleMcp = (id: string) =>
     setEnabledMcps((prev) => prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    const result = await onSave({ name, description, system_prompt: systemPrompt, tool_sets: enabledMcps, default_model: selectedModel, file_ids: selectedFileIds });
+    const result = await onSave({ name, description, system_prompt: systemPrompt, tool_sets: [], mcp_servers: enabledMcps, default_model: selectedModel, file_ids: selectedFileIds });
     // Save project skills — use existing projectId or the newly created one
     const resolvedId = projectId || (result as any)?.id;
     const enabledSkills = projectSkills.filter((s) => s.enabled);

@@ -38,14 +38,14 @@ export default function ProjectsPage() {
     }
   };
 
-  const handleCreateProject = async (data: { name: string; description: string; system_prompt: string; tool_sets: string[]; default_model: string }) => {
+  const handleCreateProject = async (data: { name: string; description: string; system_prompt: string; tool_sets: string[]; mcp_servers: string[]; default_model: string }) => {
     setSaving(true);
     try {
       const project = await api.projects.create({
         name: data.name,
         description: data.description,
         system_prompt: data.system_prompt,
-        tool_sets: JSON.stringify(data.tool_sets),
+        mcp_servers: JSON.stringify(data.mcp_servers || []),
         default_model: data.default_model,
         temperature: 0.7,
       });

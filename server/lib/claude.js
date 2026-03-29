@@ -9,7 +9,9 @@
  */
 import { AnthropicVertex } from "@anthropic-ai/vertex-sdk";
 import { config } from "./config.js";
-import { tavilySearch, hasTavily } from "./tavily.js";
+// Tavily removed — web search now handled via MCP servers
+const hasTavily = () => false;
+const tavilySearch = async () => null;
 
 const MAX_TOKENS = 8192;
 const MAX_SEARCH_ITERATIONS = 5;

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../../store';
 import * as api from '../../api';
-import { Send, Paperclip, Share2, ChevronDown } from 'lucide-react';
+import { Send, Paperclip, Share2, ChevronDown, Plus } from 'lucide-react';
 import { LibraryFile } from '../../types';
 import LibraryPickerModal from './LibraryPickerModal';
 import FileTypeBadge from './FileTypeBadge';
@@ -33,7 +33,13 @@ function ModelIcon({ color, isGemini }: { color: string; isGemini?: boolean }) {
   );
 }
 
-export default function ChatInput({ centered = false, projectId }: { centered?: boolean; projectId?: string }) {
+export default function ChatInput({ centered = false, projectId, mcpServerIds = [], onMcpServersChange, isProjectChat = false }: {
+  centered?: boolean;
+  projectId?: string;
+  mcpServerIds?: string[];
+  onMcpServersChange?: (ids: string[]) => void;
+  isProjectChat?: boolean;
+}) {
   const { id: urlId } = useParams<{ id: string }>();
   // When on a project page, the URL :id is the project ID — don't use it as a chat ID
   const id = projectId ? undefined : urlId;
@@ -75,6 +81,31 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
   const [showModelSelect, setShowModelSelect] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const paperclipButtonRef = useRef<HTMLButtonElement>(null);
+
+  // MCP Tools state
+  const [mcpServers, setMcpServers] = useState<{ id: string; name: string; description: string; icon: string }[]>([]);
+  const [showMcpPicker, setShowMcpPicker] = useState(false);
+  const mcpButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    api.mcpServers.list().then(setMcpServers).catch(() => {});
+  }, []);
+
+  const activeMcpCount = mcpServerIds.length;
+
+  // Close MCP picker on outside click
+  useEffect(() => {
+    if (!showMcpPicker) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const popover = document.getElementById('mcp-picker-popover');
+      if (mcpButtonRef.current && !mcpButtonRef.current.contains(target) && popover && !popover.contains(target)) {
+        setShowMcpPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMcpPicker]);
 
   // Focus textarea on mount and whenever the route changes
   useEffect(() => {
@@ -267,6 +298,8 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
+              spellCheck={true}
+              autoComplete="on"
               placeholder="Ask anything..."
               className="w-full px-3 pt-2.5 pb-10 text-sm leading-relaxed resize-none bg-transparent outline-none placeholder:text-vetted-text-muted min-h-[56px] max-h-[160px]"
               rows={1}
@@ -288,6 +321,64 @@ export default function ChatInput({ centered = false, projectId }: { centered?: 
                 >
                   <Paperclip size={18} />
                 </button>
+                {/* MCP Tools button */}
+                <div className="relative">
+                  <button
+                    ref={mcpButtonRef}
+                    onClick={() => setShowMcpPicker(!showMcpPicker)}
+                    className={`p-2 rounded-lg transition-colors relative ${
+                      showMcpPicker
+                        ? 'text-vetted-accent bg-vetted-accent/10'
+                        : 'text-vetted-text-muted hover:text-vetted-text-secondary hover:bg-vetted-surface'
+                    }`}
+                    title="AI Tools"
+                  >
+                    <Plus size={18} />
+                    {activeMcpCount > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-vetted-accent rounded-full border-2 border-white" />
+                    )}
+                  </button>
+                  {showMcpPicker && (
+                    <div id="mcp-picker-popover" className="absolute bottom-full left-0 mb-2 w-80 bg-white border border-vetted-border rounded-xl shadow-lg z-50 overflow-hidden">
+                      <div className="px-4 py-3 border-b border-vetted-border">
+                        <p className="text-sm font-medium text-vetted-primary">AI Tools</p>
+                        {isProjectChat && (
+                          <p className="text-xs text-vetted-text-muted mt-0.5">Configured in project settings</p>
+                        )}
+                      </div>
+                      <div className="max-h-64 overflow-y-auto divide-y divide-vetted-border">
+                        {mcpServers.map((server) => {
+                          const active = mcpServerIds.includes(server.id);
+                          return (
+                            <div key={server.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-vetted-surface/50">
+                              <div className="flex-1 min-w-0 mr-3">
+                                <p className="text-sm font-medium text-vetted-primary">{server.name}</p>
+                                <p className="text-xs text-vetted-text-muted truncate">{server.description}</p>
+                              </div>
+                              {isProjectChat ? (
+                                <span className={`text-xs px-1.5 py-0.5 rounded ${active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                  {active ? 'On' : 'Off'}
+                                </span>
+                              ) : (
+                                <div
+                                  onClick={() => {
+                                    const newIds = active
+                                      ? mcpServerIds.filter(id => id !== server.id)
+                                      : [...mcpServerIds, server.id];
+                                    onMcpServersChange?.(newIds);
+                                  }}
+                                  className={`w-9 h-5 rounded-full relative cursor-pointer transition-colors flex-shrink-0 ${active ? 'bg-vetted-accent' : 'bg-vetted-border'}`}
+                                >
+                                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${active ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 {activeChat && (
                   <button
                     onClick={() => {

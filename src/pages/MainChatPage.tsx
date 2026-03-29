@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, Loader2, Paperclip, X, ChevronDown, ChevronUp, Check, Download } from 'lucide-react';
+import { Send, Loader2, Paperclip, X, ChevronDown, ChevronUp, Check, Download, Plus } from 'lucide-react';
 import LibraryPickerModal from '../components/chat/LibraryPickerModal';
 import ExportModal from '../components/chat/ExportModal';
 import { LibraryFile } from '../types';
@@ -323,6 +323,7 @@ export default function MainChatPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState<ModelOption | null>(null);
+  const [chatMcpServerIds, setChatMcpServerIds] = useState<string[]>([]);
 
   // Fetch models from admin config
   useEffect(() => {
@@ -347,9 +348,21 @@ export default function MainChatPage() {
 
   const [modelOpen, setModelOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [mcpServers, setMcpServers] = useState<{ id: string; name: string; description: string }[]>([]);
+  const [showMcpPicker, setShowMcpPicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const attachButtonRef = useRef<HTMLButtonElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
+  const mcpButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => { api.mcpServers.list().then(setMcpServers).catch(() => {}); }, []);
+
+  const handleMcpServersChange = async (ids: string[]) => {
+    setChatMcpServerIds(ids);
+    if (chatId) {
+      try { await api.mcpServers.setChatServers(chatId, ids); } catch {}
+    }
+  };
 
   // Close model dropdown on outside click
   useEffect(() => {
@@ -361,6 +374,18 @@ export default function MainChatPage() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // Close MCP picker on outside click
+  useEffect(() => {
+    if (!showMcpPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (mcpButtonRef.current && !mcpButtonRef.current.contains(e.target as Node)) {
+        setShowMcpPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMcpPicker]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -375,6 +400,7 @@ export default function MainChatPage() {
     if (!id) {
       setMessages([]);
       setChatId(null);
+      setChatMcpServerIds([]);
       return;
     }
     // Skip re-fetch if we just created this chat via send
@@ -390,6 +416,7 @@ export default function MainChatPage() {
             timestamp: m.created_at,
           }))
         );
+        try { setChatMcpServerIds(JSON.parse(chat.mcp_servers || '[]')); } catch { setChatMcpServerIds([]); }
       })
       .catch(() => {});
   }, [id]);
@@ -532,15 +559,61 @@ export default function MainChatPage() {
 
       {/* Bottom toolbar */}
       <div className="flex items-center justify-between pt-2 mt-1 border-t border-vetted-border">
-        {/* Left: file attach */}
-        <button
-          ref={attachButtonRef}
-          onClick={() => setPickerOpen(true)}
-          className="p-1.5 rounded-lg border border-vetted-border text-vetted-text-muted hover:text-vetted-primary transition-colors"
-          title="Attach file"
-        >
-          <Paperclip size={16} />
-        </button>
+        {/* Left: file attach + MCP tools */}
+        <div className="flex items-center gap-1 relative">
+          <button
+            ref={attachButtonRef}
+            onClick={() => setPickerOpen(true)}
+            className="p-1.5 rounded-lg border border-vetted-border text-vetted-text-muted hover:text-vetted-primary transition-colors"
+            title="Attach file"
+          >
+            <Paperclip size={16} />
+          </button>
+          <button
+            ref={mcpButtonRef}
+            onClick={() => setShowMcpPicker(!showMcpPicker)}
+            className={`p-1.5 rounded-lg border border-vetted-border transition-colors relative ${
+              showMcpPicker ? 'text-vetted-accent border-vetted-accent' : 'text-vetted-text-muted hover:text-vetted-primary'
+            }`}
+            title="AI Tools"
+          >
+            <Plus size={16} />
+            {chatMcpServerIds.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-vetted-accent rounded-full border-2 border-white" />
+            )}
+          </button>
+          {showMcpPicker && (
+            <div className="absolute bottom-full left-0 mb-2 w-80 bg-white border border-vetted-border rounded-xl shadow-lg z-50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-vetted-border">
+                <p className="text-sm font-medium text-vetted-primary">AI Tools</p>
+              </div>
+              <div className="max-h-64 overflow-y-auto divide-y divide-vetted-border">
+                {mcpServers.map((server) => {
+                  const active = chatMcpServerIds.includes(server.id);
+                  return (
+                    <div key={server.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-vetted-surface/50">
+                      <div className="flex-1 min-w-0 mr-3">
+                        <p className="text-sm font-medium text-vetted-primary">{server.name}</p>
+                        <p className="text-xs text-vetted-text-muted truncate">{server.description}</p>
+                      </div>
+                      <div
+                        onClick={() => {
+                          const newIds = active
+                            ? chatMcpServerIds.filter(id => id !== server.id)
+                            : [...chatMcpServerIds, server.id];
+                          handleMcpServersChange(newIds);
+                        }}
+                        className={`w-9 h-5 rounded-full relative cursor-pointer transition-colors flex-shrink-0 ${active ? 'bg-vetted-accent' : 'bg-vetted-border'}`}
+                      >
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${active ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Right: model selector + send */}
         <div className="flex items-center gap-2">

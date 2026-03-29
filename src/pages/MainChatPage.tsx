@@ -12,6 +12,7 @@ interface ModelOption {
   modelId: string;
   provider: string;
   iconColor: string;
+  isDefault: boolean;
 }
 
 function ModelIcon({ color, isGemini }: { color: string; isGemini?: boolean }) {
@@ -332,10 +333,14 @@ export default function MainChatPage() {
         modelId: m.model_name,
         provider: m.provider,
         iconColor: m.icon_color || '#888',
+        isDefault: !!m.is_default,
       }));
       setAvailableModels(mapped);
-      const saved = localStorage.getItem('selectedModel');
-      const match = mapped.find((m) => m.value === saved) ?? mapped[0] ?? null;
+      const savedModelId = localStorage.getItem('selectedModelId');
+      const match = (savedModelId && mapped.find((m) => m.modelId === savedModelId))
+        ?? mapped.find((m) => m.isDefault)
+        ?? mapped[0]
+        ?? null;
       setSelectedModel(match);
     }).catch(() => {});
   }, []);
@@ -554,7 +559,7 @@ export default function MainChatPage() {
                 {availableModels.map((model) => (
                   <button
                     key={model.modelId}
-                    onClick={() => { setSelectedModel(model); localStorage.setItem('selectedModel', model.value); setModelOpen(false); }}
+                    onClick={() => { setSelectedModel(model); localStorage.setItem('selectedModelId', model.modelId); setModelOpen(false); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
                   >
                     <ModelIcon color={model.iconColor} isGemini={model.value === 'gemini'} />

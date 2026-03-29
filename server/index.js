@@ -668,7 +668,8 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     } else if (msg.includes('quota') || msg.includes('rate limit') || msg.includes('429')) {
       aiContent = 'The AI service is temporarily rate-limited. Please wait a moment and try again.';
     } else if (msg.includes('not found') || msg.includes('404')) {
-      aiContent = `The AI model is not available. Check that \`${process.env.MODEL_ID || 'gemini-3.1-pro-preview'}\` exists in project \`${process.env.GCP_PROJECT || 'bill-leases'}\` (location: \`${process.env.GCP_LOCATION || 'global'}\`).\n\nError: \`${msg.slice(0, 200)}\``;
+      const failedModel = msg.match(/models\/([^\s]+)/)?.[1] || process.env.MODEL_ID || 'unknown';
+      aiContent = `The AI model \`${failedModel}\` is not available in project \`${process.env.GCP_PROJECT || 'bill-leases'}\` (location: \`${process.env.GCP_LOCATION || 'global'}\`).\n\nError: \`${msg.slice(0, 200)}\``;
     } else {
       aiContent = `Sorry, I was unable to generate a response. Please try again.\n\nError: \`${msg.slice(0, 200)}\``;
     }

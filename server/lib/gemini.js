@@ -15,9 +15,10 @@ import { tavilySearch, hasTavily } from "./tavily.js";
 
 // Map display model names to Vertex AI model IDs
 const MODEL_ID_MAP = {
-  'Gemini 3': 'gemini-3.0-pro-preview-0325',
-  'Gemini 3 Flash': 'gemini-3.0-flash-preview-0325',
   'Gemini 3.1': 'gemini-3.1-pro-preview',
+  'Gemini 3.1 Flash': 'gemini-3.1-flash-preview',
+  'Gemini 3': 'gemini-3.1-pro-preview',        // legacy alias
+  'Gemini 3 Flash': 'gemini-3.1-flash-preview', // legacy alias
   'Gemini 2.5 Flash': 'gemini-2.5-flash',
   'Gemini 2.5 Pro': 'gemini-2.5-pro',
   'Gemini 2.0 Flash': 'gemini-2.0-flash',

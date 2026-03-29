@@ -52,10 +52,10 @@ export async function seedDatabase() {
   // Seed Model Configs
   const models = [
     {
-      id: 'gemini-3',
-      model_name: 'Gemini 3',
+      id: 'gemini-3-1-pro',
+      model_name: 'Gemini 3.1',
       provider: 'Google',
-      display_name: 'Gemini 3',
+      display_name: 'Gemini 3.1',
       icon_color: '#3B82F6',
       is_default: 1,
       is_enabled: 1,
@@ -65,10 +65,10 @@ export async function seedDatabase() {
       updated_at: now
     },
     {
-      id: 'gemini-3-flash',
-      model_name: 'Gemini 3 Flash',
+      id: 'gemini-3-1-flash',
+      model_name: 'Gemini 3.1 Flash',
       provider: 'Google',
-      display_name: 'Gemini 3 Flash',
+      display_name: 'Gemini 3.1 Flash',
       icon_color: '#60A5FA',
       is_default: 0,
       is_enabled: 1,
@@ -87,19 +87,6 @@ export async function seedDatabase() {
       is_enabled: 1,
       max_tokens: 8192,
       rate_limit: 120,
-      created_at: now,
-      updated_at: now
-    },
-    {
-      id: 'gemini-3-1-pro',
-      model_name: 'Gemini 3.1',
-      provider: 'Google',
-      display_name: 'Gemini 3.1',
-      icon_color: '#8B5CF6',
-      is_default: 0,
-      is_enabled: 1,
-      max_tokens: 8192,
-      rate_limit: 60,
       created_at: now,
       updated_at: now
     }

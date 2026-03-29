@@ -61,7 +61,7 @@ export default function AppsPage() {
     try {
       const newApp = await api.apps.create({
         ...createForm,
-        model: 'Gemini 3',
+        model: 'Gemini 3.1',
         temperature: 0.7,
         visibility: 'all',
         status: 'active',

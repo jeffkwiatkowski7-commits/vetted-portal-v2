@@ -11,7 +11,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { config } from "./config.js";
 import { logUsage, getDatabase } from "../database.js";
-import { tavilySearch, hasTavily } from "./tavily.js";
+
 
 // Map display model names to Vertex AI model IDs
 const MODEL_ID_MAP = {
@@ -340,67 +340,7 @@ export async function chatWithLeases(leaseTexts, userMessage, chatHistory, useSe
     contents.push({ role: "user", parts: [{ text: userMessage }] });
   }
 
-  // Use Tavily for web search if available and search is enabled
-  if (useSearch && hasTavily()) {
-    const tavilyTool = {
-      functionDeclarations: [{
-        name: "web_search",
-        description: "Search the web for current information. Use for market data, recent events, or anything requiring live information.",
-        parameters: {
-          type: "object",
-          properties: {
-            query: { type: "string", description: "The search query" },
-          },
-          required: ["query"],
-        },
-      }],
-    };
-
-    const searchQueries = [];
-    const MAX_ITERATIONS = 5;
-    for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const result = await generate(contents, {}, [tavilyTool]);
-      const candidate = result.candidates?.[0];
-      const parts = candidate?.content?.parts ?? [];
-
-      const fnCalls = parts.filter((p) => p.functionCall);
-      if (fnCalls.length === 0) {
-        const usageMeta = result?.response?.usageMetadata;
-        if (usageMeta) {
-          logUsage(getDatabase(), {
-            userId,
-            source: 'lease',
-            prompt: userMessage,
-            model: config.modelId,
-            inputTokens: usageMeta.promptTokenCount || 0,
-            outputTokens: usageMeta.candidatesTokenCount || 0,
-          });
-        }
-        return { text: extractGroundedResponse(result).text, searchQueries };
-      }
-
-      contents.push({ role: "model", parts });
-
-      const fnResponseParts = [];
-      for (const part of fnCalls) {
-        const query = part.functionCall.args?.query || "";
-        searchQueries.push(query);
-        console.log("[gemini] web search:", query);
-        const searchResult = await tavilySearch(query);
-        fnResponseParts.push({
-          functionResponse: {
-            name: "web_search",
-            response: { result: searchResult || "No results found." },
-          },
-        });
-      }
-      contents.push({ role: "user", parts: fnResponseParts });
-    }
-
-    // Fallback if max iterations hit
-    const result = await generate(contents, {}, []);
-    return { text: extractGroundedResponse(result).text, searchQueries };
-  }
+  // Web search removed (replaced by MCP in main chat)
 
   const result = await generateWithContinuation(contents, {}, [], null);
 
@@ -458,7 +398,7 @@ Today's date is ${today}.
 
 // ── General document Q&A / project chat ─────────────────────────────
 
-export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null, modelOverride = null) {
+export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null, modelOverride = null, tools = []) {
   const textDocs = docs.filter((d) => d.text !== undefined);
   const pdfDocs = docs.filter((d) => d.base64 !== undefined);
 
@@ -492,62 +432,34 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
     contents.push({ role: "user", parts: [{ text: userMessage }] });
   }
 
-  // Use Tavily web search via function calling if available
-  if (!hasTavily()) {
+  // No tools — use continuation for long responses
+  if (tools.length === 0) {
     const result = await generateWithContinuation(contents, {}, [], modelOverride);
+    const usageMeta = result?.response?.usageMetadata;
+    const inputTokens = result._totalInputTokens || usageMeta?.promptTokenCount || 0;
+    const outputTokens = result._totalOutputTokens || usageMeta?.candidatesTokenCount || 0;
+    if ((inputTokens || outputTokens) && userId) {
+      logUsage(getDatabase(), { userId, source: 'chat', prompt: userMessage, model: resolveModelId(modelOverride) || config.modelId, inputTokens, outputTokens });
+    }
     return extractGroundedResponse(result);
   }
 
-  const searchQueries = [];
-  const tavilyTool = {
-    functionDeclarations: [{
-      name: "web_search",
-      description: "Search the web for current information. Use for market data, recent events, or anything requiring live information.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "The search query" },
-        },
-        required: ["query"],
-      },
-    }],
-  };
+  // With tools — single generate call, return raw parts for caller's tool loop
+  const result = await generate(contents, {}, tools, modelOverride);
+  const candidate = result.candidates?.[0];
+  const parts = candidate?.content?.parts ?? [];
 
-  const MAX_ITERATIONS = 5;
-  for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const result = await generate(contents, {}, [tavilyTool], modelOverride);
-    const candidate = result.candidates?.[0];
-    const parts = candidate?.content?.parts ?? [];
-
-    const fnCalls = parts.filter((p) => p.functionCall);
-    if (fnCalls.length === 0) {
-      return { text: extractGroundedResponse(result).text, searchQueries };
+  const fnCalls = parts.filter((p) => p.functionCall);
+  if (fnCalls.length === 0) {
+    const usageMeta = result?.usageMetadata || result?.response?.usageMetadata;
+    if (usageMeta && userId) {
+      logUsage(getDatabase(), { userId, source: 'chat', prompt: userMessage, model: resolveModelId(modelOverride) || config.modelId, inputTokens: usageMeta.promptTokenCount || 0, outputTokens: usageMeta.candidatesTokenCount || 0 });
     }
-
-    // Add model response to conversation
-    contents.push({ role: "model", parts });
-
-    // Execute each function call and add results
-    const fnResponseParts = [];
-    for (const part of fnCalls) {
-      const query = part.functionCall.args?.query || "";
-      searchQueries.push(query);
-      console.log("[gemini] web search:", query);
-      if (onStep) onStep(`Web search: "${query}"`);
-      const searchResult = await tavilySearch(query);
-      fnResponseParts.push({
-        functionResponse: {
-          name: "web_search",
-          response: { result: searchResult || "No results found." },
-        },
-      });
-    }
-    contents.push({ role: "user", parts: fnResponseParts });
+    return { text: extractGroundedResponse(result).text };
   }
 
-  // Fallback if max iterations hit
-  const result = await generate(contents, {}, [], modelOverride);
-  return { text: extractGroundedResponse(result).text, searchQueries };
+  // Return function calls for the caller to handle in its tool loop
+  return { text: null, functionCalls: fnCalls, _modelParts: parts, _contents: contents };
 }
 
 // ── Cross-portfolio Q&A ──────────────────────────────────────────────
@@ -586,67 +498,7 @@ Answer questions using this portfolio data. If you need the full lease text to a
     contents.push({ role: "user", parts: [{ text: userMessage }] });
   }
 
-  // Use Tavily for web search if available and search is enabled
-  if (useSearch && hasTavily()) {
-    const tavilyTool = {
-      functionDeclarations: [{
-        name: "web_search",
-        description: "Search the web for current information. Use for market data, recent events, or anything requiring live information.",
-        parameters: {
-          type: "object",
-          properties: {
-            query: { type: "string", description: "The search query" },
-          },
-          required: ["query"],
-        },
-      }],
-    };
-
-    const searchQueries = [];
-    const MAX_ITERATIONS = 5;
-    for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const result = await generate(contents, {}, [tavilyTool]);
-      const candidate = result.candidates?.[0];
-      const parts = candidate?.content?.parts ?? [];
-
-      const fnCalls = parts.filter((p) => p.functionCall);
-      if (fnCalls.length === 0) {
-        const usageMeta = result?.response?.usageMetadata;
-        if (usageMeta) {
-          logUsage(getDatabase(), {
-            userId,
-            source: 'lease',
-            prompt: userMessage,
-            model: config.modelId,
-            inputTokens: usageMeta.promptTokenCount || 0,
-            outputTokens: usageMeta.candidatesTokenCount || 0,
-          });
-        }
-        return { text: extractGroundedResponse(result).text, searchQueries };
-      }
-
-      contents.push({ role: "model", parts });
-
-      const fnResponseParts = [];
-      for (const part of fnCalls) {
-        const query = part.functionCall.args?.query || "";
-        searchQueries.push(query);
-        console.log("[gemini] web search:", query);
-        const searchResult = await tavilySearch(query);
-        fnResponseParts.push({
-          functionResponse: {
-            name: "web_search",
-            response: { result: searchResult || "No results found." },
-          },
-        });
-      }
-      contents.push({ role: "user", parts: fnResponseParts });
-    }
-
-    // Fallback if max iterations hit
-    const result = await generate(contents, {}, []);
-    return { text: extractGroundedResponse(result).text, searchQueries };
-  }
+  // Web search removed (replaced by MCP in main chat)
 
   const result = await generateWithContinuation(contents, {}, [], null);
 
@@ -666,3 +518,5 @@ Answer questions using this portfolio data. If you need the full lease text to a
 
   return extractGroundedResponse(result);
 }
+
+export { generate, extractGroundedResponse };

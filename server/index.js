@@ -12,7 +12,7 @@ import { initializeDatabase, getDatabase, dbGet, dbAll, dbRun, logUsage } from '
 import { getMockResponse } from './mock-responses.js';
 import { seedDatabase } from './seed.js';
 import leaseRoutes from './lease-routes.js';
-import { chatWithDocuments as geminiChatWithDocuments } from './lib/gemini.js';
+import { chatWithDocuments as geminiChatWithDocuments, generate as geminiGenerate, extractGroundedResponse } from './lib/gemini.js';
 import bcrypt from 'bcryptjs';
 import mammoth from 'mammoth';
 import { indexFile, queryProject, deleteFileChunks, deleteProjectChunks, formatRetrievedContext, extractCitations, isSupportedType, extractText } from './lib/rag.js';
@@ -679,10 +679,120 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     if (history.length > 0) step(`Loaded ${history.length} previous message${history.length !== 1 ? 's' : ''}`);
     if (docs.length > 0) step(`Building prompt with ${docs.length} document${docs.length !== 1 ? 's' : ''}`);
     const modelId = req.body.modelId || null;
+
+    // -- MCP tool declarations -----------------------------------------------
+    let mcpToolDeclarations = [];
+    let mcpToolMap = {}; // prefixedName -> { serverId, serverName, originalName, serverConfig }
+
+    let activeMcpIds = [];
+    if (chat.project_id) {
+      const proj = dbGet(db, 'SELECT mcp_servers FROM projects WHERE id = ?', [chat.project_id]);
+      try { activeMcpIds = JSON.parse(proj?.mcp_servers || '[]'); } catch { activeMcpIds = []; }
+    } else {
+      try { activeMcpIds = JSON.parse(chat.mcp_servers || '[]'); } catch { activeMcpIds = []; }
+    }
+
+    if (activeMcpIds.length > 0) {
+      const mcpServers = dbAll(db,
+        `SELECT * FROM mcp_servers WHERE id IN (${activeMcpIds.map(() => '?').join(',')}) AND enabled = 1`,
+        activeMcpIds
+      );
+
+      for (const server of mcpServers) {
+        try {
+          step(`Starting ${server.name}...`);
+          const tools = await mcpManager.getTools(server);
+          for (const tool of tools) {
+            const prefixedName = `${server.id}__${tool.name}`;
+            mcpToolMap[prefixedName] = {
+              serverId: server.id,
+              serverName: server.name,
+              originalName: tool.name,
+              serverConfig: server,
+            };
+            const declaration = {
+              name: prefixedName,
+              description: tool.description || '',
+            };
+            if (tool.inputSchema && tool.inputSchema.properties && Object.keys(tool.inputSchema.properties).length > 0) {
+              declaration.parameters = {
+                type: tool.inputSchema.type || 'object',
+                properties: tool.inputSchema.properties || {},
+              };
+              if (tool.inputSchema.required) {
+                declaration.parameters.required = tool.inputSchema.required;
+              }
+            }
+            mcpToolDeclarations.push(declaration);
+          }
+          step(`Loaded ${tools.length} tool${tools.length !== 1 ? 's' : ''} from ${server.name}`);
+        } catch (err) {
+          step(`Failed to start ${server.name}: ${err.message}`);
+          console.error(`[mcp] Failed to start ${server.name}:`, err);
+        }
+      }
+    }
+
+    const geminiTools = mcpToolDeclarations.length > 0
+      ? [{ functionDeclarations: mcpToolDeclarations }]
+      : [];
+
     step('Calling Gemini');
 
-    const result = await geminiChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId);
-    aiContent = result.text;
+    let aiText = '';
+    const result = await geminiChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, geminiTools);
+
+    if (result.text) {
+      aiText = result.text;
+    } else if (result.functionCalls) {
+      // MCP tool-calling loop
+      let loopContents = result._contents;
+      let modelParts = result._modelParts;
+      const MAX_ITERATIONS = 10;
+
+      for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+        loopContents.push({ role: 'model', parts: modelParts });
+
+        const fnCalls = modelParts.filter(p => p.functionCall);
+        const fnResponseParts = await Promise.all(fnCalls.map(async (part) => {
+          const prefixedName = part.functionCall.name;
+          const mapping = mcpToolMap[prefixedName];
+          if (!mapping) {
+            return { functionResponse: { name: prefixedName, response: { result: 'Error: Unknown tool' } } };
+          }
+          step(`Calling ${mapping.serverName}: ${mapping.originalName}...`);
+          try {
+            const toolResult = await mcpManager.callTool(mapping.serverConfig, mapping.originalName, part.functionCall.args || {});
+            step(`${mapping.originalName} returned (${toolResult.length} chars)`);
+            return { functionResponse: { name: prefixedName, response: { result: toolResult } } };
+          } catch (err) {
+            step(`${mapping.originalName} error: ${err.message}`);
+            return { functionResponse: { name: prefixedName, response: { result: `Error: ${err.message}` } } };
+          }
+        }));
+
+        loopContents.push({ role: 'user', parts: fnResponseParts });
+
+        const nextResult = await geminiGenerate(loopContents, {}, geminiTools, modelId);
+        const candidate = nextResult.candidates?.[0];
+        const nextParts = candidate?.content?.parts ?? [];
+
+        const nextFnCalls = nextParts.filter(p => p.functionCall);
+        if (nextFnCalls.length === 0) {
+          aiText = extractGroundedResponse(nextResult).text;
+          break;
+        }
+
+        modelParts = nextParts;
+      }
+
+      if (!aiText) {
+        const fallback = await geminiGenerate(loopContents, {}, [], modelId);
+        aiText = extractGroundedResponse(fallback).text;
+      }
+    }
+
+    aiContent = aiText;
     step('Response received');
   } catch (err) {
     console.error('[chat] AI error:', err.message, err.stack);

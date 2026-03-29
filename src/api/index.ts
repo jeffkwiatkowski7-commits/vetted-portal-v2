@@ -146,6 +146,17 @@ export const projects = {
   removeMember: (id: string, userId: string) => request(`/projects/${id}/members/${userId}`, { method: 'DELETE' }),
 };
 
+// MCP Servers
+export const mcpServers = {
+  list: () => request('/mcp-servers').then(d => d.servers || []),
+  adminList: () => request('/admin/mcp-servers').then(d => d.servers || []),
+  adminCreate: (data: any) => request('/admin/mcp-servers', { method: 'POST', body: JSON.stringify(data) }).then(d => d.server),
+  adminUpdate: (id: string, data: any) => request(`/admin/mcp-servers/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(d => d.server),
+  adminDelete: (id: string) => request(`/admin/mcp-servers/${id}`, { method: 'DELETE' }),
+  setChatServers: (chatId: string, serverIds: string[]) =>
+    request(`/chats/${chatId}/mcp-servers`, { method: 'PUT', body: JSON.stringify({ serverIds }) }),
+};
+
 // Models - public endpoint for enabled models
 export const models = {
   list: () => request('/models').then(d => d.models || d || []),

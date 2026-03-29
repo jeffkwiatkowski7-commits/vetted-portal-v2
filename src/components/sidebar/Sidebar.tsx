@@ -8,6 +8,7 @@ import {
   BookOpen,
   Sparkles,
   Grid3X3,
+  Puzzle,
   Shield,
   ChevronLeft,
   ChevronRight,
@@ -147,6 +148,7 @@ export default function Sidebar() {
           { path: '/library', icon: BookOpen, label: 'Library' },
           { path: '/skills', icon: Sparkles, label: 'Skills' },
           { path: '/apps', icon: Grid3X3, label: 'Apps' },
+          { path: '/integrations', icon: Puzzle, label: 'Integrations' },
           ...(user?.role === 'admin' || user?.role === 'super_admin'
             ? [{ path: '/admin', icon: Shield, label: 'Admin' }]
             : []),
@@ -228,7 +230,7 @@ export default function Sidebar() {
 
       {/* User Footer */}
       <div className="p-3 border-t border-vetted-border">
-        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.6.1</p>
+        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.7.0</p>
       </div>
 
       {/* Context Menu */}

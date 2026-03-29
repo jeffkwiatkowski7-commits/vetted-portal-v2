@@ -306,6 +306,19 @@ export async function initializeDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_skill_files_skill_id ON skill_files(skill_id);
     CREATE INDEX IF NOT EXISTS idx_project_skills_project_id ON project_skills(project_id);
+
+    CREATE TABLE IF NOT EXISTS mcp_servers (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      icon TEXT,
+      command TEXT NOT NULL,
+      args TEXT,
+      env_vars TEXT,
+      enabled INTEGER DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Add index_status column to existing databases (ignore if already exists)
@@ -313,6 +326,72 @@ export async function initializeDatabase() {
     db.run(`ALTER TABLE library_files ADD COLUMN index_status TEXT DEFAULT NULL`);
   } catch (e) {
     // Column already exists, ignore
+  }
+
+  // Add mcp_servers column to chats and projects
+  try { db.run(`ALTER TABLE chats ADD COLUMN mcp_servers TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
+  try { db.run(`ALTER TABLE projects ADD COLUMN mcp_servers TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
+
+  // Seed default MCP servers
+  const existingMcp = dbGet(db, 'SELECT id FROM mcp_servers LIMIT 1', []);
+  if (!existingMcp) {
+    const now = new Date().toISOString();
+    const mcpServers = [
+      {
+        id: 'mcp-brave-search',
+        name: 'Brave Search',
+        description: 'Search the web in real-time during conversations. The AI can look up current market data, property comparables, industry news, company information, and regulatory updates. Results are woven into the AI\'s response with source attribution. Powered by Brave\'s independent search index — covers web, news, and local business listings.',
+        icon: 'search',
+        command: 'npx',
+        args: JSON.stringify(['-y', '@anthropic-ai/mcp-server-brave-search']),
+        env_vars: JSON.stringify({ BRAVE_API_KEY: '' }),
+        enabled: 1,
+      },
+      {
+        id: 'mcp-fetch',
+        name: 'Fetch',
+        description: 'Retrieve and read content from any URL. Paste a link to a property listing, news article, report, or any web page into the conversation and the AI will pull the content, convert it to readable text, and analyze it. Supports HTML pages, JSON APIs, and plain text. Large pages are automatically chunked for processing.',
+        icon: 'globe',
+        command: 'npx',
+        args: JSON.stringify(['-y', '@anthropic-ai/mcp-server-fetch']),
+        env_vars: JSON.stringify({}),
+        enabled: 1,
+      },
+      {
+        id: 'mcp-memory',
+        name: 'Memory',
+        description: 'Persistent knowledge graph that remembers information across conversations. The AI can store and recall entities (clients, properties, lease terms), relationships between them, and specific observations. Useful for building up institutional knowledge over time — the AI remembers what you\'ve told it about a client\'s preferences, a property\'s history, or a deal\'s key terms without re-uploading documents.',
+        icon: 'brain',
+        command: 'npx',
+        args: JSON.stringify(['-y', '@modelcontextprotocol/server-memory']),
+        env_vars: JSON.stringify({}),
+        enabled: 1,
+      },
+      {
+        id: 'mcp-puppeteer',
+        name: 'Puppeteer',
+        description: 'Automated browser for interacting with web pages. The AI can navigate to websites, fill out forms, take screenshots, and extract structured data from pages that require JavaScript to load. Useful for pulling data from property listing sites, capturing visual snapshots of dashboards, or scraping tabular data that isn\'t available via a simple URL fetch.',
+        icon: 'terminal',
+        command: 'npx',
+        args: JSON.stringify(['-y', '@anthropic-ai/mcp-server-puppeteer']),
+        env_vars: JSON.stringify({}),
+        enabled: 1,
+      },
+      {
+        id: 'mcp-sequential-thinking',
+        name: 'Sequential Thinking',
+        description: 'Structured reasoning for complex analysis. Gives the AI a step-by-step thinking scratchpad for problems that require careful multi-stage reasoning — lease comparisons across multiple properties, financial modeling, portfolio-level analysis, or any question where the AI needs to break down the problem, consider multiple factors, and build toward a conclusion methodically.',
+        icon: 'lightbulb',
+        command: 'npx',
+        args: JSON.stringify(['-y', '@anthropic-ai/mcp-server-sequential-thinking']),
+        env_vars: JSON.stringify({}),
+        enabled: 1,
+      },
+    ];
+    for (const s of mcpServers) {
+      dbRun(db, `INSERT INTO mcp_servers (id, name, description, icon, command, args, env_vars, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [s.id, s.name, s.description, s.icon, s.command, s.args, s.env_vars, s.enabled, now, now]);
+    }
   }
 
   dbInstance = db;

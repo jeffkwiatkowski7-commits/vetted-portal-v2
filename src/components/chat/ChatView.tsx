@@ -360,6 +360,19 @@ export default function ChatView({ chatId: chatIdProp }: { chatId?: string } = {
               /* User message — right-aligned pill */
               <div className="flex flex-col items-end gap-1">
                 <div className="max-w-[75%] bg-vetted-surface text-vetted-primary rounded-2xl px-5 py-3 text-[15px] leading-relaxed whitespace-pre-wrap">
+                  {msg.images && msg.images.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {msg.images.map((img: { base64: string; mimeType: string }, imgIdx: number) => (
+                        <img
+                          key={imgIdx}
+                          src={`data:${img.mimeType};base64,${img.base64}`}
+                          alt={`Attached image ${imgIdx + 1}`}
+                          className="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => window.open(`data:${img.mimeType};base64,${img.base64}`, '_blank')}
+                        />
+                      ))}
+                    </div>
+                  )}
                   {msg.content}
                 </div>
                 {msg.created_at && (

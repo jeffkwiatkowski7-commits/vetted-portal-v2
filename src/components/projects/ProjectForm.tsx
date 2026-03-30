@@ -105,8 +105,15 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
   }, [defaultModel]);
 
   const [enabledMcps, setEnabledMcps] = useState<string[]>(() => {
-    try { return JSON.parse(initialData?.mcp_servers as unknown as string ?? '[]'); }
-    catch { return Array.isArray(initialData?.mcp_servers) ? (initialData.mcp_servers as unknown as string[]) : []; }
+    const raw = initialData?.mcp_servers;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw !== 'string' || !raw) return [];
+    try {
+      let parsed = JSON.parse(raw);
+      // Handle double-encoded JSON (string instead of array)
+      if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
   });
   const [availableMcps, setAvailableMcps] = useState<{ id: string; name: string; description: string; icon: string }[]>([]);
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>(initialData?.file_ids ?? []);

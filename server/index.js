@@ -13,6 +13,7 @@ import { getMockResponse } from './mock-responses.js';
 import { seedDatabase } from './seed.js';
 import leaseRoutes from './lease-routes.js';
 import { chatWithDocuments as geminiChatWithDocuments, generate as geminiGenerate, extractGroundedResponse } from './lib/gemini.js';
+import { chatWithDocuments as claudeDirectChatWithDocuments } from './lib/claude-direct.js';
 import bcrypt from 'bcryptjs';
 import mammoth from 'mammoth';
 import { indexFile, queryProject, deleteFileChunks, deleteProjectChunks, formatRetrievedContext, extractCitations, isSupportedType, extractText } from './lib/rag.js';
@@ -134,7 +135,7 @@ async function runMigrations(db) {
     console.log('Migration: set jeffk password');
   }
 
-  // Disable Claude models if any exist (GCP doesn't support Claude)
+  // Disable old Vertex-based Claude models (GCP doesn't support Claude); direct-API models re-enabled below
   dbRun(db, "UPDATE model_configs SET is_enabled = 0 WHERE provider = 'Anthropic'");
 
   // Ensure Gemini 3.1 model exists in model_configs (check by id or display_name)
@@ -162,6 +163,18 @@ async function runMigrations(db) {
     dbRun(db, `INSERT INTO model_configs (id, model_name, provider, display_name, icon_color, is_default, is_enabled, max_tokens, rate_limit, created_at, updated_at)
       VALUES ('gemini-2-5-flash', 'Gemini 2.5 Flash', 'Google', 'Gemini 2.5 Flash', '#10B981', 0, 1, 8192, 120, ?, ?)`, [now, now]);
     console.log('Migration: added Gemini 2.5 Flash model');
+  }
+
+  // Ensure Claude Opus 4.6 model exists in model_configs
+  const opusModel = dbGet(db, "SELECT id FROM model_configs WHERE id = 'claude-opus-4-6'");
+  if (!opusModel) {
+    const now = new Date().toISOString();
+    dbRun(db, `INSERT INTO model_configs (id, model_name, provider, display_name, icon_color, is_default, is_enabled, max_tokens, rate_limit, created_at, updated_at)
+      VALUES ('claude-opus-4-6', 'claude-opus-4-20250514', 'Anthropic', 'Claude Opus 4.6', '#F97316', 0, 1, 8192, 60, ?, ?)`, [now, now]);
+    console.log('Migration: added Claude Opus 4.6 model');
+  } else {
+    // Re-enable if it was disabled by the Anthropic blanket disable above
+    dbRun(db, "UPDATE model_configs SET is_enabled = 1 WHERE id = 'claude-opus-4-6'");
   }
 
   // Ensure jefffox@vettedconsultant.com exists
@@ -685,11 +698,19 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     let mcpToolMap = {}; // prefixedName -> { serverId, serverName, originalName, serverConfig }
 
     let activeMcpIds = [];
+    const parseMcpIds = (raw) => {
+      if (!raw) return [];
+      try {
+        let parsed = JSON.parse(raw);
+        if (typeof parsed === 'string') parsed = JSON.parse(parsed); // handle double-encoded
+        return Array.isArray(parsed) ? parsed : [];
+      } catch { return []; }
+    };
     if (chat.project_id) {
       const proj = dbGet(db, 'SELECT mcp_servers FROM projects WHERE id = ?', [chat.project_id]);
-      try { activeMcpIds = JSON.parse(proj?.mcp_servers || '[]'); } catch { activeMcpIds = []; }
+      activeMcpIds = parseMcpIds(proj?.mcp_servers);
     } else {
-      try { activeMcpIds = JSON.parse(chat.mcp_servers || '[]'); } catch { activeMcpIds = []; }
+      activeMcpIds = parseMcpIds(chat.mcp_servers);
     }
 
     if (activeMcpIds.length > 0) {
@@ -737,10 +758,34 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       ? [{ functionDeclarations: mcpToolDeclarations }]
       : [];
 
-    step('Calling Gemini');
+    // Determine provider from modelId (model_name in DB)
+    const isClaudeModel = modelId && (modelId.startsWith('claude-') || modelId.includes('claude'));
 
     let aiText = '';
-    const result = await geminiChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, geminiTools);
+    let result;
+
+    if (isClaudeModel) {
+      // Convert MCP tool declarations to Claude tool format
+      const claudeTools = mcpToolDeclarations.map(decl => {
+        const tool = { name: decl.name, description: decl.description || '' };
+        if (decl.parameters) {
+          tool.input_schema = {
+            type: decl.parameters.type || 'object',
+            properties: decl.parameters.properties || {},
+          };
+          if (decl.parameters.required) tool.input_schema.required = decl.parameters.required;
+        } else {
+          tool.input_schema = { type: 'object', properties: {} };
+        }
+        return tool;
+      });
+
+      step('Calling Claude');
+      result = await claudeDirectChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, { claudeTools, mcpToolMap, mcpManager });
+    } else {
+      step('Calling Gemini');
+      result = await geminiChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, geminiTools);
+    }
 
     if (result.text) {
       aiText = result.text;

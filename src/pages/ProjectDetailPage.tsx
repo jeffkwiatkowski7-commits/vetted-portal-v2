@@ -61,7 +61,7 @@ export default function ProjectDetailPage() {
         name: data.name,
         description: data.description,
         system_prompt: data.system_prompt,
-        mcp_servers: JSON.stringify(data.mcp_servers || []),
+        mcp_servers: data.mcp_servers || [],
       });
 
       // Sync file assignments

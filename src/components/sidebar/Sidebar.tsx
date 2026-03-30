@@ -55,16 +55,8 @@ export default function Sidebar() {
     setChatAttachedFiles([]);
     setActiveChat(null);
     if (isInProjectChat) {
-      // Stay on the project page — just clear the chat to start fresh
-      if (projectRouteMatch) {
-        // Already on /projects/:id, just clearing activeChat is enough
-        // Force re-render by navigating to the same project
-        navigate(`/projects/${currentProjectId}`, { replace: true });
-      } else {
-        // On /chat/:id with a project chat — go to the project page
-        setPendingProjectId(null);
-        navigate(`/projects/${currentProjectId}`);
-      }
+      // Navigate to the project page — clears chat and shows fresh input
+      navigate(`/projects/${currentProjectId}`);
     } else {
       setPendingProjectId(null);
       navigate('/');
@@ -230,7 +222,7 @@ export default function Sidebar() {
 
       {/* User Footer */}
       <div className="p-3 border-t border-vetted-border">
-        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.7.0</p>
+        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.8.0</p>
       </div>
 
       {/* Context Menu */}

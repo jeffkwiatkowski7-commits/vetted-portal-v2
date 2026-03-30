@@ -29,7 +29,7 @@ function resolveModelId(modelName) {
   return MODEL_ID_MAP[modelName] || null;
 }
 
-// Singleton client
+// Singleton client — uses ADC from ~/.config/gcloud/application_default_credentials.json
 let _client = null;
 
 function getClient() {

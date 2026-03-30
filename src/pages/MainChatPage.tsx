@@ -15,7 +15,14 @@ interface ModelOption {
   isDefault: boolean;
 }
 
-function ModelIcon({ color, isGemini }: { color: string; isGemini?: boolean }) {
+function ModelIcon({ color, isGemini, isClaude }: { color: string; isGemini?: boolean; isClaude?: boolean }) {
+  if (isClaude) {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2l2.09 6.26L20.18 9.27l-5.09 3.9L16.18 19.27 12 15.77l-4.18 3.5 1.09-6.1L3.82 9.27l6.09-1.01z" fill={color} />
+      </svg>
+    );
+  }
   if (isGemini) {
     return (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -421,7 +428,11 @@ export default function MainChatPage() {
             timestamp: m.created_at,
           }))
         );
-        try { setChatMcpServerIds(JSON.parse(chat.mcp_servers || '[]')); } catch { setChatMcpServerIds([]); }
+        try {
+          let parsed = JSON.parse(chat.mcp_servers || '[]');
+          if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+          setChatMcpServerIds(Array.isArray(parsed) ? parsed : []);
+        } catch { setChatMcpServerIds([]); }
       })
       .catch(() => {});
   }, [id]);
@@ -628,7 +639,7 @@ export default function MainChatPage() {
               onClick={() => setModelOpen(o => !o)}
               className="flex items-center gap-1.5 text-xs border border-vetted-border rounded-lg px-2 py-1 text-vetted-text-secondary bg-white hover:border-vetted-primary transition-colors"
             >
-              {selectedModel && <ModelIcon color={selectedModel.iconColor} isGemini={selectedModel.value === 'gemini'} />}
+              {selectedModel && <ModelIcon color={selectedModel.iconColor} isGemini={selectedModel.value === 'gemini'} isClaude={selectedModel.value === 'claude'} />}
               {selectedModel?.name || 'Select model'}
               <ChevronDown size={11} className="opacity-50" />
             </button>
@@ -640,7 +651,7 @@ export default function MainChatPage() {
                     onClick={() => { setSelectedModel(model); localStorage.setItem('selectedModelId', model.modelId); setModelOpen(false); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
                   >
-                    <ModelIcon color={model.iconColor} isGemini={model.value === 'gemini'} />
+                    <ModelIcon color={model.iconColor} isGemini={model.value === 'gemini'} isClaude={model.value === 'claude'} />
                     <span className="flex-1 text-left">{model.name}</span>
                     {selectedModel?.modelId === model.modelId && <Check size={11} className="text-vetted-primary" />}
                   </button>

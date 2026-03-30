@@ -17,7 +17,14 @@ interface ModelOption {
   isDefault: boolean;
 }
 
-function ModelIcon({ color, isGemini }: { color: string; isGemini?: boolean }) {
+function ModelIcon({ color, isGemini, isClaude }: { color: string; isGemini?: boolean; isClaude?: boolean }) {
+  if (isClaude) {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2l2.09 6.26L20.18 9.27l-5.09 3.9L16.18 19.27 12 15.77l-4.18 3.5 1.09-6.1L3.82 9.27l6.09-1.01z" fill={color} />
+      </svg>
+    );
+  }
   if (isGemini) {
     return (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -409,7 +416,7 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
                         : 'border-vetted-border text-vetted-text-secondary hover:bg-vetted-surface'
                     }`}
                   >
-                    {selectedModel && <ModelIcon color={selectedModel.iconColor} isGemini={selectedModel.value === 'gemini'} />}
+                    {selectedModel && <ModelIcon color={selectedModel.iconColor} isGemini={selectedModel.value === 'gemini'} isClaude={selectedModel.value === 'claude'} />}
                     {selectedModel?.name || 'Select model'}
                     <ChevronDown size={12} />
                   </button>
@@ -430,7 +437,7 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
                             selectedModel?.modelId === model.modelId ? 'bg-vetted-surface font-medium' : ''
                           }`}
                         >
-                          <ModelIcon color={model.iconColor} isGemini={model.value === 'gemini'} />
+                          <ModelIcon color={model.iconColor} isGemini={model.value === 'gemini'} isClaude={model.value === 'claude'} />
                           {model.name}
                           {selectedModel?.modelId === model.modelId && (
                             <span className="ml-auto text-vetted-accent text-xs">&#10003;</span>

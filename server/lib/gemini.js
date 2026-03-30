@@ -25,6 +25,14 @@ const MODEL_ID_MAP = {
   'Gemini 2.0 Flash': 'gemini-2.0-flash',
 };
 
+// Fallback chain: when a model is rate-limited, try the next one
+const MODEL_FALLBACK_CHAIN = {
+  'gemini-3.1-pro-preview': ['gemini-3.0-pro-preview', 'gemini-2.5-pro'],
+  'gemini-3.1-flash-preview': ['gemini-3.0-flash-preview', 'gemini-2.5-flash'],
+  'gemini-3.0-pro-preview': ['gemini-2.5-pro'],
+  'gemini-3.0-flash-preview': ['gemini-2.5-flash'],
+};
+
 function resolveModelId(modelName) {
   if (!modelName) return null;
   return MODEL_ID_MAP[modelName] || null;
@@ -47,32 +55,47 @@ function getClient() {
 
 async function generate(contents, genConfig = {}, tools = [], modelOverride = null) {
   const client = getClient();
-  const req = {
-    model: resolveModelId(modelOverride) || config.modelId,
-    contents,
-    config: {
-      temperature: 0.3,
-      maxOutputTokens: 65536,
-      ...genConfig,
-    },
-  };
-  if (tools.length) req.config.tools = tools;
+  const primaryModel = resolveModelId(modelOverride) || config.modelId;
+  const modelsToTry = [primaryModel, ...(MODEL_FALLBACK_CHAIN[primaryModel] || [])];
 
-  // Retry with exponential backoff for transient 429/quota errors
-  const MAX_RETRIES = 3;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      return await client.models.generateContent(req);
-    } catch (err) {
-      const msg = err.message || '';
-      const isRetryable = msg.includes('429') || msg.includes('quota') || msg.includes('rate limit') || msg.includes('RESOURCE_EXHAUSTED');
-      if (isRetryable && attempt < MAX_RETRIES) {
-        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
-        console.log(`[gemini] Rate limited (attempt ${attempt + 1}/${MAX_RETRIES}), retrying in ${Math.round(delay)}ms...`);
-        await new Promise(r => setTimeout(r, delay));
-        continue;
+  for (let modelIdx = 0; modelIdx < modelsToTry.length; modelIdx++) {
+    const model = modelsToTry[modelIdx];
+    const req = {
+      model,
+      contents,
+      config: {
+        temperature: 0.3,
+        maxOutputTokens: 65536,
+        ...genConfig,
+      },
+    };
+    if (tools.length) req.config.tools = tools;
+
+    // Retry with exponential backoff for transient 429/quota errors
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const result = await client.models.generateContent(req);
+        if (modelIdx > 0) {
+          console.log(`[gemini] Succeeded with fallback model: ${model}`);
+        }
+        return result;
+      } catch (err) {
+        const msg = err.message || '';
+        const isRateLimited = msg.includes('429') || msg.includes('quota') || msg.includes('rate limit') || msg.includes('RESOURCE_EXHAUSTED');
+        if (isRateLimited && attempt < MAX_RETRIES) {
+          const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+          console.log(`[gemini] ${model} rate limited (attempt ${attempt + 1}/${MAX_RETRIES}), retrying in ${Math.round(delay)}ms...`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        // Not rate-limited or exhausted retries — check for fallback
+        if (isRateLimited && modelIdx < modelsToTry.length - 1) {
+          console.log(`[gemini] ${model} exhausted retries, falling back to ${modelsToTry[modelIdx + 1]}`);
+          break; // break inner retry loop, try next model
+        }
+        throw err;
       }
-      throw err;
     }
   }
 }

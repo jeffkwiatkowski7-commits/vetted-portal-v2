@@ -38,6 +38,11 @@ export default function AppsPage() {
   };
 
   const handleAppClick = async (app: App) => {
+    // If app has a dedicated route, navigate there instead of creating a chat
+    if (app.route) {
+      navigate(app.route);
+      return;
+    }
     try {
       const newChat = await api.chats.create({
         title: `${app.name} - ${new Date().toLocaleDateString()}`,

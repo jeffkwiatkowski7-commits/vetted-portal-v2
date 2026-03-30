@@ -105,6 +105,7 @@ export interface App {
   tool_sets?: string;
   visibility: string;
   status: string;
+  route?: string;
   usage_count: number;
   created_by: string;
   created_at: string;

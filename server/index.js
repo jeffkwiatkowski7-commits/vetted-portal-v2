@@ -20,6 +20,7 @@ import { indexFile, queryProject, deleteFileChunks, deleteProjectChunks, formatR
 import { deleteFile as gcsDeleteFile, deleteProjectFiles as gcsDeleteProjectFiles, downloadFile as gcsDownload } from './lib/gcs.js';
 import { chunkText, embedTexts } from './lib/embeddings.js';
 import mcpManager from './lib/mcp-manager.js';
+import { hasTavily, tavilySearch } from './lib/tavily.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -758,8 +759,18 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       }
     }
 
-    const geminiTools = mcpToolDeclarations.length > 0
-      ? [{ functionDeclarations: mcpToolDeclarations }]
+    // Inject Tavily web_search alongside any MCP tool declarations
+    const allFunctionDeclarations = [...mcpToolDeclarations];
+    if (hasTavily()) {
+      allFunctionDeclarations.push({
+        name: "web_search",
+        description: "Search the web for current information. Use for market data, recent events, or anything requiring live information.",
+        parameters: { type: "OBJECT", properties: { query: { type: "STRING", description: "The search query" } }, required: ["query"] },
+      });
+    }
+
+    const geminiTools = allFunctionDeclarations.length > 0
+      ? [{ functionDeclarations: allFunctionDeclarations }]
       : [];
 
     // Determine provider from modelId (model_name in DB)
@@ -805,6 +816,20 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
         const fnCalls = modelParts.filter(p => p.functionCall);
         const fnResponseParts = await Promise.all(fnCalls.map(async (part) => {
           const prefixedName = part.functionCall.name;
+          // Handle Tavily web_search calls
+          if (prefixedName === 'web_search') {
+            const query = part.functionCall.args?.query || '';
+            step(`Searching the web: "${query}"`);
+            try {
+              const searchResult = await tavilySearch(query);
+              step(`Web search returned results`);
+              return { functionResponse: { name: prefixedName, response: { result: searchResult || 'No results found.' } } };
+            } catch (err) {
+              step(`Web search error: ${err.message}`);
+              return { functionResponse: { name: prefixedName, response: { result: `Error: ${err.message}` } } };
+            }
+          }
+
           const mapping = mcpToolMap[prefixedName];
           if (!mapping) {
             return { functionResponse: { name: prefixedName, response: { result: 'Error: Unknown tool' } } };

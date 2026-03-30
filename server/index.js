@@ -848,7 +848,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     if (msg.includes('invalid_grant') || msg.includes('invalid_rapt') || msg.includes('reauth') || msg.includes('Unable to authenticate') || msg.includes('401') || msg.includes('403')) {
       aiContent = `The AI service could not authenticate. Check that the VM service account has the **Vertex AI User** role and the Vertex AI API is enabled on project \`${process.env.GCP_PROJECT || 'bill-leases'}\`.\n\nError: \`${msg.slice(0, 200)}\``;
     } else if (msg.includes('quota') || msg.includes('rate limit') || msg.includes('429')) {
-      aiContent = 'The AI service is temporarily rate-limited. Please wait a moment and try again.';
+      aiContent = `The AI service is temporarily rate-limited. Please wait a moment and try again.\n\nError: \`${msg.slice(0, 300)}\``;
     } else if (msg.includes('not found') || msg.includes('404')) {
       const failedModel = msg.match(/models\/([^\s]+)/)?.[1] || process.env.MODEL_ID || 'unknown';
       aiContent = `The AI model \`${failedModel}\` is not available in project \`${process.env.GCP_PROJECT || 'bill-leases'}\` (location: \`${process.env.GCP_LOCATION || 'global'}\`).\n\nError: \`${msg.slice(0, 200)}\``;

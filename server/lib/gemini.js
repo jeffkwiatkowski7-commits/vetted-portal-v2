@@ -57,7 +57,24 @@ async function generate(contents, genConfig = {}, tools = [], modelOverride = nu
     },
   };
   if (tools.length) req.config.tools = tools;
-  return client.models.generateContent(req);
+
+  // Retry with exponential backoff for transient 429/quota errors
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await client.models.generateContent(req);
+    } catch (err) {
+      const msg = err.message || '';
+      const isRetryable = msg.includes('429') || msg.includes('quota') || msg.includes('rate limit') || msg.includes('RESOURCE_EXHAUSTED');
+      if (isRetryable && attempt < MAX_RETRIES) {
+        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+        console.log(`[gemini] Rate limited (attempt ${attempt + 1}/${MAX_RETRIES}), retrying in ${Math.round(delay)}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 /**

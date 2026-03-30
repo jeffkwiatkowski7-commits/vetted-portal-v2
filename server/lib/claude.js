@@ -189,8 +189,41 @@ CRITICAL table formatting rules:
  * Mirrors gemini.js chatWithDocuments signature.
  */
 export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null) {
-  const textDocs = docs.filter((d) => d.text !== undefined);
-  const pdfDocs = docs.filter((d) => d.base64 !== undefined);
+  let textDocs = docs.filter((d) => d.text !== undefined);
+  let pdfDocs = docs.filter((d) => d.base64 !== undefined);
+
+  // Claude API has a 100-page PDF limit. Count pages and fall back to text extraction if needed.
+  const MAX_PDF_PAGES = 100;
+  if (pdfDocs.length > 0) {
+    try {
+      const pdfParse = (await import("pdf-parse")).default;
+      let totalPages = 0;
+      for (const pdf of pdfDocs) {
+        try {
+          const buffer = Buffer.from(pdf.base64, "base64");
+          const parsed = await pdfParse(buffer);
+          totalPages += parsed.numpages || 0;
+        } catch { /* skip */ }
+      }
+
+      if (totalPages > MAX_PDF_PAGES) {
+        console.log(`[claude] Total PDF pages (${totalPages}) exceeds ${MAX_PDF_PAGES} — converting PDFs to text`);
+        if (onStep) onStep(`PDF pages (${totalPages}) exceed Claude's 100-page limit — extracting text instead`);
+        for (let i = 0; i < pdfDocs.length; i++) {
+          try {
+            const buffer = Buffer.from(pdfDocs[i].base64, "base64");
+            const parsed = await pdfParse(buffer);
+            textDocs.push({ name: pdfDocs[i].name, text: parsed.text || `[Could not extract text from ${pdfDocs[i].name}]` });
+          } catch {
+            textDocs.push({ name: pdfDocs[i].name, text: `[Could not extract text from ${pdfDocs[i].name}]` });
+          }
+        }
+        pdfDocs = [];
+      }
+    } catch (err) {
+      console.error("[claude] pdf-parse failed, sending PDFs as-is:", err.message);
+    }
+  }
 
   const docContext = textDocs.length > 0
     ? textDocs.map((d, i) => `\n--- DOCUMENT ${i + 1}: ${d.name} ---\n${d.text}\n`).join("\n")
@@ -213,7 +246,7 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
     firstContent.push({ type: "text", text: chatHistory[0].content });
   }
 
-  // Attach PDFs as document blocks
+  // Attach PDFs as document blocks (only if under page limit)
   for (const pdf of pdfDocs) {
     firstContent.push({
       type: "document",

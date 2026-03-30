@@ -75,6 +75,7 @@ export async function initializeDatabase() {
       token_count INTEGER,
       reasoning TEXT,
       attachments TEXT,
+      images TEXT,
       created_at TEXT NOT NULL,
       FOREIGN KEY (chat_id) REFERENCES chats(id)
     );
@@ -331,6 +332,9 @@ export async function initializeDatabase() {
   // Add mcp_servers column to chats and projects
   try { db.run(`ALTER TABLE chats ADD COLUMN mcp_servers TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
   try { db.run(`ALTER TABLE projects ADD COLUMN mcp_servers TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
+
+  // Add images column to messages for clipboard image paste
+  try { db.run(`ALTER TABLE messages ADD COLUMN images TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
 
   // Seed default MCP servers
   const existingMcp = dbGet(db, 'SELECT id FROM mcp_servers LIMIT 1', []);

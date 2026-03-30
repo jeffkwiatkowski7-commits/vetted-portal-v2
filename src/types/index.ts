@@ -43,6 +43,7 @@ export interface Message {
   token_count?: number;
   reasoning?: string;
   attachments?: string;
+  images?: Array<{ base64: string; mimeType: string }> | null;
   steps?: string[];
   citations?: SourceCitation[];
   created_at: string;

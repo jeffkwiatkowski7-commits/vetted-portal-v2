@@ -87,6 +87,7 @@ interface ChatMessage {
   content: string;
   steps?: string[];
   attachedFileName?: string;
+  images?: Array<{ base64: string; mimeType: string }>;
   citations?: SourceCitation[];
   timestamp?: string;
   reasoning?: string;
@@ -145,6 +146,19 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
             <div className="flex items-center gap-1 opacity-50 mb-1.5 text-[11px]">
               <Paperclip size={10} />
               <span className="truncate max-w-[200px]">{msg.attachedFileName}</span>
+            </div>
+          )}
+          {msg.images && msg.images.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {msg.images.map((img: { base64: string; mimeType: string }, imgIdx: number) => (
+                <img
+                  key={imgIdx}
+                  src={`data:${img.mimeType};base64,${img.base64}`}
+                  alt={`Attached image ${imgIdx + 1}`}
+                  className="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                  onClick={() => window.open(`data:${img.mimeType};base64,${img.base64}`, '_blank')}
+                />
+              ))}
             </div>
           )}
           {msg.content}
@@ -320,7 +334,7 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
 export default function MainChatPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, chats, setChats, pendingProjectId, setPendingProjectId } = useStore();
+  const { user, chats, setChats, pendingProjectId, setPendingProjectId, addToast } = useStore();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -331,6 +345,7 @@ export default function MainChatPage() {
   const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState<ModelOption | null>(null);
   const [chatMcpServerIds, setChatMcpServerIds] = useState<string[]>([]);
+  const [pastedImages, setPastedImages] = useState<Array<{ base64: string; mimeType: string }>>([]);
 
   // Fetch models from admin config
   useEffect(() => {
@@ -437,6 +452,30 @@ export default function MainChatPage() {
       .catch(() => {});
   }, [id]);
 
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!item.type.startsWith('image/')) continue;
+      e.preventDefault();
+      const blob = item.getAsFile();
+      if (!blob) continue;
+      if (blob.size > 5 * 1024 * 1024) {
+        addToast({ type: 'error', title: 'Image too large', detail: 'Maximum image size is 5MB' });
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const [header, base64] = dataUrl.split(',');
+        const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
+        setPastedImages((prev) => [...prev, { base64, mimeType }]);
+      };
+      reader.readAsDataURL(blob);
+    }
+  };
+
   const handleSend = async () => {
     let text = input.trim();
     if (chatting) return;
@@ -450,7 +489,15 @@ export default function MainChatPage() {
       text = `Please summarize the following document${pendingFiles.length > 1 ? 's' : ''}: ${names}`;
     }
 
+    // Allow sending images with no text
+    if (!text && pastedImages.length > 0) {
+      text = "What's in this image?";
+    }
     if (!text) return;
+
+    // Capture images before clearing
+    const imagesToSend = pastedImages.length > 0 ? [...pastedImages] : undefined;
+
     const attachedName = pendingFiles.length === 1
       ? pendingFiles[0].original_name
       : pendingFiles.length > 1
@@ -458,9 +505,10 @@ export default function MainChatPage() {
       : undefined;
 
     // Show user message and clear inputs immediately
-    setMessages(prev => [...prev, { role: 'user', content: text, attachedFileName: attachedName, timestamp: new Date().toISOString() }]);
+    setMessages(prev => [...prev, { role: 'user', content: text, attachedFileName: attachedName, images: imagesToSend, timestamp: new Date().toISOString() }]);
     setInput('');
     setPendingFiles([]);
+    setPastedImages([]);
     setChatting(true);
     sendingRef.current = true;
 
@@ -489,7 +537,7 @@ export default function MainChatPage() {
     try {
       const result = await (api.chats as any).streamMessage(
         activeChatId!,
-        { content: text, model: selectedModel?.value || 'gemini', modelId: selectedModel?.modelId, attachments: attachmentIds.length > 0 ? attachmentIds : undefined },
+        { content: text, model: selectedModel?.value || 'gemini', modelId: selectedModel?.modelId, attachments: attachmentIds.length > 0 ? attachmentIds : undefined, images: imagesToSend },
         (step: { message: string }) => {
           setMessages(prev => {
             const updated = [...prev];
@@ -557,6 +605,28 @@ export default function MainChatPage() {
         </div>
       )}
 
+      {/* Pasted image previews */}
+      {pastedImages.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {pastedImages.map((img, idx) => (
+            <div key={idx} className="relative group">
+              <img
+                src={`data:${img.mimeType};base64,${img.base64}`}
+                alt={`Pasted image ${idx + 1}`}
+                className="w-12 h-12 object-cover rounded-lg border border-vetted-border"
+              />
+              <button
+                onClick={() => setPastedImages((prev) => prev.filter((_, i) => i !== idx))}
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-vetted-primary text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Remove image"
+              >
+                &times;
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Textarea */}
       <textarea
         value={input}
@@ -567,6 +637,7 @@ export default function MainChatPage() {
             handleSend();
           }
         }}
+        onPaste={handlePaste}
         placeholder="Ask anything…"
         disabled={chatting}
         rows={3}

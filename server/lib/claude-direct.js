@@ -4,6 +4,7 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { logUsage, getDatabase } from "../database.js";
+import { hasTavily, tavilySearch } from "./tavily.js";
 
 const MAX_TOKENS = 8192;
 const MAX_TOOL_ITERATIONS = 10;
@@ -22,7 +23,7 @@ function getClient() {
  * General document Q&A / project chat via Claude direct API.
  * Supports MCP tools via the mcpToolMap + mcpManager passed from the caller.
  */
-export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null, modelOverride = null, { claudeTools = [], mcpToolMap = {}, mcpManager = null } = {}) {
+export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null, modelOverride = null, { claudeTools = [], mcpToolMap = {}, mcpManager = null, images = [] } = {}) {
   const textDocs = docs.filter((d) => d.text !== undefined);
   const pdfDocs = docs.filter((d) => d.base64 !== undefined);
 
@@ -57,6 +58,20 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
     });
   }
 
+  // Add pasted clipboard images as image blocks
+  if (images && images.length > 0) {
+    for (const img of images) {
+      firstContent.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: img.mimeType,
+          data: img.base64,
+        },
+      });
+    }
+  }
+
   messages.push({ role: "user", content: firstContent });
 
   for (let i = 1; i < chatHistory.length; i++) {
@@ -74,14 +89,24 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
   const client = getClient();
   const modelId = modelOverride || "claude-opus-4-20250514";
 
+  // Build tools list: Tavily web_search + MCP tools
+  const allTools = [...claudeTools];
+  if (hasTavily()) {
+    allTools.unshift({
+      name: "web_search",
+      description: "Search the web for current information. Use for market data, recent events, or anything requiring live information.",
+      input_schema: { type: "object", properties: { query: { type: "string", description: "The search query" } }, required: ["query"] },
+    });
+  }
+
   const params = {
     model: modelId,
     max_tokens: MAX_TOKENS,
     system,
     messages: [...messages],
   };
-  if (claudeTools.length > 0) {
-    params.tools = claudeTools;
+  if (allTools.length > 0) {
+    params.tools = allTools;
   }
 
   let totalInputTokens = 0;
@@ -114,11 +139,19 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
       return { text: text || 'No response generated.' };
     }
 
-    // Execute MCP tool calls
+    // Execute tool calls (Tavily web_search + MCP tools)
     params.messages.push({ role: 'assistant', content: response.content });
 
     const toolResults = [];
     for (const block of toolUseBlocks) {
+      if (block.name === 'web_search') {
+        const query = block.input?.query || '';
+        console.log('[claude-direct] web search:', query);
+        if (onStep) onStep(`Web search: "${query}"`);
+        const result = await tavilySearch(query);
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result || 'No results found.' });
+        continue;
+      }
       const mapping = mcpToolMap[block.name];
       if (!mapping) {
         toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: 'Error: Unknown tool' });
@@ -171,6 +204,8 @@ Today's date is ${today}.
 ## Core Behavior
 
 - Answer questions directly and accurately
+- Use the web_search tool when questions require current information, recent events, live data, or anything likely beyond your training knowledge — search proactively, don't wait to be asked
+- When using search results, cite sources inline as [Source Name](URL)
 - If you're uncertain about something, say so clearly rather than speculating
 - Never refuse a reasonable request — if you can't do exactly what's asked, do the closest useful thing and explain
 

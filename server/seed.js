@@ -280,6 +280,23 @@ export async function seedDatabase() {
       created_by: users[0].id,
       created_at: now,
       updated_at: now
+    },
+    {
+      id: uuidv4(),
+      name: 'PowerPoint Template Extractor',
+      description: 'Extract design tokens from PowerPoint templates — colors, fonts, backgrounds, and layouts — saved as JSON to your Library for use with Canvas Mode',
+      icon: '📊',
+      category: 'data',
+      system_prompt: systemPrompts[0].id,
+      model: 'gemini-3',
+      temperature: 0.5,
+      tool_sets: JSON.stringify([]),
+      visibility: 'all',
+      status: 'active',
+      usage_count: 0,
+      created_by: users[0].id,
+      created_at: now,
+      updated_at: now
     }
   ];
 
@@ -291,6 +308,31 @@ export async function seedDatabase() {
   }
 
   console.log(`✓ Created ${apps.length} apps`);
+
+  // Seed Canvas Mode skill
+  const canvasSkillId = uuidv4();
+  dbRun(db, `
+    INSERT INTO skills (id, name, description, instructions, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `, [
+    canvasSkillId,
+    'Canvas Mode',
+    'Renders AI-generated HTML/CSS as live visual previews in chat',
+    `You are in Canvas Mode. When the user requests visual content — pages, reports, dashboards, cards, layouts, or any visual output — generate complete, self-contained HTML with embedded CSS.
+
+Rules:
+1. Wrap ALL visual HTML output in a \`\`\`canvas-html code fence (not \`\`\`html)
+2. Include all styles in a <style> block — no external stylesheets except Google Fonts via @import
+3. Make the output responsive and presentable as a standalone page
+4. If design tokens are attached (colors, fonts, backgrounds), use them for all styling decisions
+5. When the user asks for revisions, output the complete updated HTML — never a partial diff
+6. Keep the HTML clean and well-structured — it may be exported and used directly
+
+The \`\`\`canvas-html fence signals the UI to render your output as a live preview instead of a code block. The user can toggle between the preview and the raw code.`,
+    now,
+    now
+  ]);
+  console.log('✓ Created Canvas Mode skill');
 
   // Seed Projects
   const projects = [];

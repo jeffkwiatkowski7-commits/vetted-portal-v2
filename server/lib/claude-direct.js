@@ -27,41 +27,67 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
   let textDocs = docs.filter((d) => d.text !== undefined);
   let pdfDocs = docs.filter((d) => d.base64 !== undefined);
 
-  // Claude API has a 100-page PDF limit. Count pages and fall back to text extraction if needed.
-  const MAX_PDF_PAGES = 100;
-  if (pdfDocs.length > 0) {
+  // Claude API has a 100-page PDF limit.
+  // When multiple PDFs exist, only send query-relevant ones as native documents;
+  // use Gemini Flash to summarize the rest (Gemini has no page limit on PDFs).
+  if (pdfDocs.length > 1) {
     try {
-      const pdfParse = (await import("pdf-parse")).default;
-      let totalPages = 0;
-      const pageCounts = [];
-      for (const pdf of pdfDocs) {
-        try {
-          const buffer = Buffer.from(pdf.base64, "base64");
-          const parsed = await pdfParse(buffer);
-          pageCounts.push(parsed.numpages || 0);
-          totalPages += parsed.numpages || 0;
-        } catch {
-          pageCounts.push(0);
+      // Check filename relevance to the user's query
+      const stopWords = new Set(["the","and","for","are","but","not","you","all","can","her","was","one","our","out","about","give","tell","what","with","from","this","that","have","been","some","details","detail","info","information","please","show","list","me"]);
+      const keywords = userMessage.toLowerCase().split(/\s+/).filter(w => w.length >= 2 && !stopWords.has(w));
+      const isRelevant = (name) => {
+        const lower = name.toLowerCase();
+        return keywords.some(kw => lower.includes(kw));
+      };
+
+      const relevant = pdfDocs.filter(d => isRelevant(d.name));
+      const other = pdfDocs.filter(d => !isRelevant(d.name));
+
+      if (relevant.length > 0 && other.length > 0) {
+        // Send relevant PDFs as native documents, have Gemini summarize the rest
+        if (onStep) onStep(`${relevant.length} of ${pdfDocs.length} PDFs match query — summarizing ${other.length} others via Gemini`);
+        console.log(`[claude-direct] Relevant PDFs: ${relevant.map(d => d.name).join(", ")}`);
+        pdfDocs = relevant;
+
+        // Use Gemini Flash to summarize non-relevant PDFs in parallel
+        const { summarizePdfs } = await import("./gemini.js");
+        const summaries = await summarizePdfs(other, onStep);
+        textDocs.push(...summaries);
+      } else if (pdfDocs.length > 0) {
+        // No filename match — count pages to check if we need fallback
+        const pdfParse = (await import("pdf-parse")).default;
+        let totalPages = 0;
+        for (const pdf of pdfDocs) {
+          try {
+            const buffer = Buffer.from(pdf.base64, "base64");
+            const parsed = await pdfParse(buffer);
+            totalPages += parsed.numpages || 0;
+          } catch { /* skip */ }
+        }
+        if (totalPages > 100) {
+          if (onStep) onStep(`PDF pages (${totalPages}) exceed limit — summarizing all via Gemini`);
+          const { summarizePdfs } = await import("./gemini.js");
+          const summaries = await summarizePdfs(pdfDocs, onStep);
+          textDocs.push(...summaries);
+          pdfDocs = [];
         }
       }
-
-      if (totalPages > MAX_PDF_PAGES) {
-        console.log(`[claude-direct] Total PDF pages (${totalPages}) exceeds ${MAX_PDF_PAGES} — converting PDFs to text`);
-        if (onStep) onStep(`PDF pages (${totalPages}) exceed Claude's 100-page limit — extracting text instead`);
-        // Convert all PDFs to text docs
-        for (let i = 0; i < pdfDocs.length; i++) {
+    } catch (err) {
+      console.error("[claude-direct] PDF filtering failed, falling back to pdf-parse text extraction:", err.message);
+      // Fallback: extract text with pdf-parse
+      try {
+        const pdfParse = (await import("pdf-parse")).default;
+        for (const pdf of pdfDocs) {
           try {
-            const buffer = Buffer.from(pdfDocs[i].base64, "base64");
+            const buffer = Buffer.from(pdf.base64, "base64");
             const parsed = await pdfParse(buffer);
-            textDocs.push({ name: pdfDocs[i].name, text: parsed.text || `[Could not extract text from ${pdfDocs[i].name}]` });
+            textDocs.push({ name: pdf.name, text: parsed.text || `[Could not extract text from ${pdf.name}]` });
           } catch {
-            textDocs.push({ name: pdfDocs[i].name, text: `[Could not extract text from ${pdfDocs[i].name}]` });
+            textDocs.push({ name: pdf.name, text: `[Could not extract text from ${pdf.name}]` });
           }
         }
         pdfDocs = [];
-      }
-    } catch (err) {
-      console.error("[claude-direct] pdf-parse failed, sending PDFs as-is:", err.message);
+      } catch { /* give up, let it fail at API level */ }
     }
   }
 

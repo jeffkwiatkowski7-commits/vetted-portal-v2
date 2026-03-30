@@ -219,6 +219,53 @@ async function generateWithTavily(contents, genConfig = {}, modelOverride = null
   return { result: finalResult, searchQueries };
 }
 
+// ── PDF Summarization (for Claude handoff) ──────────────────────────
+
+const SUMMARIZE_PROMPT = `Summarize this PDF document concisely. Include all key facts, names, dates, numbers, addresses, and terms. This summary will be used as context for answering questions, so preserve specific details rather than generalizing. Keep it under 2000 words.`;
+
+/**
+ * Summarize multiple PDFs using Gemini Flash (fast, no page limit).
+ * Returns array of { name, text } objects suitable for text doc injection.
+ * PDFs are summarized in parallel for speed.
+ */
+export async function summarizePdfs(pdfDocs, onStep = null) {
+  const results = await Promise.all(
+    pdfDocs.map(async (pdf) => {
+      try {
+        const result = await generate(
+          [
+            {
+              role: "user",
+              parts: [
+                { inlineData: { mimeType: pdf.mimeType || "application/pdf", data: pdf.base64 } },
+                { text: SUMMARIZE_PROMPT },
+              ],
+            },
+          ],
+          { temperature: 0.1, maxOutputTokens: 8192 },
+          [],
+          "Gemini 3.1 Flash",
+        );
+        const text = result.candidates?.[0]?.content?.parts?.[0]?.text || result.text || "";
+        return { name: pdf.name, text: text || `[Could not summarize ${pdf.name}]` };
+      } catch (err) {
+        console.error(`[gemini] Failed to summarize ${pdf.name}:`, err.message);
+        // Fallback: try pdf-parse text extraction
+        try {
+          const pdfParse = (await import("pdf-parse")).default;
+          const buffer = Buffer.from(pdf.base64, "base64");
+          const parsed = await pdfParse(buffer);
+          return { name: pdf.name, text: parsed.text || `[Could not read ${pdf.name}]` };
+        } catch {
+          return { name: pdf.name, text: `[Could not summarize ${pdf.name}]` };
+        }
+      }
+    })
+  );
+  if (onStep) onStep(`Summarized ${results.length} PDF${results.length !== 1 ? "s" : ""} via Gemini Flash`);
+  return results;
+}
+
 // ── OCR ─────────────────────────────────────────────────────────────
 
 const OCR_PROMPT = `You are a document OCR specialist. Transcribe ALL visible text from this scanned PDF lease document.

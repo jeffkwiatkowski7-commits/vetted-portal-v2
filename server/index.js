@@ -444,6 +444,7 @@ app.put('/api/chats/:id/mcp-servers', requireAuth, (req, res) => {
 
 app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
   const { content, attachments, images } = req.body;
+  console.log('[chat] images received:', images ? `${images.length} image(s), first mimeType: ${images[0]?.mimeType}` : 'none');
 
   const chat = dbGet(db, 'SELECT * FROM chats WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
   if (!chat) {

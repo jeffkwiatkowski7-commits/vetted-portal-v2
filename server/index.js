@@ -499,11 +499,22 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     : null;
 
   // Helper: read a library file from disk.
-  // PDFs → { name, mimeType, base64 } for native Gemini vision.
+  // PDFs → { name, mimeType, base64 } for native vision, or { name, text } for text fallback.
   // Other files → { name, text }.
-  async function readLibraryFile(file) {
+  async function readLibraryFile(file, forceText = false) {
     const filePath = resolveFilePath(file.file_path);
     if (file.file_type === 'pdf' || file.mime_type === 'application/pdf') {
+      if (forceText) {
+        // Extract text instead of sending raw PDF
+        try {
+          const pdfParse = (await import('pdf-parse')).default;
+          const buffer = fs.readFileSync(filePath);
+          const parsed = await pdfParse(buffer);
+          return { name: file.original_name, text: parsed.text || `[Could not extract text from ${file.original_name}]` };
+        } catch {
+          return { name: file.original_name, text: `[Could not read ${file.original_name}]` };
+        }
+      }
       try {
         const buffer = fs.readFileSync(filePath);
         return { name: file.original_name, mimeType: 'application/pdf', base64: buffer.toString('base64') };
@@ -527,16 +538,49 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     }
   }
 
+  // Check if a filename is relevant to the user's query (keyword matching)
+  function isFileRelevant(filename, query) {
+    const name = filename.toLowerCase();
+    const q = query.toLowerCase();
+    // Extract meaningful keywords (3+ chars, skip stop words)
+    const stopWords = new Set(['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'her', 'was', 'one', 'our', 'out', 'about', 'give', 'tell', 'what', 'with', 'from', 'this', 'that', 'have', 'been', 'some', 'details', 'detail', 'info', 'information', 'please', 'show', 'list']);
+    const keywords = q.split(/\s+/).filter(w => w.length >= 2 && !stopWords.has(w));
+    return keywords.some(kw => name.includes(kw));
+  }
+
   try {
     const docs = [];
 
-    // 1. Load project files
+    // 1. Load project files — only send relevant PDFs as base64, rest as extracted text
     if (project) {
       step(`Loading project: ${project.name}`);
       const projectFiles = dbAll(db, 'SELECT * FROM library_files WHERE project_id = ?', [project.id]);
       if (projectFiles.length > 0) {
-        step(`Reading ${projectFiles.length} project file${projectFiles.length !== 1 ? 's' : ''}`);
-        for (const file of projectFiles) docs.push(await readLibraryFile(file));
+        const pdfFiles = projectFiles.filter(f => f.file_type === 'pdf' || f.mime_type === 'application/pdf');
+        const nonPdfFiles = projectFiles.filter(f => f.file_type !== 'pdf' && f.mime_type !== 'application/pdf');
+
+        // For PDFs: only send files matching the query as native base64, extract text for the rest
+        if (pdfFiles.length > 1) {
+          const relevantPdfs = pdfFiles.filter(f => isFileRelevant(f.original_name, content));
+          const otherPdfs = pdfFiles.filter(f => !isFileRelevant(f.original_name, content));
+
+          if (relevantPdfs.length > 0 && relevantPdfs.length < pdfFiles.length) {
+            step(`${relevantPdfs.length} of ${pdfFiles.length} PDFs match query — loading those as full documents`);
+            for (const file of relevantPdfs) docs.push(await readLibraryFile(file, false));
+            if (otherPdfs.length > 0) {
+              step(`Extracting text from ${otherPdfs.length} other PDF${otherPdfs.length !== 1 ? 's' : ''}`);
+              for (const file of otherPdfs) docs.push(await readLibraryFile(file, true));
+            }
+          } else {
+            // No filename match or all match — load all as base64 (let claude-direct.js handle page limit)
+            step(`Reading ${pdfFiles.length} PDF${pdfFiles.length !== 1 ? 's' : ''}`);
+            for (const file of pdfFiles) docs.push(await readLibraryFile(file, false));
+          }
+        } else {
+          for (const file of pdfFiles) docs.push(await readLibraryFile(file, false));
+        }
+
+        for (const file of nonPdfFiles) docs.push(await readLibraryFile(file, false));
       }
     }
 

@@ -359,9 +359,7 @@ export default function MainChatPage() {
         isDefault: !!m.is_default,
       }));
       setAvailableModels(mapped);
-      const savedModelId = localStorage.getItem('selectedModelId');
-      const match = (savedModelId && mapped.find((m) => m.modelId === savedModelId))
-        ?? mapped.find((m) => m.isDefault)
+      const match = mapped.find((m) => m.isDefault)
         ?? mapped[0]
         ?? null;
       setSelectedModel(match);
@@ -378,7 +376,16 @@ export default function MainChatPage() {
   const mcpButtonRef = useRef<HTMLButtonElement>(null);
   const mcpPopoverRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { api.mcpServers.list().then(setMcpServers).catch(() => {}); }, []);
+  useEffect(() => {
+    api.mcpServers.list().then((servers: any[]) => {
+      setMcpServers(servers);
+      // Default Memory MCP to on for new chats (no id loaded yet)
+      if (!id) {
+        const memory = servers.find((s: any) => s.id === 'mcp-memory');
+        if (memory) setChatMcpServerIds([memory.id]);
+      }
+    }).catch(() => {});
+  }, []);
 
   const handleMcpServersChange = async (ids: string[]) => {
     setChatMcpServerIds(ids);
@@ -427,7 +434,9 @@ export default function MainChatPage() {
     if (!id) {
       setMessages([]);
       setChatId(null);
-      setChatMcpServerIds([]);
+      // Default Memory MCP to on for new chats
+      const memoryId = mcpServers.find(s => s.id === 'mcp-memory')?.id;
+      setChatMcpServerIds(memoryId ? [memoryId] : []);
       return;
     }
     // Skip re-fetch if we just created this chat via send
@@ -524,6 +533,10 @@ export default function MainChatPage() {
         navigate(`/chat/${activeChatId}`, { replace: true });
         setChats([newChat, ...chats]);
         if (pendingProjectId) setPendingProjectId(null);
+        // Persist MCP server selection to the newly created chat
+        if (chatMcpServerIds.length > 0) {
+          try { await api.mcpServers.setChatServers(activeChatId, chatMcpServerIds); } catch {}
+        }
       } catch {
         setMessages(prev => [...prev, { role: 'assistant', content: 'Error: could not create chat.' }]);
         setChatting(false);
@@ -719,7 +732,7 @@ export default function MainChatPage() {
                 {availableModels.map((model) => (
                   <button
                     key={model.modelId}
-                    onClick={() => { setSelectedModel(model); localStorage.setItem('selectedModelId', model.modelId); setModelOpen(false); }}
+                    onClick={() => { setSelectedModel(model); setModelOpen(false); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
                   >
                     <ModelIcon color={model.iconColor} isGemini={model.value === 'gemini'} isClaude={model.value === 'claude'} />

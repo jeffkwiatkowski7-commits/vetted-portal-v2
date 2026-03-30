@@ -107,7 +107,7 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
   const [enabledMcps, setEnabledMcps] = useState<string[]>(() => {
     const raw = initialData?.mcp_servers;
     if (Array.isArray(raw)) return raw;
-    if (typeof raw !== 'string' || !raw) return [];
+    if (typeof raw !== 'string' || !raw) return ['mcp-memory'];
     try {
       let parsed = JSON.parse(raw);
       // Handle double-encoded JSON (string instead of array)

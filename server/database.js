@@ -336,31 +336,18 @@ export async function initializeDatabase() {
   // Add images column to messages for clipboard image paste
   try { db.run(`ALTER TABLE messages ADD COLUMN images TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
 
+  // Migrate MCP servers: remove broken packages, fix Sequential Thinking package name
+  try {
+    db.run(`DELETE FROM mcp_servers WHERE id IN ('mcp-brave-search', 'mcp-fetch', 'mcp-puppeteer')`);
+    db.run(`UPDATE mcp_servers SET args = '${JSON.stringify(['-y', '@modelcontextprotocol/server-sequential-thinking']).replace(/'/g, "''")}' WHERE id = 'mcp-sequential-thinking'`);
+    saveDatabase(db);
+  } catch (e) { /* table may not exist yet */ }
+
   // Seed default MCP servers
   const existingMcp = dbGet(db, 'SELECT id FROM mcp_servers LIMIT 1', []);
   if (!existingMcp) {
     const now = new Date().toISOString();
     const mcpServers = [
-      {
-        id: 'mcp-brave-search',
-        name: 'Brave Search',
-        description: 'Search the web in real-time during conversations. The AI can look up current market data, property comparables, industry news, company information, and regulatory updates. Results are woven into the AI\'s response with source attribution. Powered by Brave\'s independent search index — covers web, news, and local business listings.',
-        icon: 'search',
-        command: 'npx',
-        args: JSON.stringify(['-y', '@anthropic-ai/mcp-server-brave-search']),
-        env_vars: JSON.stringify({ BRAVE_API_KEY: '' }),
-        enabled: 1,
-      },
-      {
-        id: 'mcp-fetch',
-        name: 'Fetch',
-        description: 'Retrieve and read content from any URL. Paste a link to a property listing, news article, report, or any web page into the conversation and the AI will pull the content, convert it to readable text, and analyze it. Supports HTML pages, JSON APIs, and plain text. Large pages are automatically chunked for processing.',
-        icon: 'globe',
-        command: 'npx',
-        args: JSON.stringify(['-y', '@anthropic-ai/mcp-server-fetch']),
-        env_vars: JSON.stringify({}),
-        enabled: 1,
-      },
       {
         id: 'mcp-memory',
         name: 'Memory',
@@ -372,22 +359,12 @@ export async function initializeDatabase() {
         enabled: 1,
       },
       {
-        id: 'mcp-puppeteer',
-        name: 'Puppeteer',
-        description: 'Automated browser for interacting with web pages. The AI can navigate to websites, fill out forms, take screenshots, and extract structured data from pages that require JavaScript to load. Useful for pulling data from property listing sites, capturing visual snapshots of dashboards, or scraping tabular data that isn\'t available via a simple URL fetch.',
-        icon: 'terminal',
-        command: 'npx',
-        args: JSON.stringify(['-y', '@anthropic-ai/mcp-server-puppeteer']),
-        env_vars: JSON.stringify({}),
-        enabled: 1,
-      },
-      {
         id: 'mcp-sequential-thinking',
         name: 'Sequential Thinking',
         description: 'Structured reasoning for complex analysis. Gives the AI a step-by-step thinking scratchpad for problems that require careful multi-stage reasoning — lease comparisons across multiple properties, financial modeling, portfolio-level analysis, or any question where the AI needs to break down the problem, consider multiple factors, and build toward a conclusion methodically.',
         icon: 'lightbulb',
         command: 'npx',
-        args: JSON.stringify(['-y', '@anthropic-ai/mcp-server-sequential-thinking']),
+        args: JSON.stringify(['-y', '@modelcontextprotocol/server-sequential-thinking']),
         env_vars: JSON.stringify({}),
         enabled: 1,
       },

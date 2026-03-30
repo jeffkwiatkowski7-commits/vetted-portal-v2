@@ -76,9 +76,7 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
         isDefault: !!m.is_default,
       }));
       setAvailableModels(mapped);
-      const savedModelId = localStorage.getItem('selectedModelId');
-      const match = (savedModelId && mapped.find((m) => m.modelId === savedModelId))
-        ?? mapped.find((m) => m.isDefault)
+      const match = mapped.find((m) => m.isDefault)
         ?? mapped[0]
         ?? null;
       setSelectedModel(match);
@@ -487,7 +485,6 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
                           key={model.name}
                           onClick={() => {
                             setSelectedModel(model);
-                            localStorage.setItem('selectedModelId', model.modelId);
                             setShowModelSelect(false);
                           }}
                           className={`w-full text-left px-3 py-2.5 text-sm hover:bg-vetted-surface flex items-center gap-2.5 transition-colors ${

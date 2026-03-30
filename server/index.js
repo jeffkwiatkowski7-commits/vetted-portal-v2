@@ -386,7 +386,8 @@ app.get('/api/chats/:id', requireAuth, (req, res) => {
   const messagesWithParsedReasoning = messages.map(m => ({
     ...m,
     reasoning: m.reasoning ? JSON.parse(m.reasoning) : null,
-    attachments: m.attachments ? JSON.parse(m.attachments) : null
+    attachments: m.attachments ? JSON.parse(m.attachments) : null,
+    images: m.images ? JSON.parse(m.images) : null,
   }));
 
   res.json({ chat, messages: messagesWithParsedReasoning });
@@ -442,7 +443,7 @@ app.put('/api/chats/:id/mcp-servers', requireAuth, (req, res) => {
 });
 
 app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
-  const { content, attachments } = req.body;
+  const { content, attachments, images } = req.body;
 
   const chat = dbGet(db, 'SELECT * FROM chats WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
   if (!chat) {
@@ -467,8 +468,8 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
   // Save user message
   const userMessageId = uuidv4();
   dbRun(db, `
-    INSERT INTO messages (id, chat_id, role, content, model_used, token_count, reasoning, attachments, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO messages (id, chat_id, role, content, model_used, token_count, reasoning, attachments, images, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     userMessageId,
     req.params.id,
@@ -478,6 +479,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     Math.ceil(content.split(/\s+/).length * 1.3),
     null,
     attachments ? JSON.stringify(attachments) : null,
+    images && images.length > 0 ? JSON.stringify(images) : null,
     now
   ]);
 
@@ -860,8 +862,8 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
   // Save to DB after response is ended
   try {
     dbRun(db, `
-      INSERT INTO messages (id, chat_id, role, content, model_used, token_count, reasoning, attachments, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO messages (id, chat_id, role, content, model_used, token_count, reasoning, attachments, images, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       aiMessageId,
       req.params.id,
@@ -870,6 +872,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       chat.model,
       Math.ceil(aiContent.split(/\s+/).length * 1.3),
       aiReasoning ? JSON.stringify(aiReasoning) : null,
+      null,
       null,
       now
     ]);

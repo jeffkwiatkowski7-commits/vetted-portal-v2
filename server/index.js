@@ -455,6 +455,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Tell nginx to disable buffering for SSE
   res.socket?.setNoDelay(true);
   res.flushHeaders();
 

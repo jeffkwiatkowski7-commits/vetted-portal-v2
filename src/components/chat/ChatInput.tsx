@@ -86,6 +86,7 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
   }, []);
   const [temperature, setTemperature] = useState(0.7);
   const [showModelSelect, setShowModelSelect] = useState(false);
+  const [pastedImages, setPastedImages] = useState<Array<{ base64: string; mimeType: string }>>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const paperclipButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -151,6 +152,35 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
     }
   }, [message]);
 
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!item.type.startsWith('image/')) continue;
+
+      e.preventDefault();
+      const blob = item.getAsFile();
+      if (!blob) continue;
+
+      // Reject images > 5MB
+      if (blob.size > 5 * 1024 * 1024) {
+        addToast({ type: 'error', title: 'Image too large', detail: 'Maximum image size is 5MB' });
+        continue;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const [header, base64] = dataUrl.split(',');
+        const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
+        setPastedImages((prev) => [...prev, { base64, mimeType }]);
+      };
+      reader.readAsDataURL(blob);
+    }
+  };
+
   const handleSendMessage = async (overrides?: { msg?: string; files?: LibraryFile[]; hidden?: boolean }) => {
     let content = overrides?.msg ?? message;
     const files = overrides?.files ?? chatAttachedFiles;
@@ -162,7 +192,11 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
       content = `Please summarize the following document${files.length > 1 ? 's' : ''}: ${names}`;
     }
 
-    if (!content.trim()) return;
+    // Allow sending images with no text
+    if (!content.trim() && pastedImages.length === 0) return;
+    if (!content.trim() && pastedImages.length > 0) {
+      content = "What's in this image?";
+    }
 
     setLoading(true);
     try {
@@ -185,13 +219,14 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
 
       // Optimistically show the user's message immediately (skip for hidden sends)
       if (!hidden) setMessage('');
+      if (!hidden) setPastedImages([]);
       if (!hidden) {
         setActiveChat({
           ...(activeChat || { id: chatId, title: content.slice(0, 50), messages: [] }),
           id: chatId,
           messages: [
             ...(activeChat?.messages || []),
-            { id: `optimistic-${Date.now()}`, role: 'user', content, created_at: new Date().toISOString() },
+            { id: `optimistic-${Date.now()}`, role: 'user', content, created_at: new Date().toISOString(), images: pastedImages.length > 0 ? pastedImages : null },
           ],
         } as any);
       }
@@ -200,7 +235,7 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
       const modelValue = selectedModel?.value || 'gemini';
       const sendResult = await api.chats.streamMessage(
         chatId!,
-        { content, model: modelValue, modelId: selectedModel?.modelId, temperature, attachments: files.map((f) => f.id) },
+        { content, model: modelValue, modelId: selectedModel?.modelId, temperature, attachments: files.map((f) => f.id), images: pastedImages.length > 0 ? pastedImages : undefined },
         hidden ? () => {} : (step) => addLiveStep(step),
       );
       if (!hidden) { setAiThinking(false); clearLiveSteps(); }
@@ -299,12 +334,34 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
 
           {/* Main input container */}
           <div className="relative border border-vetted-border rounded-2xl bg-white focus-within:border-vetted-accent focus-within:ring-2 focus-within:ring-vetted-accent/20 outline-none">
+            {/* Pasted image previews */}
+            {pastedImages.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-3 pt-2.5">
+                {pastedImages.map((img, idx) => (
+                  <div key={idx} className="relative group">
+                    <img
+                      src={`data:${img.mimeType};base64,${img.base64}`}
+                      alt={`Pasted image ${idx + 1}`}
+                      className="w-12 h-12 object-cover rounded-lg border border-vetted-border"
+                    />
+                    <button
+                      onClick={() => setPastedImages((prev) => prev.filter((_, i) => i !== idx))}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-vetted-primary text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Remove image"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             {/* Textarea */}
             <textarea
               ref={textareaRef}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               spellCheck={true}
               autoComplete="on"
               placeholder="Ask anything..."
@@ -450,11 +507,11 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
 
                 <button
                   onClick={handleSendMessage}
-                  disabled={loading || (!message.trim() && !demoActive)}
+                  disabled={loading || (!message.trim() && pastedImages.length === 0 && !demoActive)}
                   className={`p-2 rounded-full transition-all ${
                     demoActive && demoHighlight === 'send-button'
                       ? 'bg-vetted-accent text-vetted-primary ring-2 ring-vetted-accent/40'
-                      : message.trim() && !loading
+                      : (message.trim() || pastedImages.length > 0) && !loading
                         ? 'bg-vetted-primary text-white hover:bg-gray-800'
                         : 'bg-vetted-border text-vetted-text-muted cursor-not-allowed'
                   }`}

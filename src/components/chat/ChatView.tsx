@@ -4,6 +4,7 @@ import { useStore } from '../../store';
 import * as api from '../../api';
 import { Copy, ThumbsUp, ThumbsDown, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import ModelReasoning from '../pipeline/ModelReasoning';
+import CanvasBlock from './CanvasBlock';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -79,6 +80,9 @@ function MarkdownContent({ content }: { content: string }) {
 
           // Inline code
           code: ({ children, className }) => {
+            if (className === 'language-canvas-html') {
+              return <CanvasBlock html={String(children)} />;
+            }
             const isBlock = className?.includes('language-');
             if (isBlock) {
               return (

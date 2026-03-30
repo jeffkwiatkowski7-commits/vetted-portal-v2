@@ -33,15 +33,17 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
   if (pdfDocs.length > 1) {
     try {
       // Check filename relevance to the user's query
-      const stopWords = new Set(["the","and","for","are","but","not","you","all","can","her","was","one","our","out","about","give","tell","what","with","from","this","that","have","been","some","details","detail","info","information","please","show","list","me"]);
+      const stopWords = new Set(["the","and","for","are","but","not","you","all","can","her","was","one","our","out","about","give","tell","what","with","from","this","that","have","been","some","details","detail","info","information","please","show","list","me","lease","leases","suite","suites","document","documents","file","files","pdf","compare","summary","summarize","review","analyze","analysis"]);
       const keywords = userMessage.toLowerCase().split(/\s+/).filter(w => w.length >= 2 && !stopWords.has(w));
       const isRelevant = (name) => {
         const lower = name.toLowerCase();
         return keywords.some(kw => lower.includes(kw));
       };
 
-      const relevant = pdfDocs.filter(d => isRelevant(d.name));
-      const other = pdfDocs.filter(d => !isRelevant(d.name));
+      let relevant = pdfDocs.filter(d => isRelevant(d.name));
+      // If all or none match, the keywords are too generic — skip filtering
+      if (relevant.length === pdfDocs.length) relevant = [];
+      const other = relevant.length > 0 ? pdfDocs.filter(d => !isRelevant(d.name)) : [];
 
       if (relevant.length > 0 && other.length > 0) {
         // Send relevant PDFs as native documents, have Gemini summarize the rest

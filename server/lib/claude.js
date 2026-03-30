@@ -197,15 +197,16 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
   // use Gemini Flash to summarize the rest (Gemini has no page limit on PDFs).
   if (pdfDocs.length > 1) {
     try {
-      const stopWords = new Set(["the","and","for","are","but","not","you","all","can","her","was","one","our","out","about","give","tell","what","with","from","this","that","have","been","some","details","detail","info","information","please","show","list","me"]);
+      const stopWords = new Set(["the","and","for","are","but","not","you","all","can","her","was","one","our","out","about","give","tell","what","with","from","this","that","have","been","some","details","detail","info","information","please","show","list","me","lease","leases","suite","suites","document","documents","file","files","pdf","compare","summary","summarize","review","analyze","analysis"]);
       const keywords = userMessage.toLowerCase().split(/\s+/).filter(w => w.length >= 2 && !stopWords.has(w));
       const isRelevant = (name) => {
         const lower = name.toLowerCase();
         return keywords.some(kw => lower.includes(kw));
       };
 
-      const relevant = pdfDocs.filter(d => isRelevant(d.name));
-      const other = pdfDocs.filter(d => !isRelevant(d.name));
+      let relevant = pdfDocs.filter(d => isRelevant(d.name));
+      if (relevant.length === pdfDocs.length) relevant = [];
+      const other = relevant.length > 0 ? pdfDocs.filter(d => !isRelevant(d.name)) : [];
 
       if (relevant.length > 0 && other.length > 0) {
         if (onStep) onStep(`${relevant.length} of ${pdfDocs.length} PDFs match query — summarizing ${other.length} others via Gemini`);

@@ -21,6 +21,7 @@ import { deleteFile as gcsDeleteFile, deleteProjectFiles as gcsDeleteProjectFile
 import { chunkText, embedTexts } from './lib/embeddings.js';
 import mcpManager from './lib/mcp-manager.js';
 import { hasTavily, tavilySearch } from './lib/tavily.js';
+import { parsePptxTemplate } from './lib/pptx-parser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -1178,6 +1179,61 @@ app.post('/api/library/upload', requireAuth, upload.single('file'), (req, res) =
 
   const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ?', [fileId]);
   res.status(201).json({ file });
+});
+
+// PPTX Template Extractor — parse .pptx and save design tokens to library
+app.post('/api/apps/pptx-parse', requireAuth, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file provided' });
+    }
+    if (!req.file.originalname.toLowerCase().endsWith('.pptx')) {
+      return res.status(400).json({ success: false, error: 'File must be a .pptx PowerPoint file' });
+    }
+
+    const buffer = fs.readFileSync(req.file.path);
+    const result = await parsePptxTemplate(buffer, req.file.originalname);
+
+    if (result.error) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+
+    // Write design tokens JSON to disk
+    const fileId = uuidv4();
+    const jsonContent = JSON.stringify(result.tokens, null, 2);
+    const jsonBuffer = Buffer.from(jsonContent, 'utf8');
+    const filename = `${fileId}-design-tokens.json`;
+    const uploadDir = process.env.UPLOAD_DIR || './data/uploads';
+    const filePath = path.join(uploadDir, filename);
+    fs.writeFileSync(filePath, jsonContent);
+
+    // Insert library_files row
+    const now = new Date().toISOString();
+    const originalName = req.file.originalname.replace(/\.pptx$/i, '') + '-design-tokens.json';
+    dbRun(db, `
+      INSERT INTO library_files (id, user_id, filename, original_name, file_path, file_type, file_size, mime_type, uploaded_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [fileId, req.user.id, filename, originalName, `/uploads/${filename}`, 'json', jsonBuffer.byteLength, 'application/json', now]);
+
+    // Clean up the uploaded .pptx temp file
+    try { fs.unlinkSync(req.file.path); } catch {}
+
+    res.json({
+      success: true,
+      file_id: fileId,
+      summary: {
+        colorCount: Object.keys(result.tokens.colors || {}).length,
+        fonts: result.tokens.fonts || {},
+        layoutCount: (result.tokens.layouts || []).length,
+        mediaCount: (result.tokens.media || []).length,
+      },
+      colors: result.tokens.colors || {},
+      skippedMedia: result.skippedMedia || [],
+    });
+  } catch (err) {
+    console.error('PPTX parse error:', err);
+    res.status(500).json({ success: false, error: 'Failed to parse PowerPoint file' });
+  }
 });
 
 app.get('/api/library/:id/download', requireAuth, (req, res) => {

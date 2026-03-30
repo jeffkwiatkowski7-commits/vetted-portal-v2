@@ -11,6 +11,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { config } from "./config.js";
 import { logUsage, getDatabase } from "../database.js";
+import { hasTavily, tavilySearch } from "./tavily.js";
 
 
 // Map display model names to Vertex AI model IDs
@@ -143,6 +144,62 @@ function extractGroundedResponse(result) {
   if (sourceLines) text += `\n\n---\n**Sources:**\n${sourceLines}`;
 
   return { text, searchQueries };
+}
+
+// ── Tavily web search as Gemini function-calling tool ────────────────
+
+const TAVILY_TOOL_DECL = [{
+  functionDeclarations: [{
+    name: "web_search",
+    description: "Search the web for current information. Use for market data, recent events, or anything requiring live information.",
+    parameters: { type: "OBJECT", properties: { query: { type: "STRING", description: "The search query" } }, required: ["query"] },
+  }],
+}];
+
+const MAX_SEARCH_ITERATIONS = 5;
+
+/**
+ * Run a Gemini generate call with Tavily web_search tool-calling loop.
+ * Returns { text, searchQueries }.
+ */
+async function generateWithTavily(contents, genConfig = {}, modelOverride = null, onStep = null) {
+  const searchQueries = [];
+  let currentContents = [...contents];
+
+  for (let i = 0; i < MAX_SEARCH_ITERATIONS; i++) {
+    const result = await generate(currentContents, genConfig, TAVILY_TOOL_DECL, modelOverride);
+    const candidate = result.candidates?.[0];
+    const parts = candidate?.content?.parts ?? [];
+
+    const fnCalls = parts.filter((p) => p.functionCall);
+    if (fnCalls.length === 0) {
+      // No tool calls — return final text
+      return { result, searchQueries };
+    }
+
+    // Execute web_search calls
+    const fnResponseParts = [];
+    for (const fc of fnCalls) {
+      if (fc.functionCall.name === "web_search") {
+        const query = fc.functionCall.args?.query || "";
+        searchQueries.push(query);
+        console.log("[gemini] web search:", query);
+        if (onStep) onStep(`Web search: "${query}"`);
+        const searchResult = await tavilySearch(query);
+        fnResponseParts.push({
+          functionResponse: { name: "web_search", response: { result: searchResult || "No results found." } },
+        });
+      }
+    }
+
+    // Append model response + tool results, continue loop
+    currentContents.push({ role: "model", parts });
+    currentContents.push({ role: "user", parts: fnResponseParts });
+  }
+
+  // Exhausted iterations — do a final call without tools
+  const finalResult = await generateWithContinuation(currentContents, genConfig, [], modelOverride);
+  return { result: finalResult, searchQueries };
 }
 
 // ── OCR ─────────────────────────────────────────────────────────────
@@ -340,9 +397,14 @@ export async function chatWithLeases(leaseTexts, userMessage, chatHistory, useSe
     contents.push({ role: "user", parts: [{ text: userMessage }] });
   }
 
-  // Web search removed (replaced by MCP in main chat)
-
-  const result = await generateWithContinuation(contents, {}, [], null);
+  let result, searchQueries = [];
+  if (useSearch && hasTavily()) {
+    const tavilyResult = await generateWithTavily(contents, {}, null);
+    result = tavilyResult.result;
+    searchQueries = tavilyResult.searchQueries;
+  } else {
+    result = await generateWithContinuation(contents, {}, [], null);
+  }
 
   const usageMeta = result?.response?.usageMetadata;
   const inputTokens = result._totalInputTokens || usageMeta?.promptTokenCount || 0;
@@ -358,7 +420,9 @@ export async function chatWithLeases(leaseTexts, userMessage, chatHistory, useSe
     });
   }
 
-  return extractGroundedResponse(result);
+  const response = extractGroundedResponse(result);
+  if (searchQueries.length) response.searchQueries = searchQueries;
+  return response;
 }
 
 // ── Default system prompt ────────────────────────────────────────────
@@ -398,7 +462,7 @@ Today's date is ${today}.
 
 // ── General document Q&A / project chat ─────────────────────────────
 
-export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null, modelOverride = null, tools = []) {
+export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null, modelOverride = null, tools = [], images = []) {
   const textDocs = docs.filter((d) => d.text !== undefined);
   const pdfDocs = docs.filter((d) => d.base64 !== undefined);
 
@@ -419,6 +483,13 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
     firstUserParts.push({ inlineData: { mimeType: pdf.mimeType, data: pdf.base64 } });
   }
 
+  // Add pasted clipboard images as inline data
+  if (images && images.length > 0) {
+    for (const img of images) {
+      firstUserParts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+    }
+  }
+
   const contents = [
     { role: "user", parts: firstUserParts },
   ];
@@ -432,16 +503,25 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
     contents.push({ role: "user", parts: [{ text: userMessage }] });
   }
 
-  // No tools — use continuation for long responses
+  // No MCP tools — use Tavily web search if available, otherwise plain continuation
   if (tools.length === 0) {
-    const result = await generateWithContinuation(contents, {}, [], modelOverride);
+    let result, searchQueries = [];
+    if (hasTavily()) {
+      const tavilyResult = await generateWithTavily(contents, {}, modelOverride, onStep);
+      result = tavilyResult.result;
+      searchQueries = tavilyResult.searchQueries;
+    } else {
+      result = await generateWithContinuation(contents, {}, [], modelOverride);
+    }
     const usageMeta = result?.response?.usageMetadata;
     const inputTokens = result._totalInputTokens || usageMeta?.promptTokenCount || 0;
     const outputTokens = result._totalOutputTokens || usageMeta?.candidatesTokenCount || 0;
     if ((inputTokens || outputTokens) && userId) {
       logUsage(getDatabase(), { userId, source: 'chat', prompt: userMessage, model: resolveModelId(modelOverride) || config.modelId, inputTokens, outputTokens });
     }
-    return extractGroundedResponse(result);
+    const response = extractGroundedResponse(result);
+    if (searchQueries.length) response.searchQueries = searchQueries;
+    return response;
   }
 
   // With tools — single generate call, return raw parts for caller's tool loop
@@ -498,9 +578,14 @@ Answer questions using this portfolio data. If you need the full lease text to a
     contents.push({ role: "user", parts: [{ text: userMessage }] });
   }
 
-  // Web search removed (replaced by MCP in main chat)
-
-  const result = await generateWithContinuation(contents, {}, [], null);
+  let result, searchQueries = [];
+  if (useSearch && hasTavily()) {
+    const tavilyResult = await generateWithTavily(contents, {}, null);
+    result = tavilyResult.result;
+    searchQueries = tavilyResult.searchQueries;
+  } else {
+    result = await generateWithContinuation(contents, {}, [], null);
+  }
 
   const usageMeta = result?.response?.usageMetadata;
   const inputTokens = result._totalInputTokens || usageMeta?.promptTokenCount || 0;
@@ -516,7 +601,9 @@ Answer questions using this portfolio data. If you need the full lease text to a
     });
   }
 
-  return extractGroundedResponse(result);
+  const response = extractGroundedResponse(result);
+  if (searchQueries.length) response.searchQueries = searchQueries;
+  return response;
 }
 
 export { generate, extractGroundedResponse };

@@ -786,7 +786,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       result = await claudeDirectChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, { claudeTools, mcpToolMap, mcpManager, images });
     } else {
       step('Calling Gemini');
-      result = await geminiChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, geminiTools);
+      result = await geminiChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, geminiTools, images);
     }
 
     if (result.text) {

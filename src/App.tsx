@@ -21,6 +21,7 @@ import SkillsPage from './pages/SkillsPage';
 import SkillEditPage from './pages/SkillEditPage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import LeaseChatPage from './pages/LeaseChatPage';
+import PptxAppPage from './pages/PptxAppPage';
 import ToastContainer from './components/notifications/ToastContainer';
 import GlobalSearch from './components/search/GlobalSearch';
 import DemoMode from './components/demo/DemoMode';
@@ -120,6 +121,7 @@ function App() {
             <Route path="/skills" element={<SkillsPage />} />
             <Route path="/skills/new" element={<SkillEditPage />} />
             <Route path="/skills/:id/edit" element={<SkillEditPage />} />
+            <Route path="/apps/pptx-parser" element={<PptxAppPage />} />
             <Route path="/apps" element={<AppsPage />} />
             <Route path="/integrations" element={<IntegrationsPage />} />
             <Route path="/admin" element={<AdminPage />} />

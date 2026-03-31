@@ -253,7 +253,7 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
                 ),
                 // Code
                 code: ({ className, children }) => {
-                  if (className === 'language-canvas-html') {
+                  if (className?.includes('language-canvas-html')) {
                     return <CanvasBlock html={String(children)} />;
                   }
                   const isBlock = className?.includes('language-');

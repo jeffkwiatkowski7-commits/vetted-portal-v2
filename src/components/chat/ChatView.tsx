@@ -80,7 +80,7 @@ function MarkdownContent({ content }: { content: string }) {
 
           // Inline code
           code: ({ children, className }) => {
-            if (className === 'language-canvas-html') {
+            if (className?.includes('language-canvas-html')) {
               return <CanvasBlock html={String(children)} />;
             }
             const isBlock = className?.includes('language-');

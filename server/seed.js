@@ -294,6 +294,7 @@ export async function seedDatabase() {
       visibility: 'all',
       status: 'active',
       usage_count: 0,
+      route: '/apps/pptx-parser',
       created_by: users[0].id,
       created_at: now,
       updated_at: now
@@ -302,9 +303,9 @@ export async function seedDatabase() {
 
   for (const app of apps) {
     dbRun(db, `
-      INSERT INTO apps (id, name, description, icon, category, system_prompt, model, temperature, tool_sets, visibility, status, usage_count, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [app.id, app.name, app.description, app.icon, app.category, app.system_prompt, app.model, app.temperature, app.tool_sets, app.visibility, app.status, app.usage_count, app.created_by, app.created_at, app.updated_at]);
+      INSERT INTO apps (id, name, description, icon, category, system_prompt, model, temperature, tool_sets, visibility, status, usage_count, route, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [app.id, app.name, app.description, app.icon, app.category, app.system_prompt, app.model, app.temperature, app.tool_sets, app.visibility, app.status, app.usage_count, app.route || null, app.created_by, app.created_at, app.updated_at]);
   }
 
   console.log(`✓ Created ${apps.length} apps`);

@@ -135,6 +135,7 @@ export async function initializeDatabase() {
       visibility TEXT DEFAULT 'all',
       status TEXT DEFAULT 'active',
       usage_count INTEGER DEFAULT 0,
+      route TEXT,
       created_by TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,

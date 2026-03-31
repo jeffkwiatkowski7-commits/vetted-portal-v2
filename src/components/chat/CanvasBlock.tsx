@@ -14,7 +14,7 @@ export default function CanvasBlock({ html }: CanvasBlockProps) {
 
   const sanitizedHtml = useMemo(() => DOMPurify.sanitize(html, {
     WHOLE_DOCUMENT: true,
-    ADD_TAGS: ['style', 'link'],
+    ADD_TAGS: ['style'],
     ADD_ATTR: ['target', 'rel'],
   }), [html]);
 
@@ -35,9 +35,10 @@ export default function CanvasBlock({ html }: CanvasBlockProps) {
   };
 
   const handleNewTab = () => {
-    const blob = new Blob([html], { type: 'text/html' });
+    const blob = new Blob([sanitizedHtml], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   };
 
   return (

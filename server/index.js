@@ -73,7 +73,8 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage });
+const maxFileSize = (parseInt(process.env.MAX_FILE_SIZE_MB, 10) || 50) * 1024 * 1024;
+const upload = multer({ storage, limits: { fileSize: maxFileSize } });
 const memoryUpload = multer({ storage: multer.memoryStorage() });
 
 app.post('/api/chat/upload', requireAuth, upload.single('file'), async (req, res) => {
@@ -1215,9 +1216,6 @@ app.post('/api/apps/pptx-parse', requireAuth, upload.single('file'), async (req,
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [fileId, req.user.id, filename, originalName, `/uploads/${filename}`, 'json', jsonBuffer.byteLength, 'application/json', now]);
 
-    // Clean up the uploaded .pptx temp file
-    try { fs.unlinkSync(req.file.path); } catch {}
-
     res.json({
       success: true,
       file_id: fileId,
@@ -1233,6 +1231,11 @@ app.post('/api/apps/pptx-parse', requireAuth, upload.single('file'), async (req,
   } catch (err) {
     console.error('PPTX parse error:', err);
     res.status(500).json({ success: false, error: 'Failed to parse PowerPoint file' });
+  } finally {
+    // Clean up the uploaded .pptx temp file
+    if (req.file?.path) {
+      try { fs.unlinkSync(req.file.path); } catch {}
+    }
   }
 });
 

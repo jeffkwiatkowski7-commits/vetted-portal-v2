@@ -86,7 +86,8 @@ export default function ProjectDetailPage() {
       setProjectFiles(updatedFiles);
       if (updatedFiles.length > 0) setRightPanelOpen(true);
 
-      setProject({ ...project, name: data.name, description: data.description, system_prompt: data.system_prompt });
+      setProject({ ...project, name: data.name, description: data.description, system_prompt: data.system_prompt, mcp_servers: data.mcp_servers as any });
+      setProjectMcpIds(data.mcp_servers || []);
       setShowSettings(false);
       addToast({ type: 'success', title: 'Project updated' });
     } catch {

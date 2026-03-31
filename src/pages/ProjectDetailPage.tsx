@@ -24,6 +24,7 @@ export default function ProjectDetailPage() {
   const [uploadSteps, setUploadSteps] = useState<{message: string; ts: string}[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [projectMcpIds, setProjectMcpIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (id) {
@@ -44,6 +45,13 @@ export default function ProjectDetailPage() {
         api.library.list(id!),
       ]);
       setProject(proj);
+      // Parse project MCP servers for chat input
+      let mcpIds: string[] = [];
+      try {
+        const raw = proj.mcp_servers;
+        mcpIds = Array.isArray(raw) ? raw : typeof raw === 'string' ? JSON.parse(raw) : [];
+      } catch {}
+      setProjectMcpIds(mcpIds);
       setProjectFiles(files);
       if (files.length > 0) setRightPanelOpen(true);
     } catch {
@@ -191,7 +199,7 @@ export default function ProjectDetailPage() {
           <div className="flex-1 overflow-hidden">
             <ChatView chatId={activeChat?.id} />
           </div>
-          <ChatInput projectId={id} />
+          <ChatInput projectId={id} mcpServerIds={projectMcpIds} onMcpServersChange={setProjectMcpIds} isProjectChat />
         </>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center px-4 pb-16">
@@ -201,7 +209,7 @@ export default function ProjectDetailPage() {
           )}
 
           <div className="w-full max-w-3xl">
-            <ChatInput centered projectId={id} />
+            <ChatInput centered projectId={id} mcpServerIds={projectMcpIds} onMcpServersChange={setProjectMcpIds} isProjectChat />
           </div>
         </div>
       )}

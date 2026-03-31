@@ -1040,7 +1040,8 @@ app.get('/api/projects/:id', requireAuth, (req, res) => {
   res.json({
     project: {
       ...project,
-      tool_sets: project.tool_sets ? JSON.parse(project.tool_sets) : []
+      tool_sets: project.tool_sets ? JSON.parse(project.tool_sets) : [],
+      mcp_servers: project.mcp_servers ? JSON.parse(project.mcp_servers) : []
     },
     members
   });
@@ -1049,9 +1050,16 @@ app.get('/api/projects/:id', requireAuth, (req, res) => {
 app.put('/api/projects/:id', requireAuth, (req, res) => {
   const { name, description, default_model, system_prompt, temperature, tool_sets, mcp_servers } = req.body;
 
-  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ? AND owner_id = ?', [req.params.id, req.user.id]);
+  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [req.params.id]);
   if (!project) {
-    return res.status(404).json({ error: 'Project not found or not authorized' });
+    return res.status(404).json({ error: 'Project not found' });
+  }
+  // Allow owner, admin, or project member to update
+  const isOwner = project.owner_id === req.user.id;
+  const isAdmin = req.user.role === 'admin';
+  const isMember = dbGet(db, 'SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?', [req.params.id, req.user.id]);
+  if (!isOwner && !isAdmin && !isMember) {
+    return res.status(403).json({ error: 'Not authorized to update this project' });
   }
 
   const now = new Date().toISOString();

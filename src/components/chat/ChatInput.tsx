@@ -52,7 +52,7 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
   const id = projectId ? undefined : urlId;
   const navigate = useNavigate();
   const {
-    activeChat, setActiveChat, addToast,
+    activeChat, setActiveChat, setChats, addToast,
     demoActive, demoHighlight, demoInputText, demoShowModelPicker, demoAttachedFile,
     demoTriggerSend, setDemoTriggerSend,
     quickActionText, setQuickActionText,
@@ -253,6 +253,8 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
           }
         }
         setActiveChat(updated);
+        // Refresh sidebar chat list so new project chats appear
+        api.chats.list().then(setChats).catch(() => {});
       }
 
       if (!hidden) addToast({ type: 'success', title: 'Message sent' });

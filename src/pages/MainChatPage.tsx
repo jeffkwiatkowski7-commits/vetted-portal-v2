@@ -582,8 +582,6 @@ export default function MainChatPage() {
         return updated;
       });
 
-      // Refresh sidebar chat list so new chat appears
-      api.chats.list().then(setChats).catch(() => {});
     } catch (err: any) {
       setMessages(prev => {
         const updated = [...prev];
@@ -596,6 +594,8 @@ export default function MainChatPage() {
     } finally {
       setChatting(false);
       sendingRef.current = false;
+      // Refresh sidebar chat list so new chat appears
+      api.chats.list().then(setChats).catch(() => {});
     }
   };
 

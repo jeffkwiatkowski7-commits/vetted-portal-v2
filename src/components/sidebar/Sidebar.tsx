@@ -174,7 +174,7 @@ export default function Sidebar() {
                   isActive={activeChat?.id === chat.id}
                   onSelect={() => {
                     setActiveChat(chat);
-                    navigate(`/chat/${chat.id}`);
+                    navigate(chat.project_id ? `/projects/${chat.project_id}` : `/chat/${chat.id}`);
                   }}
                   onContextMenu={(x, y) => setContextMenu({ chatId: chat.id, x, y })}
                   renaming={renaming === chat.id}

@@ -15,7 +15,7 @@ export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { addToast, activeChat, setActiveChat, projectFiles, setProjectFiles, setRightPanelOpen } = useStore();
-  const hasChat = (activeChat?.messages?.length ?? 0) > 0;
+  const hasChat = (activeChat?.messages?.length ?? 0) > 0 || (activeChat?.project_id === id && activeChat?.id != null);
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -28,7 +28,13 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     if (id) {
-      setActiveChat(null);
+      // If activeChat belongs to this project, load its full data (messages)
+      // so clicking a project chat from sidebar history opens it properly
+      if (activeChat && activeChat.project_id === id) {
+        api.chats.get(activeChat.id).then(setActiveChat).catch(() => {});
+      } else {
+        setActiveChat(null);
+      }
       setProjectFiles([]);
       loadProject();
     }

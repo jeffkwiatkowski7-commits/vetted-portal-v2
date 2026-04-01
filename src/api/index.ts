@@ -266,6 +266,18 @@ export const admin = {
     summary: (): Promise<UsageSummary> => request('/admin/usage/summary'),
     models: (): Promise<string[]> => request('/admin/usage/models'),
   },
+  chatHistory: {
+    list: (params?: { page?: number; limit?: number; user_id?: string; q?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.page) qs.set('page', String(params.page));
+      if (params?.limit) qs.set('limit', String(params.limit));
+      if (params?.user_id) qs.set('user_id', params.user_id);
+      if (params?.q) qs.set('q', params.q);
+      const query = qs.toString();
+      return request(`/admin/chat-history${query ? '?' + query : ''}`);
+    },
+    remove: (id: string) => request(`/admin/chat-history/${id}`, { method: 'DELETE' }),
+  },
 };
 
 // Settings - unwrap

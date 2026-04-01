@@ -15,6 +15,7 @@ import AdminSystemPromptsPage from './pages/AdminSystemPromptsPage';
 import AdminModelsPage from './pages/AdminModelsPage';
 import AdminMcpPage from './pages/AdminMcpPage';
 import AdminUsagePage from './pages/AdminUsagePage';
+import AdminChatsPage from './pages/AdminChatsPage';
 import SettingsPage from './pages/SettingsPage';
 import NotFoundPage from './pages/NotFoundPage';
 import SkillsPage from './pages/SkillsPage';
@@ -130,6 +131,7 @@ function App() {
             <Route path="/admin/models" element={<AdminModelsPage />} />
             <Route path="/admin/tool-sets" element={<AdminMcpPage />} />
             <Route path="/admin/usage" element={<AdminUsagePage />} />
+            <Route path="/admin/chats" element={<AdminChatsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/leases" element={<LeaseChatPage />} />
             <Route path="*" element={<NotFoundPage />} />

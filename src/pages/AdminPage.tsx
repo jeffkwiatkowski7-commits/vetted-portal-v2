@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import * as api from '../api';
-import { Wrench, Users, Zap, AlertCircle, CheckCircle, CheckCircle2, BarChart2 } from 'lucide-react';
+import { Wrench, Users, Zap, AlertCircle, CheckCircle, CheckCircle2, BarChart2, MessageSquare } from 'lucide-react';
 
 interface Stats {
   total_users?: number;
@@ -249,6 +249,15 @@ export default function AdminPage() {
             <span className="flex items-center gap-2">
               <Users size={18} />
               Manage Users
+            </span>
+          </button>
+          <button
+            onClick={() => navigate('/admin/chats')}
+            className="w-full btn-primary flex items-center justify-between"
+          >
+            <span className="flex items-center gap-2">
+              <MessageSquare size={18} />
+              Chat History
             </span>
           </button>
           <button

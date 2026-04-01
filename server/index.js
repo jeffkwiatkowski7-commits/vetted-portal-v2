@@ -1686,6 +1686,53 @@ app.delete('/api/admin/chats', requireAuth, requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+app.delete('/api/admin/users/:id/chats', requireAuth, requireAdmin, (req, res) => {
+  const targetUser = dbGet(db, 'SELECT id, display_name FROM users WHERE id = ?', [req.params.id]);
+  if (!targetUser) return res.status(404).json({ error: 'User not found' });
+  const userChats = dbAll(db, 'SELECT id FROM chats WHERE user_id = ?', [req.params.id]);
+  const chatIds = userChats.map(c => c.id);
+  if (chatIds.length > 0) {
+    dbRun(db, `DELETE FROM messages WHERE chat_id IN (${chatIds.map(() => '?').join(',')})`, chatIds);
+    dbRun(db, 'DELETE FROM chats WHERE user_id = ?', [req.params.id]);
+  }
+  res.json({ success: true, deleted: chatIds.length });
+});
+
+app.get('/api/admin/chat-history', requireAuth, requireAdmin, (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+  const offset = (page - 1) * limit;
+  const conditions = [];
+  const params = [];
+
+  if (req.query.user_id) { conditions.push('c.user_id = ?'); params.push(req.query.user_id); }
+  if (req.query.q) { conditions.push('c.title LIKE ?'); params.push(`%${req.query.q}%`); }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const countRow = dbGet(db, `SELECT COUNT(*) as total FROM chats c ${where}`, params);
+  const rows = dbAll(db, `
+    SELECT c.id, c.title, c.user_id, c.project_id, c.model, c.created_at, c.updated_at,
+           u.display_name, u.email,
+           p.name as project_name,
+           (SELECT COUNT(*) FROM messages WHERE chat_id = c.id) as message_count
+    FROM chats c
+    LEFT JOIN users u ON c.user_id = u.id
+    LEFT JOIN projects p ON c.project_id = p.id
+    ${where}
+    ORDER BY c.updated_at DESC
+    LIMIT ? OFFSET ?
+  `, [...params, limit, offset]);
+  res.json({ rows, total: countRow?.total || 0, page, limit });
+});
+
+app.delete('/api/admin/chat-history/:id', requireAuth, requireAdmin, (req, res) => {
+  const chat = dbGet(db, 'SELECT id FROM chats WHERE id = ?', [req.params.id]);
+  if (!chat) return res.status(404).json({ error: 'Chat not found' });
+  dbRun(db, 'DELETE FROM messages WHERE chat_id = ?', [req.params.id]);
+  dbRun(db, 'DELETE FROM chats WHERE id = ?', [req.params.id]);
+  res.json({ success: true });
+});
+
 app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
   const userCount = dbGet(db, 'SELECT COUNT(*) as count FROM users WHERE status = ?', ['active']);
   const chatCount = dbGet(db, 'SELECT COUNT(*) as count FROM chats');

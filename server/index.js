@@ -1680,6 +1680,12 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+app.delete('/api/admin/chats', requireAuth, requireAdmin, (req, res) => {
+  dbRun(db, 'DELETE FROM messages');
+  dbRun(db, 'DELETE FROM chats');
+  res.json({ success: true });
+});
+
 app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
   const userCount = dbGet(db, 'SELECT COUNT(*) as count FROM users WHERE status = ?', ['active']);
   const chatCount = dbGet(db, 'SELECT COUNT(*) as count FROM chats');

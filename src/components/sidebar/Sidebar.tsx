@@ -15,7 +15,6 @@ import {
   MoreHorizontal,
   Trash2,
   Pencil,
-  Play,
 } from 'lucide-react';
 import type { Chat } from '../../types';
 
@@ -31,8 +30,6 @@ export default function Sidebar() {
     activeChat,
     setActiveChat,
     setUser,
-    demoActive,
-    setDemoActive,
     setChatAttachedFiles,
     setPendingProjectId,
   } = useStore();
@@ -97,20 +94,9 @@ export default function Sidebar() {
       {/* Header */}
       <div className="p-4 border-b border-vetted-border flex items-center justify-between">
         {!sidebarCollapsed && (
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-serif font-bold text-vetted-primary">
-              Vetted<span className="text-vetted-accent">.</span>
-            </h1>
-            {!demoActive && (
-              <button
-                onClick={() => setDemoActive(true)}
-                className="flex items-center gap-1 px-2 py-0.5 border border-vetted-accent text-vetted-accent rounded text-xs font-medium hover:bg-vetted-accent hover:text-vetted-primary transition-colors"
-              >
-                <Play size={10} />
-                Demo
-              </button>
-            )}
-          </div>
+          <h1 className="text-2xl font-serif font-bold text-vetted-primary">
+            Vetted<span className="text-vetted-accent">.</span>
+          </h1>
         )}
         <button
           onClick={toggleSidebar}

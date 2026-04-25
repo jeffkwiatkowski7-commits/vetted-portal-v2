@@ -118,6 +118,7 @@ export async function initializeDatabase() {
       project_id TEXT,
       uploaded_at TEXT NOT NULL,
       index_status TEXT DEFAULT NULL,
+      library_visible INTEGER DEFAULT 1,
       FOREIGN KEY (user_id) REFERENCES users(id),
       FOREIGN KEY (project_id) REFERENCES projects(id)
     );
@@ -336,6 +337,9 @@ export async function initializeDatabase() {
 
   // Add images column to messages for clipboard image paste
   try { db.run(`ALTER TABLE messages ADD COLUMN images TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
+
+  // Add library_visible flag for chat-export files (hidden until "Add to Library")
+  try { db.run(`ALTER TABLE library_files ADD COLUMN library_visible INTEGER DEFAULT 1`); } catch (e) { /* already exists */ }
 
   // Migrate MCP servers: remove broken packages, fix Sequential Thinking package name
   try {

@@ -192,6 +192,27 @@ export const library = {
   assignProject: (id: string, projectId: string | null) =>
     request(`/library/${id}`, { method: 'PUT', body: JSON.stringify({ project_id: projectId }) }),
   download: (id: string) => `${BASE}/library/${id}/download`,
+  // Fetches the file with the X-User-Id auth header and triggers a Blob download.
+  // Use this instead of window.open(download(id)) — the latter silently 401s.
+  downloadAsBlob: async (id: string, filename: string): Promise<void> => {
+    const userId = localStorage.getItem('userId') || '';
+    const res = await fetch(`${BASE}/library/${id}/download`, {
+      headers: { 'X-User-Id': userId },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(err.error || `Download failed (${res.status})`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
   rename: (id: string, name: string) => request(`/library/${id}`, { method: 'PUT', body: JSON.stringify({ original_name: name }) }),
   delete: (id: string) => request(`/library/${id}`, { method: 'DELETE' }),
   stats: () => request('/library/stats').then(d => { const s = d.stats || d; return { totalSize: s.total_size || 0, fileCount: s.total_files || 0 }; }),

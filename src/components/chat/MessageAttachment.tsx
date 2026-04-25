@@ -24,20 +24,7 @@ export function MessageAttachment({ attachment }: Props) {
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      const userId = localStorage.getItem('userId') || '';
-      const res = await fetch(`/api/library/${attachment.id}/download`, {
-        headers: { 'X-User-Id': userId },
-      });
-      if (!res.ok) throw new Error(`Download failed (${res.status})`);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = attachment.filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      await api.library.downloadAsBlob(attachment.id, attachment.filename);
     } catch (err) {
       console.error('[MessageAttachment] download failed:', err);
       alert(err instanceof Error ? err.message : 'Download failed');

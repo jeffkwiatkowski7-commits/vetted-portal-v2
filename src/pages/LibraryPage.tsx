@@ -309,7 +309,9 @@ export default function LibraryPage() {
                 <div className="flex gap-1">
                   <button
                     onClick={() =>
-                      window.open(api.library.download(file.id))
+                      api.library.downloadAsBlob(file.id, file.original_name).catch((err) =>
+                        alert(err instanceof Error ? err.message : 'Download failed')
+                      )
                     }
                     className="p-1.5 hover:bg-white rounded transition-colors text-vetted-text-secondary hover:text-vetted-primary"
                     title="Download"

@@ -457,11 +457,41 @@ app.get('/api/chats/:id', requireAuth, (req, res) => {
 
   const messages = dbAll(db, 'SELECT * FROM messages WHERE chat_id = ? ORDER BY created_at ASC', [req.params.id]);
 
-  // Parse reasoning if it exists
-  const messagesWithParsedReasoning = messages.map(m => ({
+  // Collect every attachment id referenced by any message and hydrate in one pass.
+  const allAttachmentIds = new Set();
+  const parsedAttachments = messages.map(m => {
+    if (!m.attachments) return null;
+    try {
+      const ids = JSON.parse(m.attachments);
+      if (Array.isArray(ids)) {
+        ids.forEach(id => allAttachmentIds.add(id));
+        return ids;
+      }
+    } catch { /* ignore malformed */ }
+    return null;
+  });
+
+  let attachmentMap = {};
+  if (allAttachmentIds.size > 0) {
+    const idList = [...allAttachmentIds];
+    const rows = dbAll(db,
+      `SELECT id, original_name, mime_type, library_visible FROM library_files WHERE id IN (${idList.map(() => '?').join(',')})`,
+      idList,
+    );
+    attachmentMap = Object.fromEntries(rows.map(r => [r.id, {
+      id: r.id,
+      filename: r.original_name,
+      mime_type: r.mime_type,
+      library_visible: r.library_visible === 1,
+    }]));
+  }
+
+  const messagesWithParsedReasoning = messages.map((m, i) => ({
     ...m,
     reasoning: m.reasoning ? JSON.parse(m.reasoning) : null,
-    attachments: m.attachments ? JSON.parse(m.attachments) : null,
+    attachments: parsedAttachments[i]
+      ? parsedAttachments[i].map(id => attachmentMap[id]).filter(Boolean)
+      : null,
     images: m.images ? JSON.parse(m.images) : null,
   }));
 

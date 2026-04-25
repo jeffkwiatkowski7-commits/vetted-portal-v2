@@ -34,6 +34,13 @@ export interface SourceCitation {
   pageNumber: number | null;
 }
 
+export interface MessageAttachment {
+  id: string;
+  filename: string;
+  mime_type: string;
+  library_visible: boolean;
+}
+
 export interface Message {
   id: string;
   chat_id: string;
@@ -42,7 +49,7 @@ export interface Message {
   model_used?: string;
   token_count?: number;
   reasoning?: string;
-  attachments?: string;
+  attachments?: MessageAttachment[] | null;
   images?: Array<{ base64: string; mimeType: string }> | null;
   steps?: string[];
   citations?: SourceCitation[];

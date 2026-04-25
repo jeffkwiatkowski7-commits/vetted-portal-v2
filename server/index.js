@@ -1304,12 +1304,12 @@ app.get('/api/library', requireAuth, (req, res) => {
   let files;
   if (isAdmin) {
     files = project_id
-      ? dbAll(db, 'SELECT lf.*, u.display_name as owner_name FROM library_files lf LEFT JOIN users u ON lf.user_id = u.id WHERE lf.project_id = ? ORDER BY lf.uploaded_at DESC', [project_id])
-      : dbAll(db, 'SELECT lf.*, u.display_name as owner_name FROM library_files lf LEFT JOIN users u ON lf.user_id = u.id ORDER BY lf.uploaded_at DESC');
+      ? dbAll(db, 'SELECT lf.*, u.display_name as owner_name FROM library_files lf LEFT JOIN users u ON lf.user_id = u.id WHERE lf.project_id = ? AND lf.library_visible = 1 ORDER BY lf.uploaded_at DESC', [project_id])
+      : dbAll(db, 'SELECT lf.*, u.display_name as owner_name FROM library_files lf LEFT JOIN users u ON lf.user_id = u.id WHERE lf.library_visible = 1 ORDER BY lf.uploaded_at DESC');
   } else {
     files = project_id
-      ? dbAll(db, 'SELECT * FROM library_files WHERE user_id = ? AND project_id = ? ORDER BY uploaded_at DESC', [req.user.id, project_id])
-      : dbAll(db, 'SELECT * FROM library_files WHERE user_id = ? ORDER BY uploaded_at DESC', [req.user.id]);
+      ? dbAll(db, 'SELECT * FROM library_files WHERE user_id = ? AND project_id = ? AND library_visible = 1 ORDER BY uploaded_at DESC', [req.user.id, project_id])
+      : dbAll(db, 'SELECT * FROM library_files WHERE user_id = ? AND library_visible = 1 ORDER BY uploaded_at DESC', [req.user.id]);
   }
 
   res.json({ files });
@@ -1417,6 +1417,16 @@ app.get('/api/library/:id/download', requireAuth, (req, res) => {
   res.download(filePath, file.original_name);
 });
 
+// Promote a hidden chat-export file into the user's main Library.
+app.post('/api/library/:id/promote', requireAuth, (req, res) => {
+  const file = dbGet(db, 'SELECT id, library_visible FROM library_files WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+  if (!file) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+  dbRun(db, 'UPDATE library_files SET library_visible = 1 WHERE id = ?', [req.params.id]);
+  res.json({ ok: true });
+});
+
 app.put('/api/library/:id', requireAuth, async (req, res) => {
   const { original_name, project_id } = req.body;
 
@@ -1484,7 +1494,7 @@ app.get('/api/library/stats', requireAuth, (req, res) => {
       SUM(file_size) as total_size,
       COUNT(DISTINCT file_type) as file_types
     FROM library_files
-    WHERE user_id = ?
+    WHERE user_id = ? AND library_visible = 1
   `, [req.user.id]);
 
   res.json({ stats });

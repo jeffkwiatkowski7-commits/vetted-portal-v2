@@ -195,6 +195,8 @@ export const library = {
   rename: (id: string, name: string) => request(`/library/${id}`, { method: 'PUT', body: JSON.stringify({ original_name: name }) }),
   delete: (id: string) => request(`/library/${id}`, { method: 'DELETE' }),
   stats: () => request('/library/stats').then(d => { const s = d.stats || d; return { totalSize: s.total_size || 0, fileCount: s.total_files || 0 }; }),
+  promoteToLibrary: (id: string) =>
+    request(`/library/${id}/promote`, { method: 'POST' }),
 };
 
 // Skills - unwrap

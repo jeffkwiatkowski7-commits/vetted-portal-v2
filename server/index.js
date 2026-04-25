@@ -63,7 +63,7 @@ function resolveFilePath(filePathValue) {
 const BUILTIN_EXPORT_TOOLS = [
   {
     name: 'export_to_word',
-    description: 'Generate a Microsoft Word (.docx) file from structured content and attach it to your response so the user can download it. Call this when the user asks to export, save as Word, make a doc, etc. Compose the sections from the conversation context.',
+    description: 'Generate a downloadable Microsoft Word (.docx) file from structured content. ONLY call this tool when the user explicitly asks for a downloadable file using language like "export to Word", "save as Word", "download as a doc", "make a Word document", "give me a .docx", or similar. DO NOT call this tool just because the user asks to "format", "structure", "show", "list", "summarize", or "write up" something — those requests should produce a normal markdown response, not a file. When in doubt, do NOT call this tool; just respond with formatted markdown.',
     parameters: {
       type: 'object',
       properties: {
@@ -94,7 +94,7 @@ const BUILTIN_EXPORT_TOOLS = [
   },
   {
     name: 'export_to_excel',
-    description: 'Generate a Microsoft Excel (.xlsx) file from tabular data. Call this when the user asks to export to Excel, spreadsheet, or csv. ONLY call when the content has a clear tabular structure; if the source is prose with no rows/columns, ask whether the user prefers Word, or offer to restructure the data first.',
+    description: 'Generate a downloadable Microsoft Excel (.xlsx) file from tabular data. ONLY call this tool when the user explicitly asks for a downloadable file using language like "export to Excel", "save as Excel", "download as a spreadsheet", "give me a .xlsx", "save as csv", or similar. DO NOT call this tool when the user asks to "show as a grid", "put in a grid", "format as a table", "make a table", "tabulate", "list", or "compare" — those requests should produce a markdown table in the response, not a file. When the content is prose with no clear rows and columns, do NOT call this tool. When in doubt, respond with a markdown table instead.',
     parameters: {
       type: 'object',
       properties: {

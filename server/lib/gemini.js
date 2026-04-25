@@ -27,8 +27,8 @@ const MODEL_ID_MAP = {
 
 // Fallback chain: when a model is rate-limited, try the next one
 const MODEL_FALLBACK_CHAIN = {
-  'gemini-3.1-pro-preview': ['gemini-3.0-pro-preview', 'gemini-2.5-pro'],
-  'gemini-3.1-flash-preview': ['gemini-3.0-flash-preview', 'gemini-2.5-flash'],
+  'gemini-3.1-pro-preview': ['gemini-2.5-pro', 'gemini-2.0-flash'],
+  'gemini-3.1-flash-preview': ['gemini-2.5-flash', 'gemini-2.0-flash'],
   'gemini-3.0-pro-preview': ['gemini-2.5-pro'],
   'gemini-3.0-flash-preview': ['gemini-2.5-flash'],
 };
@@ -83,6 +83,14 @@ async function generate(contents, genConfig = {}, tools = [], modelOverride = nu
       } catch (err) {
         const msg = err.message || '';
         const isRateLimited = msg.includes('429') || msg.includes('quota') || msg.includes('rate limit') || msg.includes('RESOURCE_EXHAUSTED');
+        const isModelNotFound = msg.includes('404') || msg.includes('not found') || msg.includes('NOT_FOUND');
+
+        // Model doesn't exist in this location — skip directly to next fallback
+        if (isModelNotFound && modelIdx < modelsToTry.length - 1) {
+          console.log(`[gemini] ${model} not available, falling back to ${modelsToTry[modelIdx + 1]}`);
+          break;
+        }
+
         if (isRateLimited && attempt < MAX_RETRIES) {
           const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
           console.log(`[gemini] ${model} rate limited (attempt ${attempt + 1}/${MAX_RETRIES}), retrying in ${Math.round(delay)}ms...`);

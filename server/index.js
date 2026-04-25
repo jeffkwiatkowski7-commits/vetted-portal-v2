@@ -22,6 +22,7 @@ import { chunkText, embedTexts } from './lib/embeddings.js';
 import mcpManager from './lib/mcp-manager.js';
 import { hasTavily, tavilySearch } from './lib/tavily.js';
 import { parsePptxTemplate } from './lib/pptx-parser.js';
+import { buildDocx, buildXlsx } from './lib/exports.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -55,6 +56,90 @@ if (!fs.existsSync(uploadsDir)) {
 function resolveFilePath(filePathValue) {
   const filename = path.basename(filePathValue);
   return path.join(uploadsDir, filename);
+}
+
+// Tool declarations for AI-driven chat exports. Both Claude and Gemini
+// see these alongside any MCP tools the user has selected.
+const BUILTIN_EXPORT_TOOLS = [
+  {
+    name: 'export_to_word',
+    description: 'Generate a Microsoft Word (.docx) file from structured content and attach it to your response so the user can download it. Call this when the user asks to export, save as Word, make a doc, etc. Compose the sections from the conversation context.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Document title shown at the top of the file.' },
+        filename: { type: 'string', description: 'Suggested filename without extension.' },
+        sections: {
+          type: 'array',
+          description: 'Ordered sections of the document.',
+          items: {
+            type: 'object',
+            properties: {
+              heading: { type: 'string', description: 'Optional section heading.' },
+              paragraphs: { type: 'array', items: { type: 'string' }, description: 'Body paragraphs.' },
+              bullets: { type: 'array', items: { type: 'string' }, description: 'Bullet list items.' },
+              table: {
+                type: 'object',
+                properties: {
+                  headers: { type: 'array', items: { type: 'string' } },
+                  rows: { type: 'array', items: { type: 'array', items: { type: 'string' } } },
+                },
+              },
+            },
+          },
+        },
+      },
+      required: ['title', 'sections'],
+    },
+  },
+  {
+    name: 'export_to_excel',
+    description: 'Generate a Microsoft Excel (.xlsx) file from tabular data. Call this when the user asks to export to Excel, spreadsheet, or csv. ONLY call when the content has a clear tabular structure; if the source is prose with no rows/columns, ask whether the user prefers Word, or offer to restructure the data first.',
+    parameters: {
+      type: 'object',
+      properties: {
+        filename: { type: 'string', description: 'Suggested filename without extension.' },
+        sheets: {
+          type: 'array',
+          description: 'One or more worksheets, each with headers and rows.',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: 'Worksheet tab name.' },
+              headers: { type: 'array', items: { type: 'string' } },
+              rows: { type: 'array', items: { type: 'array', items: { type: 'string' } } },
+            },
+            required: ['headers', 'rows'],
+          },
+        },
+      },
+      required: ['filename', 'sheets'],
+    },
+  },
+];
+
+// Save a generated export Buffer to disk and insert a hidden library_files row.
+// Returns { id, filename, mimeType }.
+function persistExportFile({ db, buffer, mimeType, baseFilename, extension, userId }) {
+  const id = uuidv4();
+  const safeBase = (baseFilename || 'export').replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '-') || 'export';
+  const displayName = `${safeBase}.${extension}`;
+  const diskFilename = `export-${id}.${extension}`;
+  const diskPath = path.join(uploadsDir, diskFilename);
+  fs.writeFileSync(diskPath, buffer);
+
+  const now = new Date().toISOString();
+  dbRun(db, `
+    INSERT INTO library_files (
+      id, user_id, filename, original_name, file_path, file_type, file_size,
+      mime_type, project_id, uploaded_at, library_visible
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+  `, [
+    id, userId, diskFilename, displayName, `/uploads/${diskFilename}`,
+    extension, buffer.length, mimeType, null, now,
+  ]);
+
+  return { id, filename: displayName, mimeType };
 }
 
 // Middleware
@@ -518,6 +603,10 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     }
   }
 
+  // Accumulator for built-in export tools — populated inside the AI tool loop,
+  // read again when persisting the assistant message in the second try block.
+  const exportFileIds = [];
+
   try {
     const docs = [];
 
@@ -748,8 +837,46 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       }
     }
 
-    // Inject Tavily web_search alongside any MCP tool declarations
-    const allFunctionDeclarations = [...mcpToolDeclarations];
+    // Built-in export tools (Word/Excel) — visible to both Claude and Gemini.
+    // Handlers close over the chat context so they can persist files for this user/chat.
+    const builtinToolMap = {
+      export_to_word: async (args) => {
+        if (!args || !Array.isArray(args.sections) || args.sections.length === 0) {
+          return 'Error: export_to_word requires a non-empty `sections` array. Build the document content from the conversation and retry.';
+        }
+        const { buffer, mimeType } = await buildDocx(args);
+        const file = persistExportFile({
+          db, buffer, mimeType, extension: 'docx',
+          baseFilename: args.filename || args.title || 'document',
+          userId: req.user.id,
+        });
+        exportFileIds.push(file.id);
+        step(`Generated ${file.filename}`);
+        return `Generated Word document "${file.filename}". The file is now attached to your reply and the user can download it.`;
+      },
+      export_to_excel: async (args) => {
+        if (!args || !Array.isArray(args.sheets) || args.sheets.length === 0) {
+          return 'Error: export_to_excel requires a non-empty `sheets` array.';
+        }
+        const hasRows = args.sheets.some(s => Array.isArray(s.rows) && s.rows.length > 0);
+        if (!hasRows) {
+          return 'Error: export_to_excel requires at least one sheet with rows. The content does not appear tabular — ask the user whether to use Word instead, or restructure the data first.';
+        }
+        const { buffer, mimeType } = await buildXlsx(args);
+        const file = persistExportFile({
+          db, buffer, mimeType, extension: 'xlsx',
+          baseFilename: args.filename || 'spreadsheet',
+          userId: req.user.id,
+        });
+        exportFileIds.push(file.id);
+        step(`Generated ${file.filename}`);
+        return `Generated Excel file "${file.filename}". The file is now attached to your reply and the user can download it.`;
+      },
+    };
+    const builtinToolDeclarations = [...BUILTIN_EXPORT_TOOLS];
+
+    // Inject Tavily web_search and built-in exports alongside any MCP tool declarations
+    const allFunctionDeclarations = [...mcpToolDeclarations, ...builtinToolDeclarations];
     if (hasTavily()) {
       allFunctionDeclarations.push({
         name: "web_search",
@@ -769,8 +896,8 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     let result;
 
     if (isClaudeModel) {
-      // Convert MCP tool declarations to Claude tool format
-      const claudeTools = mcpToolDeclarations.map(decl => {
+      // Convert MCP + built-in tool declarations to Claude tool format
+      const claudeTools = [...mcpToolDeclarations, ...builtinToolDeclarations].map(decl => {
         const tool = { name: decl.name, description: decl.description || '' };
         if (decl.parameters) {
           tool.input_schema = {
@@ -785,7 +912,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       });
 
       step('Calling Claude');
-      result = await claudeDirectChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, { claudeTools, mcpToolMap, mcpManager, images });
+      result = await claudeDirectChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, { claudeTools, mcpToolMap, mcpManager, builtinToolMap, images });
     } else {
       step('Calling Gemini');
       result = await geminiChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, geminiTools, images);
@@ -815,6 +942,17 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
               return { functionResponse: { name: prefixedName, response: { result: searchResult || 'No results found.' } } };
             } catch (err) {
               step(`Web search error: ${err.message}`);
+              return { functionResponse: { name: prefixedName, response: { result: `Error: ${err.message}` } } };
+            }
+          }
+
+          // Built-in export tools
+          if (builtinToolMap[prefixedName]) {
+            try {
+              const toolResult = await builtinToolMap[prefixedName](part.functionCall.args || {});
+              return { functionResponse: { name: prefixedName, response: { result: toolResult } } };
+            } catch (err) {
+              step(`${prefixedName} error: ${err.message}`);
               return { functionResponse: { name: prefixedName, response: { result: `Error: ${err.message}` } } };
             }
           }
@@ -888,7 +1026,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       chat.model,
       Math.ceil(aiContent.split(/\s+/).length * 1.3),
       aiReasoning ? JSON.stringify(aiReasoning) : null,
-      null,
+      exportFileIds && exportFileIds.length > 0 ? JSON.stringify(exportFileIds) : null,
       null,
       now
     ]);

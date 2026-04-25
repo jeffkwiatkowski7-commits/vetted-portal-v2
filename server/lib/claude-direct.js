@@ -23,7 +23,7 @@ function getClient() {
  * General document Q&A / project chat via Claude direct API.
  * Supports MCP tools via the mcpToolMap + mcpManager passed from the caller.
  */
-export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null, modelOverride = null, { claudeTools = [], mcpToolMap = {}, mcpManager = null, images = [] } = {}) {
+export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null, modelOverride = null, { claudeTools = [], mcpToolMap = {}, mcpManager = null, builtinToolMap = {}, images = [] } = {}) {
   let textDocs = docs.filter((d) => d.text !== undefined);
   let pdfDocs = docs.filter((d) => d.base64 !== undefined);
 
@@ -216,6 +216,17 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
         if (onStep) onStep(`Web search: "${query}"`);
         const result = await tavilySearch(query);
         toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result || 'No results found.' });
+        continue;
+      }
+      // Built-in export tools (export_to_word / export_to_excel)
+      if (builtinToolMap[block.name]) {
+        try {
+          const result = await builtinToolMap[block.name](block.input || {});
+          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
+        } catch (err) {
+          if (onStep) onStep(`${block.name} error: ${err.message}`);
+          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: `Error: ${err.message}` });
+        }
         continue;
       }
       const mapping = mcpToolMap[block.name];

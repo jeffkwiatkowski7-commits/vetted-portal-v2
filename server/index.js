@@ -319,30 +319,17 @@ app.get('/api/models', requireAuth, (req, res) => {
 // ============================================================================
 
 app.get('/api/chats', requireAuth, (req, res) => {
-  const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
-  const chats = isAdmin
-    ? dbAll(db, `
-      SELECT
-        c.id, c.user_id, c.project_id, c.title, c.model, c.temperature,
-        c.system_prompt, c.is_shared, c.created_at, c.updated_at,
-        COUNT(m.id) as message_count, u.display_name as owner_name
-      FROM chats c
-      LEFT JOIN messages m ON c.id = m.chat_id
-      LEFT JOIN users u ON c.user_id = u.id
-      GROUP BY c.id
-      ORDER BY c.updated_at DESC
-    `)
-    : dbAll(db, `
-      SELECT
-        c.id, c.user_id, c.project_id, c.title, c.model, c.temperature,
-        c.system_prompt, c.is_shared, c.created_at, c.updated_at,
-        COUNT(m.id) as message_count
-      FROM chats c
-      LEFT JOIN messages m ON c.id = m.chat_id
-      WHERE c.user_id = ?
-      GROUP BY c.id
-      ORDER BY c.updated_at DESC
-    `, [req.user.id]);
+  const chats = dbAll(db, `
+    SELECT
+      c.id, c.user_id, c.project_id, c.title, c.model, c.temperature,
+      c.system_prompt, c.is_shared, c.created_at, c.updated_at,
+      COUNT(m.id) as message_count
+    FROM chats c
+    LEFT JOIN messages m ON c.id = m.chat_id
+    WHERE c.user_id = ?
+    GROUP BY c.id
+    ORDER BY c.updated_at DESC
+  `, [req.user.id]);
 
   res.json({ chats });
 });

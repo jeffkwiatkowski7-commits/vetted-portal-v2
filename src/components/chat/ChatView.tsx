@@ -5,6 +5,7 @@ import * as api from '../../api';
 import { Copy, ThumbsUp, ThumbsDown, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import ModelReasoning from '../pipeline/ModelReasoning';
 import CanvasBlock from './CanvasBlock';
+import { MessageAttachment } from './MessageAttachment';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -394,6 +395,13 @@ export default function ChatView({ chatId: chatIdProp }: { chatId?: string } = {
                   modelUsed={msg.model_used}
                   citations={msg.citations}
                 />
+                {msg.attachments && msg.attachments.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {msg.attachments.map((a) => (
+                      <MessageAttachment key={a.id} attachment={a} />
+                    ))}
+                  </div>
+                )}
                 {msg.created_at && (
                   <span className="text-[10px] text-vetted-text-muted">
                     {formatMessageTime(msg.created_at)}

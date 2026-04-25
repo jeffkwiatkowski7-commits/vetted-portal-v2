@@ -4,6 +4,7 @@ import { Send, Loader2, Paperclip, X, ChevronDown, ChevronUp, Check, Download, P
 import LibraryPickerModal from '../components/chat/LibraryPickerModal';
 import CanvasBlock from '../components/chat/CanvasBlock';
 import ExportModal from '../components/chat/ExportModal';
+import { MessageAttachment } from '../components/chat/MessageAttachment';
 import { LibraryFile } from '../types';
 
 // ── Model icon (matches ChatInput) ───────────────────────────────────────────
@@ -92,6 +93,7 @@ interface ChatMessage {
   citations?: SourceCitation[];
   timestamp?: string;
   reasoning?: string;
+  attachments?: import('../types').MessageAttachment[];
 }
 
 // ── ReasoningSummary ─────────────────────────────────────────────────────────
@@ -328,8 +330,15 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
             {msg.reasoning && <ReasoningSummary reasoning={msg.reasoning} />}
           </div>
         )}
-      {msg.timestamp && <span className="text-[10px] text-vetted-text-muted px-1">{formatTime(msg.timestamp)}</span>}
       </div>
+      {msg.attachments && msg.attachments.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-2">
+          {msg.attachments.map((a) => (
+            <MessageAttachment key={a.id} attachment={a} />
+          ))}
+        </div>
+      )}
+      {msg.timestamp && <span className="text-[10px] text-vetted-text-muted px-1">{formatTime(msg.timestamp)}</span>}
     </div>
   );
 }
@@ -577,6 +586,7 @@ export default function MainChatPage() {
           content: lastMsg?.content ?? '',
           citations: lastMsg?.citations ?? undefined,
           reasoning: lastMsg?.reasoning ?? undefined,
+          attachments: lastMsg?.attachments ?? undefined,
           timestamp: lastMsg?.created_at ?? new Date().toISOString(),
         };
         return updated;

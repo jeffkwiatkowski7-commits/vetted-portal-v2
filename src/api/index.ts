@@ -270,6 +270,7 @@ export const admin = {
   deleteSystemPrompt: (id: string) => request(`/admin/system-prompts/${id}`, { method: 'DELETE' }),
   health: () => request('/admin/health').then(d => d.health || d),
   errors: () => request('/admin/errors').then((d: any) => d.errors || []),
+  clearErrors: () => request('/admin/errors', { method: 'DELETE' }),
   reportClientError: (payload: { message: string; stack?: string; url?: string; userAgent?: string }) =>
     request('/admin/client-errors', { method: 'POST', body: JSON.stringify(payload) }).catch(() => {}),
   usage: {

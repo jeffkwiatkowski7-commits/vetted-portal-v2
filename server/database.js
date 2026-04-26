@@ -310,6 +310,21 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_skill_files_skill_id ON skill_files(skill_id);
     CREATE INDEX IF NOT EXISTS idx_project_skills_project_id ON project_skills(project_id);
 
+    CREATE TABLE IF NOT EXISTS error_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source TEXT NOT NULL,
+      message TEXT NOT NULL,
+      route TEXT,
+      stack TEXT,
+      user_agent TEXT,
+      count INTEGER NOT NULL DEFAULT 1,
+      first_seen TEXT NOT NULL,
+      last_seen TEXT NOT NULL,
+      dedup_key TEXT NOT NULL UNIQUE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_error_log_last_seen ON error_log(last_seen);
+
     CREATE TABLE IF NOT EXISTS mcp_servers (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,

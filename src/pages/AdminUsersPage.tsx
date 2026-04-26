@@ -477,7 +477,7 @@ export default function AdminUsersPage() {
 
       {/* Templates slide-over panel */}
       {panelUser && (
-        <div className="fixed inset-0 z-40 flex" onClick={() => setPanelUser(null)}>
+        <div className="fixed inset-0 z-40 flex" onClick={() => { setPreviewId(null); setPanelUser(null); }}>
           <div className="flex-1 bg-black/40" />
           <div
             className="w-full max-w-md bg-white shadow-xl flex flex-col"
@@ -488,7 +488,7 @@ export default function AdminUsersPage() {
                 <h3 className="font-serif text-lg text-vetted-primary">{panelUser.display_name}</h3>
                 <p className="text-xs text-vetted-text-muted">{panelUser.email}</p>
               </div>
-              <button onClick={() => setPanelUser(null)} className="p-1 hover:bg-vetted-surface rounded text-vetted-text-muted">
+              <button onClick={() => { setPreviewId(null); setPanelUser(null); }} className="p-1 hover:bg-vetted-surface rounded text-vetted-text-muted">
                 <X size={18} />
               </button>
             </div>

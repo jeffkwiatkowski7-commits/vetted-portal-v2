@@ -313,40 +313,44 @@ export async function ensureWrossIcMemoTemplate(database) {
     return;
   }
 
-  const templateId = uuidv4();
-  const userDir = path.join(uploadsDir, 'templates', bill.id);
-  fs.mkdirSync(userDir, { recursive: true });
-  const destPath = path.join(userDir, `${templateId}.pptx`);
-  if (!fs.existsSync(destPath)) {
-    fs.copyFileSync(sourceAsset, destPath);
-  }
-
-  let manifest, thumbnailBuffer;
   try {
-    const { extractManifest } = await import('./lib/pptx-manifest.js');
-    const result = await extractManifest(destPath);
-    manifest = result.manifest;
-    thumbnailBuffer = result.thumbnailBuffer;
+    const templateId = uuidv4();
+    const userDir = path.join(uploadsDir, 'templates', bill.id);
+    fs.mkdirSync(userDir, { recursive: true });
+    const destPath = path.join(userDir, `${templateId}.pptx`);
+    if (!fs.existsSync(destPath)) {
+      fs.copyFileSync(sourceAsset, destPath);
+    }
+
+    let manifest, thumbnailBuffer;
+    try {
+      const { extractManifest } = await import('./lib/pptx-manifest.js');
+      const result = await extractManifest(destPath);
+      manifest = result.manifest;
+      thumbnailBuffer = result.thumbnailBuffer;
+    } catch (err) {
+      console.warn(`Migration: failed to parse seed pptx (${err.message}), skipping`);
+      return;
+    }
+
+    let thumbAbs = null;
+    if (thumbnailBuffer) {
+      thumbAbs = path.join(userDir, `${templateId}.thumb.jpg`);
+      fs.writeFileSync(thumbAbs, thumbnailBuffer);
+    }
+
+    const now = new Date().toISOString();
+    const relSource = path.relative(uploadsDir, destPath);
+    const relThumb = thumbAbs ? path.relative(uploadsDir, thumbAbs) : null;
+    dbRun(database, `
+      INSERT INTO pptx_templates
+      (id, user_id, name, template_type, source_pptx_path, thumbnail_path, manifest_json, status, created_at, updated_at)
+      VALUES (?, ?, 'PREP IC Memo', 'ic_memo', ?, ?, ?, 'active', ?, ?)
+    `, [templateId, bill.id, relSource, relThumb, JSON.stringify(manifest), now, now]);
+    console.log(`Migration: seeded IC Memo template for wross@prepfunds.net (id=${templateId})`);
   } catch (err) {
-    console.warn(`Migration: failed to parse seed pptx (${err.message}), skipping`);
-    return;
+    console.warn(`Migration: ensureWrossIcMemoTemplate failed (${err.message}), skipping`);
   }
-
-  let thumbAbs = null;
-  if (thumbnailBuffer) {
-    thumbAbs = path.join(userDir, `${templateId}.thumb.jpg`);
-    fs.writeFileSync(thumbAbs, thumbnailBuffer);
-  }
-
-  const now = new Date().toISOString();
-  const relSource = path.relative(uploadsDir, destPath);
-  const relThumb = thumbAbs ? path.relative(uploadsDir, thumbAbs) : null;
-  dbRun(database, `
-    INSERT INTO pptx_templates
-    (id, user_id, name, template_type, source_pptx_path, thumbnail_path, manifest_json, status, created_at, updated_at)
-    VALUES (?, ?, 'PREP IC Memo', 'ic_memo', ?, ?, ?, 'active', ?, ?)
-  `, [templateId, bill.id, relSource, relThumb, JSON.stringify(manifest), now, now]);
-  console.log(`Migration: seeded IC Memo template for wross@prepfunds.net (id=${templateId})`);
 }
 
 // Initialize database on startup

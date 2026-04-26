@@ -2002,6 +2002,33 @@ app.get('/api/pptx-templates', requireAuth, (req, res) => {
   res.json({ templates });
 });
 
+// Returns full template row + parsed manifest for the requesting user.
+// 404 (not 403) on cross-user access — prevents existence leak per spec §7.
+app.get('/api/pptx-templates/:id', requireAuth, (req, res) => {
+  const row = dbGet(
+    db,
+    'SELECT * FROM pptx_templates WHERE id = ? AND user_id = ?',
+    [req.params.id, req.user.id]
+  );
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  let manifest;
+  try { manifest = JSON.parse(row.manifest_json); } catch { manifest = null; }
+  res.json({
+    template: {
+      id: row.id,
+      name: row.name,
+      template_type: row.template_type,
+      source_pptx_path: row.source_pptx_path,
+      thumbnail_path: row.thumbnail_path,
+      has_thumbnail: row.thumbnail_path != null,
+      manifest,
+      status: row.status,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    },
+  });
+});
+
 app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   const rows = dbAll(db, 'SELECT * FROM users ORDER BY created_at DESC');
   const users = rows.map(({ password_hash, ...u }) => ({ ...u, has_password: !!password_hash }));

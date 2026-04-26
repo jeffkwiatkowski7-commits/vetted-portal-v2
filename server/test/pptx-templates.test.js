@@ -69,4 +69,36 @@ describe('pptx-templates user endpoints', () => {
     const templates = res.body.templates || res.body;
     expect(templates).toEqual([]);
   });
+
+  it('test 2: detail endpoint returns 404 (not 403) on cross-user access', async () => {
+    const res = await request(app).get(`/api/pptx-templates/${ids.bTplId}`).set('X-User-Id', ids.a);
+    expect(res.status).toBe(404);
+    const body = JSON.stringify(res.body);
+    expect(body).not.toContain('B Template');
+    expect(body).not.toContain(ids.bTplId);
+  });
+
+  it('test 2b: detail endpoint returns own template fully', async () => {
+    const res = await request(app).get(`/api/pptx-templates/${ids.aTplId}`).set('X-User-Id', ids.a);
+    expect(res.status).toBe(200);
+    const tpl = res.body.template || res.body;
+    expect(tpl.id).toBe(ids.aTplId);
+    expect(tpl.name).toBe('A Template');
+    expect(tpl.manifest).toEqual({ version: 1, slide_count: 1, slides: [{ index: 1, title: 'Test' }] });
+  });
+
+  it('test 6: list and detail SQL strings filter by user_id in WHERE clause', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const url = await import('url');
+    const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+    const indexJs = fs.readFileSync(path.join(__dirname, '../index.js'), 'utf8');
+
+    const listHandlerMatch = indexJs.match(/app\.get\('\/api\/pptx-templates',[\s\S]*?\}\);/);
+    const detailHandlerMatch = indexJs.match(/app\.get\('\/api\/pptx-templates\/:id',[\s\S]*?\}\);/);
+    expect(listHandlerMatch, 'list handler must exist').toBeTruthy();
+    expect(detailHandlerMatch, 'detail handler must exist').toBeTruthy();
+    expect(listHandlerMatch[0]).toMatch(/WHERE user_id = \?/);
+    expect(detailHandlerMatch[0]).toMatch(/WHERE id = \? AND user_id = \?/);
+  });
 });

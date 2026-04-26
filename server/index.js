@@ -2230,6 +2230,23 @@ app.delete('/api/pptx-templates/:id', requireAuth, (req, res) => {
   res.status(204).end();
 });
 
+// Streams the per-template slide-1 thumbnail. 404 if not owned or no thumbnail on disk.
+app.get('/api/pptx-templates/:id/thumbnail', requireAuth, (req, res) => {
+  const row = dbGet(
+    db,
+    'SELECT thumbnail_path FROM pptx_templates WHERE id = ? AND user_id = ?',
+    [req.params.id, req.user.id]
+  );
+  if (!row || !row.thumbnail_path) return res.status(404).json({ error: 'Not found' });
+
+  const abs = path.join(uploadsDir, row.thumbnail_path);
+  if (!fs.existsSync(abs)) return res.status(404).json({ error: 'Not found' });
+
+  res.set('Content-Type', 'image/jpeg');
+  res.set('Cache-Control', 'private, max-age=86400, immutable');
+  fs.createReadStream(abs).pipe(res);
+});
+
 app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   const rows = dbAll(db, 'SELECT * FROM users ORDER BY created_at DESC');
   const users = rows.map(({ password_hash, ...u }) => ({ ...u, has_password: !!password_hash }));

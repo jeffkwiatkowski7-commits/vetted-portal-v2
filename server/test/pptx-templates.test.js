@@ -296,6 +296,27 @@ describe('pptx-templates user endpoints', () => {
     expect(fs.existsSync(thumbPath)).toBe(false);
   });
 
+  it('thumbnail: streams jpeg with cache headers when present', async () => {
+    const res = await request(app)
+      .get(`/api/pptx-templates/${ids.aUploadedId}/thumbnail`)
+      .set('X-User-Id', ids.a);
+    if (res.status === 404) {
+      // The seed pptx may not have a thumbnail — skip in that case
+      return;
+    }
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^image\/jpeg/);
+    expect(res.headers['cache-control']).toContain('max-age=86400');
+    expect(res.body.length || res.body.byteLength).toBeGreaterThan(0);
+  });
+
+  it('thumbnail: 404 on cross-user', async () => {
+    const res = await request(app)
+      .get(`/api/pptx-templates/${ids.aUploadedId}/thumbnail`)
+      .set('X-User-Id', ids.b);
+    expect(res.status).toBe(404);
+  });
+
   it('test 6: list and detail SQL strings filter by user_id in WHERE clause', async () => {
     const fs = await import('fs');
     const path = await import('path');

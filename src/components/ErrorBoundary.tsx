@@ -24,7 +24,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
     api.admin.reportClientError({
       message: error.message,
       stack: error.stack,
-      url: window.location.href,
+      url: window.location.pathname,
     });
   }
 

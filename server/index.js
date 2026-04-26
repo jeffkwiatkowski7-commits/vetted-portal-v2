@@ -1043,6 +1043,12 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     aiContent = aiText;
     step('Response received');
   } catch (err) {
+    logError({
+      source: 'server',
+      message: err.message || 'Chat AI error',
+      route: 'chat:messages:sse',
+      stack: err.stack,
+    });
     console.error('[chat] AI error:', err.message, err.stack);
     const msg = err.message || '';
     if (msg.includes('invalid_grant') || msg.includes('invalid_rapt') || msg.includes('reauth') || msg.includes('Unable to authenticate') || msg.includes('401') || msg.includes('403')) {
@@ -1095,6 +1101,12 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
 
     dbRun(db, 'UPDATE chats SET updated_at = ? WHERE id = ?', [now, req.params.id]);
   } catch (err) {
+    logError({
+      source: 'server',
+      message: err.message || 'Chat DB error after AI response',
+      route: 'chat:messages:db',
+      stack: err.stack,
+    });
     console.error('[chat] DB error after AI response:', err.message);
   }
 
@@ -1700,6 +1712,12 @@ app.post('/api/projects/:id/files/upload', requireAuth, memoryUpload.single('fil
       },
     });
   } catch (err) {
+    logError({
+      source: 'server',
+      message: err.message || 'File indexing failed',
+      route: 'project:files:upload',
+      stack: err.stack,
+    });
     console.error('File indexing error:', err);
     dbRun(db, 'UPDATE library_files SET index_status = ? WHERE id = ?', ['error', fileId]);
     sendEvent({ type: 'error', message: err.message || 'Indexing failed' });
@@ -1738,6 +1756,12 @@ app.post('/api/projects/:id/files/:fileId/reindex', requireAuth, async (req, res
     dbRun(db, 'UPDATE library_files SET index_status = ? WHERE id = ?', ['ready', file.id]);
     sendEvent({ type: 'done', file: { id: file.id, index_status: 'ready', chunks: result.chunks } });
   } catch (err) {
+    logError({
+      source: 'server',
+      message: err.message || 'File re-indexing failed',
+      route: 'project:files:reindex',
+      stack: err.stack,
+    });
     console.error('Re-index error:', err);
     dbRun(db, 'UPDATE library_files SET index_status = ? WHERE id = ?', ['error', file.id]);
     sendEvent({ type: 'error', message: err.message || 'Re-indexing failed' });
@@ -1952,7 +1976,7 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   res.json({ users });
 });
 
-app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+app.post('/api/admin/users', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
   const { email, display_name, job_title, department, role = 'user', password, status = 'active' } = req.body;
   if (!email || !display_name) return res.status(400).json({ error: 'Email and name required' });
   if (!['user', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
@@ -1971,9 +1995,9 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
   const user = dbGet(db, 'SELECT * FROM users WHERE id = ?', [id]);
   const { password_hash: _, ...safeUser } = user;
   res.status(201).json({ user: { ...safeUser, has_password: !!user.password_hash } });
-});
+}));
 
-app.put('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
+app.put('/api/admin/users/:id', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
   const { id } = req.params;
   const body = req.body;
   const existing = dbGet(db, 'SELECT id FROM users WHERE id = ?', [id]);
@@ -1994,7 +2018,7 @@ app.put('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
   const updated = dbGet(db, 'SELECT * FROM users WHERE id = ?', [id]);
   const { password_hash, ...safeUser } = updated;
   res.json({ user: { ...safeUser, has_password: !!password_hash } });
-});
+}));
 
 app.put('/api/admin/users/:id/password', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
   const { id } = req.params;
@@ -2227,7 +2251,25 @@ app.delete('/api/admin/errors', requireAuth, requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+// Per-user rate limit for client error reports: 60 per rolling minute.
+// Prevents a non-admin user from filling the error_log table.
+const _clientErrorBuckets = new Map(); // userId → { count, windowStart }
+const CLIENT_ERROR_LIMIT = 60;
+const CLIENT_ERROR_WINDOW_MS = 60_000;
+
 app.post('/api/admin/client-errors', requireAuth, (req, res) => {
+  const userId = req.user.id;
+  const now = Date.now();
+  const bucket = _clientErrorBuckets.get(userId);
+  if (bucket && now - bucket.windowStart < CLIENT_ERROR_WINDOW_MS) {
+    if (bucket.count >= CLIENT_ERROR_LIMIT) {
+      return res.status(429).json({ error: 'Too many client errors' });
+    }
+    bucket.count++;
+  } else {
+    _clientErrorBuckets.set(userId, { count: 1, windowStart: now });
+  }
+
   const { message, stack, url, userAgent } = req.body || {};
   logError({
     source: 'client',
@@ -2607,10 +2649,20 @@ if (NODE_ENV === 'production') {
 
 app.use((err, req, res, next) => {
   console.error('Error:', err);
+
+  // Body-parser/multer errors fire before route matching, so req.route is undefined
+  // and req.path includes resource IDs. Use a fixed route so dedup collapses them.
+  let route = req.route?.path ?? req.path;
+  if (err.type === 'entity.parse.failed' || (err instanceof SyntaxError && 'body' in err)) {
+    route = 'bodyParser:json';
+  } else if (err.code === 'LIMIT_FILE_SIZE') {
+    route = 'multer:limit';
+  }
+
   logError({
     source: 'server',
     message: err.message || 'Internal server error',
-    route: req.route?.path ?? req.path,
+    route,
     stack: err.stack,
   });
   if (!res.headersSent) {

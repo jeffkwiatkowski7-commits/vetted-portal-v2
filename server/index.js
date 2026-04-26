@@ -2277,12 +2277,17 @@ app.patch('/api/pptx-templates/:id', requireAuth, asyncRoute(async (req, res) =>
   dbRun(db, `UPDATE pptx_templates SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`, params);
 
   const updated = dbGet(db, 'SELECT * FROM pptx_templates WHERE id = ?', [row.id]);
+  let slideCount = 0;
+  try { slideCount = JSON.parse(updated.manifest_json).slide_count || 0; } catch {}
   res.json({
     template: {
       id: updated.id,
       name: updated.name,
       template_type: updated.template_type,
+      slide_count: slideCount,
+      has_thumbnail: updated.thumbnail_path != null,
       status: updated.status,
+      created_at: updated.created_at,
       updated_at: updated.updated_at,
     },
   });

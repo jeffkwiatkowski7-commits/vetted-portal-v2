@@ -1444,7 +1444,7 @@ app.post('/api/library/:id/promote', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-app.put('/api/library/:id', requireAuth, async (req, res) => {
+app.put('/api/library/:id', requireAuth, asyncRoute(async (req, res) => {
   const { original_name, project_id } = req.body;
 
   const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
@@ -1475,9 +1475,9 @@ app.put('/api/library/:id', requireAuth, async (req, res) => {
 
   const updated = dbGet(db, 'SELECT * FROM library_files WHERE id = ?', [req.params.id]);
   res.json({ file: updated });
-});
+}));
 
-app.delete('/api/library/:id', requireAuth, async (req, res) => {
+app.delete('/api/library/:id', requireAuth, asyncRoute(async (req, res) => {
   const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
   if (!file) {
@@ -1502,7 +1502,7 @@ app.delete('/api/library/:id', requireAuth, async (req, res) => {
   dbRun(db, 'DELETE FROM library_files WHERE id = ?', [req.params.id]);
 
   res.json({ success: true });
-});
+}));
 
 app.get('/api/library/stats', requireAuth, (req, res) => {
   const stats = dbGet(db, `
@@ -1996,7 +1996,7 @@ app.put('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
   res.json({ user: { ...safeUser, has_password: !!password_hash } });
 });
 
-app.put('/api/admin/users/:id/password', requireAuth, requireAdmin, async (req, res) => {
+app.put('/api/admin/users/:id/password', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
   const { id } = req.params;
   const { password } = req.body;
   if (!password || typeof password !== 'string' || password.length === 0) {
@@ -2007,7 +2007,7 @@ app.put('/api/admin/users/:id/password', requireAuth, requireAdmin, async (req, 
   const hash = await bcrypt.hash(password, 10);
   dbRun(db, 'UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?', [hash, new Date().toISOString(), id]);
   res.json({ success: true });
-});
+}));
 
 app.delete('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
   const { id } = req.params;
@@ -2329,7 +2329,7 @@ app.post('/api/admin/mcp-servers', requireAuth, requireAdmin, (req, res) => {
   res.status(201).json({ server });
 });
 
-app.put('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, async (req, res) => {
+app.put('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
   const existing = dbGet(db, 'SELECT * FROM mcp_servers WHERE id = ?', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'MCP server not found' });
   const { name, description, icon, command, args, env_vars, enabled } = req.body;
@@ -2350,15 +2350,15 @@ app.put('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, async (req, res
   await mcpManager.stopServer(req.params.id);
   const server = dbGet(db, 'SELECT * FROM mcp_servers WHERE id = ?', [req.params.id]);
   res.json({ server });
-});
+}));
 
-app.delete('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, async (req, res) => {
+app.delete('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
   const existing = dbGet(db, 'SELECT * FROM mcp_servers WHERE id = ?', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'MCP server not found' });
   await mcpManager.stopServer(req.params.id);
   dbRun(db, 'DELETE FROM mcp_servers WHERE id = ?', [req.params.id]);
   res.json({ success: true });
-});
+}));
 
 // -- User MCP Servers (enabled only, env_vars stripped) ------------------
 app.get('/api/mcp-servers', requireAuth, (req, res) => {

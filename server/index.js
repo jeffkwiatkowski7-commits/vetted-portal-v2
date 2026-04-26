@@ -2106,6 +2106,72 @@ app.post('/api/pptx-templates', requireAuth, templateUpload.single('file'), asyn
   });
 }));
 
+// Replace the source file for an existing template. Same multipart format as upload but
+// no name/template_type body — those are kept. 404 (not 403) on cross-user.
+app.post('/api/pptx-templates/:id/replace', requireAuth, templateUpload.single('file'), asyncRoute(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+  const userId = req.user.id;
+  const row = dbGet(db, 'SELECT * FROM pptx_templates WHERE id = ? AND user_id = ?', [req.params.id, userId]);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+
+  const looksLikePptx =
+    req.file.mimetype === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+    (req.file.originalname || '').toLowerCase().endsWith('.pptx');
+  if (!looksLikePptx) return res.status(400).json({ error: 'File must be a .pptx' });
+
+  const userDir = templateDir(userId);
+  fs.mkdirSync(userDir, { recursive: true });
+  const sourcePath = path.join(userDir, `${row.id}.pptx`);
+
+  // Write to a temp path first so we don't corrupt the existing file if extraction fails
+  const tempPath = sourcePath + '.new';
+  fs.writeFileSync(tempPath, req.file.buffer);
+
+  let manifest, thumbnailBuffer;
+  try {
+    const { extractManifest } = await import('./lib/pptx-manifest.js');
+    const result = await extractManifest(tempPath);
+    manifest = result.manifest;
+    thumbnailBuffer = result.thumbnailBuffer;
+  } catch (err) {
+    try { fs.unlinkSync(tempPath); } catch {}
+    return res.status(400).json({ error: err.message || 'File is not a valid .pptx' });
+  }
+
+  // Atomically move temp → source
+  fs.renameSync(tempPath, sourcePath);
+
+  const thumbDiskPath = path.join(userDir, `${row.id}.thumb.jpg`);
+  if (thumbnailBuffer) {
+    fs.writeFileSync(thumbDiskPath, thumbnailBuffer);
+  } else if (fs.existsSync(thumbDiskPath)) {
+    fs.unlinkSync(thumbDiskPath);
+  }
+
+  const now = new Date().toISOString();
+  const relSource = path.relative(uploadsDir, sourcePath);
+  const relThumb = thumbnailBuffer ? path.relative(uploadsDir, thumbDiskPath) : null;
+  dbRun(db, `
+    UPDATE pptx_templates
+    SET source_pptx_path = ?, thumbnail_path = ?, manifest_json = ?, updated_at = ?
+    WHERE id = ? AND user_id = ?
+  `, [relSource, relThumb, JSON.stringify(manifest), now, row.id, userId]);
+
+  res.json({
+    template: {
+      id: row.id,
+      name: row.name,
+      template_type: row.template_type,
+      slide_count: manifest.slide_count,
+      has_thumbnail: !!thumbnailBuffer,
+      status: row.status,
+      created_at: row.created_at,
+      updated_at: now,
+    },
+  });
+}));
+
 app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   const rows = dbAll(db, 'SELECT * FROM users ORDER BY created_at DESC');
   const users = rows.map(({ password_hash, ...u }) => ({ ...u, has_password: !!password_hash }));

@@ -150,6 +150,54 @@ describe('pptx-templates user endpoints', () => {
     expect(res.status).toBe(400);
   });
 
+  it("test 3': replace returns 404 on cross-user access; victim file unchanged", async () => {
+    const path = await import('path');
+    const url = await import('url');
+    const fs = await import('fs');
+    const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+    const samplePath = path.join(__dirname, '../seed-assets/templates/PREP_IC_Memo_Template.pptx');
+
+    const bUpload = await request(app)
+      .post('/api/pptx-templates')
+      .set('X-User-Id', ids.b)
+      .field('name', 'B Real Template')
+      .field('template_type', 'ic_memo')
+      .attach('file', samplePath);
+    expect(bUpload.status).toBe(201);
+    const bRealId = (bUpload.body.template || bUpload.body).id;
+    const bDiskPath = path.join(paths.uploadsDir, 'templates', ids.b, `${bRealId}.pptx`);
+    expect(fs.existsSync(bDiskPath)).toBe(true);
+    const bSizeBefore = fs.statSync(bDiskPath).size;
+
+    const aRes = await request(app)
+      .post(`/api/pptx-templates/${bRealId}/replace`)
+      .set('X-User-Id', ids.a)
+      .attach('file', samplePath);
+    expect(aRes.status).toBe(404);
+
+    expect(fs.existsSync(bDiskPath)).toBe(true);
+    expect(fs.statSync(bDiskPath).size).toBe(bSizeBefore);
+  });
+
+  it('replace: own template overwrites in place and updates updated_at', async () => {
+    const path = await import('path');
+    const url = await import('url');
+    const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+    const samplePath = path.join(__dirname, '../seed-assets/templates/PREP_IC_Memo_Template.pptx');
+
+    const before = dbGet('SELECT updated_at FROM pptx_templates WHERE id = ?', [ids.aUploadedId]);
+    await new Promise(r => setTimeout(r, 5));
+
+    const res = await request(app)
+      .post(`/api/pptx-templates/${ids.aUploadedId}/replace`)
+      .set('X-User-Id', ids.a)
+      .attach('file', samplePath);
+    expect(res.status).toBe(200);
+
+    const after = dbGet('SELECT updated_at FROM pptx_templates WHERE id = ?', [ids.aUploadedId]);
+    expect(after.updated_at).not.toBe(before.updated_at);
+  });
+
   it('test 6: list and detail SQL strings filter by user_id in WHERE clause', async () => {
     const fs = await import('fs');
     const path = await import('path');

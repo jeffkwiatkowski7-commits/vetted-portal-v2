@@ -245,6 +245,48 @@ export interface ProjectSkill {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// Scheduled Tasks (Claude-desktop-style recurring prompts)
+// ════════════════════════════════════════════════════════════════════
+
+export type ScheduleType = 'cron' | 'interval' | 'once' | 'manual';
+
+export interface ScheduledTask {
+  id: string;
+  user_id: string;
+  name: string;
+  description?: string | null;
+  prompt: string;
+  model?: string | null;
+  system_prompt?: string | null;
+  project_id?: string | null;
+  mcp_servers: string[];
+  schedule_type: ScheduleType;
+  cron_expression?: string | null;
+  timezone: string;
+  enabled: boolean;
+  delivery: { type: 'notification' | 'chat' | 'email'; target?: string };
+  cloud_scheduler_job?: string | null;
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+  last_status?: 'success' | 'error' | null;
+  last_error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduledTaskRun {
+  id: string;
+  task_id: string;
+  started_at: string;
+  finished_at?: string | null;
+  status: 'running' | 'success' | 'error';
+  result_text?: string | null;
+  error_message?: string | null;
+  duration_ms?: number | null;
+  trigger?: 'scheduler' | 'manual' | 'tool' | null;
+}
+
+// ════════════════════════════════════════════════════════════════════
 // Lease Bot Types (from cbre_leases integration)
 // ════════════════════════════════════════════════════════════════════
 

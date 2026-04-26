@@ -234,6 +234,17 @@ export const skills = {
     request(`/projects/${projectId}/skills`, { method: 'PUT', body: JSON.stringify({ skills }) }),
 };
 
+// Scheduled tasks
+export const tasks = {
+  list: () => request('/tasks').then(d => d.tasks || d || []),
+  get: (id: string) => request(`/tasks/${id}`),
+  create: (data: any) => request('/tasks', { method: 'POST', body: JSON.stringify(data) }).then(d => d.task || d),
+  update: (id: string, data: any) => request(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(d => d.task || d),
+  delete: (id: string) => request(`/tasks/${id}`, { method: 'DELETE' }),
+  run: (id: string) => request(`/tasks/${id}/run`, { method: 'POST' }),
+  runs: (id: string) => request(`/tasks/${id}/runs`).then(d => d.runs || d || []),
+};
+
 // Apps - unwrap
 export const apps = {
   list: () => request('/apps').then(d => d.apps || d || []),

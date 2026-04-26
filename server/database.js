@@ -337,6 +337,56 @@ export async function initializeDatabase() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    -- Scheduled tasks: Claude-desktop-style recurring or on-demand prompts.
+    -- The runner endpoint is invoked by Cloud Scheduler / Cloud Tasks (or manually).
+    CREATE TABLE IF NOT EXISTS scheduled_tasks (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      prompt TEXT NOT NULL,
+      model TEXT,
+      system_prompt TEXT,
+      project_id TEXT,
+      mcp_servers TEXT,                -- JSON array of mcp_server ids
+      schedule_type TEXT NOT NULL,     -- 'cron' | 'interval' | 'once' | 'manual'
+      cron_expression TEXT,            -- e.g. '0 9 * * MON'
+      timezone TEXT DEFAULT 'UTC',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      delivery TEXT,                   -- JSON: { type: 'notification' | 'chat' | 'email', target?: '...' }
+      cloud_scheduler_job TEXT,        -- name of the GCP Cloud Scheduler job, if synced
+      last_run_at TEXT,
+      next_run_at TEXT,
+      last_status TEXT,                -- 'success' | 'error' | null
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (project_id) REFERENCES projects(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_user_id ON scheduled_tasks(user_id);
+    CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at) WHERE enabled = 1;
+
+    -- One row per execution. Lets the user see history + debug failures.
+    CREATE TABLE IF NOT EXISTS scheduled_task_runs (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      status TEXT NOT NULL,             -- 'running' | 'success' | 'error'
+      result_text TEXT,
+      error_message TEXT,
+      input_tokens INTEGER DEFAULT 0,
+      output_tokens INTEGER DEFAULT 0,
+      duration_ms INTEGER,
+      trigger TEXT,                     -- 'scheduler' | 'manual' | 'tool'
+      FOREIGN KEY (task_id) REFERENCES scheduled_tasks(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_task_runs_task_id ON scheduled_task_runs(task_id);
+    CREATE INDEX IF NOT EXISTS idx_task_runs_started_at ON scheduled_task_runs(started_at);
   `);
 
   // Add index_status column to existing databases (ignore if already exists)

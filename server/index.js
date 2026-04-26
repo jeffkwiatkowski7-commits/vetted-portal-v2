@@ -12,6 +12,7 @@ import { initializeDatabase, getDatabase, dbGet, dbAll, dbRun, logUsage } from '
 import { getMockResponse } from './mock-responses.js';
 import { seedDatabase } from './seed.js';
 import leaseRoutes from './lease-routes.js';
+import schedulerRoutes from './scheduler-routes.js';
 import { chatWithDocuments as geminiChatWithDocuments, generate as geminiGenerate, extractGroundedResponse } from './lib/gemini.js';
 import { chatWithDocuments as claudeDirectChatWithDocuments } from './lib/claude-direct.js';
 import bcrypt from 'bcryptjs';
@@ -2563,6 +2564,12 @@ app.get('/api/settings/sessions', requireAuth, (req, res) => {
 // ============================================================================
 
 app.use('/api', leaseRoutes);
+
+// ============================================================================
+// SCHEDULED TASKS (Claude-desktop-style recurring prompts via Cloud Scheduler)
+// ============================================================================
+
+app.use('/api', schedulerRoutes({ db, requireAuth }));
 
 // ============================================================================
 // SEARCH ROUTES

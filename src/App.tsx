@@ -23,6 +23,7 @@ import SkillEditPage from './pages/SkillEditPage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import LeaseChatPage from './pages/LeaseChatPage';
 import PptxAppPage from './pages/PptxAppPage';
+import TasksPage from './pages/TasksPage';
 import ToastContainer from './components/notifications/ToastContainer';
 import GlobalSearch from './components/search/GlobalSearch';
 import DemoMode from './components/demo/DemoMode';
@@ -134,6 +135,8 @@ function App() {
             <Route path="/admin/chats" element={<AdminChatsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/leases" element={<LeaseChatPage />} />
+            <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/tasks/:id" element={<TasksPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </main>

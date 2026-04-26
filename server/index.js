@@ -2045,6 +2045,16 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
 // PPTX TEMPLATES
 // ============================================================================
 
+// Canonical audit_log writer. First callsite in the repo — copy this shape for future writes.
+function auditLog({ userId, action, resourceType = null, resourceId = null, details = null }) {
+  dbRun(
+    db,
+    `INSERT INTO audit_log (id, user_id, action, resource_type, resource_id, details, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [uuidv4(), userId, action, resourceType, resourceId, details, new Date().toISOString()]
+  );
+}
+
 // Lists templates for the requesting user. Defaults to status='active';
 // pass ?include=archived to get all statuses. Returns the minimal row data
 // the management UI needs (no manifest_json, no source paths).
@@ -2316,6 +2326,42 @@ app.get('/api/pptx-templates/:id/thumbnail', requireAuth, (req, res) => {
       else res.destroy();
     })
     .pipe(res);
+});
+
+// Admin-only: read another user's templates. Writes one audit_log row per call.
+// 400 if no user_id query param provided.
+app.get('/api/admin/pptx-templates', requireAuth, requireAdmin, (req, res) => {
+  const targetUserId = req.query.user_id;
+  if (!targetUserId) return res.status(400).json({ error: 'user_id query param is required' });
+
+  const rows = dbAll(
+    db,
+    'SELECT * FROM pptx_templates WHERE user_id = ? ORDER BY created_at DESC',
+    [targetUserId]
+  );
+  const templates = rows.map(r => {
+    let slideCount = 0;
+    try { slideCount = JSON.parse(r.manifest_json).slide_count || 0; } catch {}
+    return {
+      id: r.id,
+      name: r.name,
+      template_type: r.template_type,
+      slide_count: slideCount,
+      has_thumbnail: r.thumbnail_path != null,
+      status: r.status,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+    };
+  });
+
+  auditLog({
+    userId: req.user.id,
+    action: 'pptx_templates.admin_view',
+    resourceType: 'pptx_template',
+    resourceId: targetUserId,
+  });
+
+  res.json({ templates });
 });
 
 app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {

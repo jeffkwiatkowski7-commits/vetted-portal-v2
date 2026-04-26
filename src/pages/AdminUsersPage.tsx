@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import * as api from '../api';
+import { adminPptxTemplates } from '../api';
+import type { PptxTemplate, PptxTemplateDetail } from '../types';
+import { TemplateRow, PreviewModal } from '../components/templates';
 import { ArrowLeft, Search, Plus, Pencil, KeyRound, Trash2, X, Eye, EyeOff } from 'lucide-react';
 
 interface AdminUser {
@@ -14,6 +17,7 @@ interface AdminUser {
   status: string;
   has_password: boolean;
   last_login_at: string | null;
+  templates_count: number;
 }
 
 type ModalType = null | 'add' | 'edit' | 'password';
@@ -52,6 +56,41 @@ export default function AdminUsersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
+  const [panelUser, setPanelUser] = useState<AdminUser | null>(null);
+  const [panelTemplates, setPanelTemplates] = useState<PptxTemplate[]>([]);
+  const [panelLoading, setPanelLoading] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+
+  const openTemplatesPanel = async (u: AdminUser) => {
+    setPanelUser(u);
+    setPanelLoading(true);
+    setPanelTemplates([]);
+    try {
+      const list = await adminPptxTemplates.forUser(u.id);
+      // Override has_thumbnail to false — admin can't fetch user-scoped thumbnails,
+      // so force the placeholder icon to render instead of broken images.
+      const sanitized = list.map((t: PptxTemplate) => ({ ...t, has_thumbnail: false }));
+      setPanelTemplates(sanitized);
+    } catch (err) {
+      addToast({ type: 'error', title: (err as Error).message || 'Failed to load templates' });
+    } finally {
+      setPanelLoading(false);
+    }
+  };
+
+  // Admin previews use the admin endpoint as their loader since the user-scoped
+  // detail route would 404 (admin doesn't own the template).
+  const adminPreviewLoader = useCallback((id: string): Promise<PptxTemplateDetail> => {
+    if (!panelUser) return Promise.reject(new Error('No user selected'));
+    return adminPptxTemplates.forUser(panelUser.id).then((list: PptxTemplate[]) => {
+      const t = list.find(x => x.id === id);
+      if (!t) throw new Error('Template not found');
+      // Admin endpoint returns the same minimal shape as the user list — for v1 we
+      // construct a detail-shaped object with no manifest. PreviewModal renders
+      // gracefully when manifest is null.
+      return { ...t, has_thumbnail: false, manifest: null } as PptxTemplateDetail;
+    });
+  }, [panelUser]);
 
   useEffect(() => {
     if (currentUser?.role !== 'admin' && currentUser?.role !== 'super_admin') {
@@ -258,6 +297,7 @@ export default function AdminUsersPage() {
                 <th className="px-4 py-3">Role</th>
                 <th className="px-4 py-3">Password</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Templates</th>
                 <th className="px-4 py-3 whitespace-nowrap">Last Login</th>
                 <th className="px-4 py-3"></th>
               </tr>
@@ -296,6 +336,18 @@ export default function AdminUsersPage() {
                       {u.status.charAt(0).toUpperCase() + u.status.slice(1)}
                     </span>
                   </td>
+                  <td className="px-4 py-3 text-sm">
+                    {u.templates_count === 0 ? (
+                      <span className="text-vetted-text-muted">0 templates</span>
+                    ) : (
+                      <button
+                        onClick={() => openTemplatesPanel(u)}
+                        className="text-vetted-accent hover:underline font-medium"
+                      >
+                        {u.templates_count} {u.templates_count === 1 ? 'template' : 'templates'}
+                      </button>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-sm text-vetted-text-muted whitespace-nowrap">
                     {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : 'Never'}
                   </td>
@@ -317,7 +369,7 @@ export default function AdminUsersPage() {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-vetted-text-muted text-sm">No users found</td></tr>
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-vetted-text-muted text-sm">No users found</td></tr>
               )}
             </tbody>
           </table>
@@ -422,6 +474,56 @@ export default function AdminUsersPage() {
           </div>
         </div>
       )}
+
+      {/* Templates slide-over panel */}
+      {panelUser && (
+        <div className="fixed inset-0 z-40 flex" onClick={() => setPanelUser(null)}>
+          <div className="flex-1 bg-black/40" />
+          <div
+            className="w-full max-w-md bg-white shadow-xl flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-vetted-border flex items-center justify-between">
+              <div>
+                <h3 className="font-serif text-lg text-vetted-primary">{panelUser.display_name}</h3>
+                <p className="text-xs text-vetted-text-muted">{panelUser.email}</p>
+              </div>
+              <button onClick={() => setPanelUser(null)} className="p-1 hover:bg-vetted-surface rounded text-vetted-text-muted">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 space-y-2">
+              {panelLoading && <p className="text-sm text-vetted-text-muted">Loading…</p>}
+              {!panelLoading && panelTemplates.length === 0 && (
+                <p className="text-sm text-vetted-text-muted text-center py-8">This user has no templates.</p>
+              )}
+              {!panelLoading && panelTemplates.map(t => (
+                <div key={t.id}>
+                  <TemplateRow
+                    template={t}
+                    actions={
+                      <button
+                        onClick={() => setPreviewId(t.id)}
+                        title="Preview"
+                        className="p-1.5 hover:bg-vetted-surface rounded text-vetted-text-muted"
+                      >
+                        <Eye size={14} />
+                      </button>
+                    }
+                  />
+                  <p className="text-[10px] text-vetted-text-muted font-mono mt-1 ml-1">{t.id}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <PreviewModal
+        templateId={previewId}
+        onClose={() => setPreviewId(null)}
+        loader={adminPreviewLoader}
+      />
     </div>
   );
 }

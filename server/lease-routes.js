@@ -38,6 +38,7 @@ import {
   createSkill, getSkills, getSkillsByIds, updateSkill, deleteSkill,
 } from "./lib/firestore.js";
 import { addLog, getLogs, clearLogs } from "./lib/logger.js";
+import { logError } from "./lib/error-log.js";
 
 const router = Router();
 
@@ -136,6 +137,12 @@ router.post("/leases/ingest", pdfUpload.single("file"), async (req, res) => {
     const message = error instanceof Error ? error.message : "Unknown error";
     emit(`ERROR: ${message}`, "error");
     res.write(sseEvent("error", { message }));
+    logError({
+      source: 'server',
+      message,
+      route: 'lease:ingest:sse',
+      stack: error?.stack,
+    });
   }
 
   res.end();
@@ -299,6 +306,12 @@ router.post("/leases/chat", async (req, res) => {
     const msg = error instanceof Error ? error.message : "Unknown error";
     addLog("chat", `ERROR: ${msg}`, "error");
     res.write(sseEvent("error", { message: msg }));
+    logError({
+      source: 'server',
+      message: msg,
+      route: 'lease:chat:sse',
+      stack: error?.stack,
+    });
   }
 
   res.end();

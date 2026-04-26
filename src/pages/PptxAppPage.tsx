@@ -1,7 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
-import { Upload, CheckCircle, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
+import { Upload, CheckCircle, AlertCircle, Loader2, ArrowLeft, Plus, Eye, RefreshCw, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
+import { TemplateRow, PreviewModal } from '../components/templates';
+import { pptxTemplates } from '../api';
+import type { PptxTemplate } from '../types';
 
 type PageState = 'upload' | 'processing' | 'success' | 'error';
 
@@ -35,6 +38,86 @@ export default function PptxAppPage() {
   const [result, setResult] = useState<ParseResult | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [dragOver, setDragOver] = useState(false);
+
+  const [templates, setTemplates] = useState<PptxTemplate[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [showUploadForm, setShowUploadForm] = useState(false);
+  const [uploadName, setUploadName] = useState('');
+  const [uploadType, setUploadType] = useState<'ic_memo' | 'one_pager' | 'investor_update' | 'custom'>('ic_memo');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const refreshTemplates = useCallback(async () => {
+    try {
+      const list = await pptxTemplates.list({ includeArchived: showArchived });
+      setTemplates(list);
+    } catch (err) {
+      addToast({ type: 'error', title: (err as Error).message || 'Failed to load templates' });
+    }
+  }, [showArchived, addToast]);
+
+  useEffect(() => {
+    refreshTemplates();
+  }, [refreshTemplates]);
+
+  const handleUpload = async () => {
+    if (!uploadFile || !uploadName.trim()) return;
+    setUploading(true);
+    try {
+      await pptxTemplates.upload(uploadFile, { name: uploadName.trim(), template_type: uploadType });
+      addToast({ type: 'success', title: 'Template uploaded' });
+      setShowUploadForm(false);
+      setUploadFile(null);
+      setUploadName('');
+      setUploadType('ic_memo');
+      await refreshTemplates();
+    } catch (err) {
+      addToast({ type: 'error', title: (err as Error).message || 'Upload failed' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleArchiveToggle = async (t: PptxTemplate) => {
+    try {
+      await pptxTemplates.patch(t.id, { status: t.status === 'active' ? 'archived' : 'active' });
+      addToast({ type: 'success', title: t.status === 'active' ? 'Archived' : 'Restored' });
+      await refreshTemplates();
+    } catch (err) {
+      addToast({ type: 'error', title: (err as Error).message });
+    }
+  };
+
+  const handleReplace = (t: PptxTemplate) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pptx';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        await pptxTemplates.replace(t.id, file);
+        addToast({ type: 'success', title: 'Template replaced' });
+        await refreshTemplates();
+      } catch (err) {
+        addToast({ type: 'error', title: (err as Error).message });
+      }
+    };
+    input.click();
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await pptxTemplates.remove(id);
+      addToast({ type: 'success', title: 'Template deleted' });
+      setConfirmDeleteId(null);
+      await refreshTemplates();
+    } catch (err) {
+      addToast({ type: 'error', title: (err as Error).message });
+    }
+  };
 
   const processFile = useCallback(async (file: File) => {
     if (!file.name.toLowerCase().endsWith('.pptx')) {
@@ -117,6 +200,120 @@ export default function PptxAppPage() {
           <h1 className="text-3xl font-serif text-vetted-primary">PowerPoint Template Extractor</h1>
           <p className="text-vetted-text-secondary mt-1">Upload a PowerPoint template to extract its design system</p>
         </div>
+
+        {/* Your Templates section */}
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-serif text-xl text-vetted-primary">Your Templates</h2>
+            <button
+              onClick={() => setShowUploadForm(s => !s)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-vetted-accent text-vetted-primary rounded text-sm font-medium hover:bg-vetted-accent/90"
+            >
+              <Plus size={14} />
+              Upload
+            </button>
+          </div>
+
+          {showUploadForm && (
+            <div className="mb-4 p-4 border border-vetted-border rounded-lg bg-vetted-surface/30 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-vetted-text-muted uppercase tracking-wide mb-1">File</label>
+                <input
+                  type="file"
+                  accept=".pptx"
+                  onChange={e => {
+                    const f = e.target.files?.[0] || null;
+                    setUploadFile(f);
+                    if (f && !uploadName) setUploadName(f.name.replace(/\.pptx$/i, ''));
+                  }}
+                  className="text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-vetted-text-muted uppercase tracking-wide mb-1">Name</label>
+                <input
+                  type="text"
+                  value={uploadName}
+                  onChange={e => setUploadName(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-vetted-border rounded text-sm"
+                  placeholder="Template name"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-vetted-text-muted uppercase tracking-wide mb-1">Type</label>
+                <select
+                  value={uploadType}
+                  onChange={e => setUploadType(e.target.value as typeof uploadType)}
+                  className="w-full px-3 py-1.5 border border-vetted-border rounded text-sm"
+                >
+                  <option value="ic_memo">IC Memo</option>
+                  <option value="one_pager">One Pager</option>
+                  <option value="investor_update">Investor Update</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={handleUpload}
+                  disabled={uploading || !uploadFile || !uploadName.trim()}
+                  className="px-3 py-1.5 bg-vetted-primary text-white rounded text-sm font-medium disabled:opacity-50"
+                >
+                  {uploading ? 'Uploading…' : 'Upload'}
+                </button>
+                <button
+                  onClick={() => { setShowUploadForm(false); setUploadFile(null); setUploadName(''); }}
+                  className="px-3 py-1.5 border border-vetted-border rounded text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {templates.length === 0 ? (
+            <div className="p-6 text-center text-sm text-vetted-text-muted border border-dashed border-vetted-border rounded-lg">
+              You don't have any templates yet. Upload a <code>.pptx</code> below to get started.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {templates.map(t => (
+                <TemplateRow
+                  key={t.id}
+                  template={t}
+                  actions={
+                    <>
+                      <button onClick={() => setPreviewId(t.id)} title="Preview" className="p-1.5 hover:bg-vetted-surface rounded text-vetted-text-muted">
+                        <Eye size={14} />
+                      </button>
+                      <button onClick={() => handleReplace(t)} title="Replace" className="p-1.5 hover:bg-vetted-surface rounded text-vetted-text-muted">
+                        <RefreshCw size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleArchiveToggle(t)}
+                        title={t.status === 'active' ? 'Archive' : 'Restore'}
+                        className="p-1.5 hover:bg-vetted-surface rounded text-vetted-text-muted"
+                      >
+                        {t.status === 'active' ? <Archive size={14} /> : <ArchiveRestore size={14} />}
+                      </button>
+                      <button onClick={() => setConfirmDeleteId(t.id)} title="Delete" className="p-1.5 hover:bg-red-50 rounded text-vetted-text-muted hover:text-red-500">
+                        <Trash2 size={14} />
+                      </button>
+                    </>
+                  }
+                />
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={() => setShowArchived(s => !s)}
+            className="mt-3 text-xs text-vetted-text-muted hover:text-vetted-primary"
+          >
+            {showArchived ? 'Hide archived' : 'Show archived'}
+          </button>
+        </section>
+
+        {/* Existing token extraction UI continues below — unchanged */}
 
         {/* Upload State */}
         {state === 'upload' && (
@@ -255,6 +452,21 @@ export default function PptxAppPage() {
             <button onClick={reset} className="btn-secondary">
               Try Again
             </button>
+          </div>
+        )}
+
+        <PreviewModal templateId={previewId} onClose={() => setPreviewId(null)} />
+
+        {confirmDeleteId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setConfirmDeleteId(null)}>
+            <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+              <h3 className="font-medium text-vetted-primary mb-2">Delete this template?</h3>
+              <p className="text-sm text-vetted-text-secondary mb-4">This cannot be undone.</p>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setConfirmDeleteId(null)} className="px-3 py-1.5 border border-vetted-border rounded text-sm">Cancel</button>
+                <button onClick={() => handleDelete(confirmDeleteId)} className="px-3 py-1.5 bg-red-500 text-white rounded text-sm">Delete</button>
+              </div>
+            </div>
           </div>
         )}
       </div>

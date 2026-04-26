@@ -158,6 +158,10 @@ const storage = multer.diskStorage({
 const maxFileSize = (parseInt(process.env.MAX_FILE_SIZE_MB, 10) || 50) * 1024 * 1024;
 const upload = multer({ storage, limits: { fileSize: maxFileSize } });
 const memoryUpload = multer({ storage: multer.memoryStorage() });
+const templateUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: maxFileSize },
+});
 
 app.post('/api/chat/upload', requireAuth, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
@@ -2028,6 +2032,79 @@ app.get('/api/pptx-templates/:id', requireAuth, (req, res) => {
     },
   });
 });
+
+const VALID_TEMPLATE_TYPES = ['ic_memo', 'one_pager', 'investor_update', 'custom'];
+
+// Resolve the per-user template directory under the configured uploads dir.
+function templateDir(userId) {
+  return path.join(uploadsDir, 'templates', userId);
+}
+
+// Upload a new template. Multipart form: file + name + template_type.
+// Writes source .pptx to data/uploads/templates/{user_id}/{id}.pptx, runs
+// extractManifest, writes optional thumbnail next to it, inserts row.
+app.post('/api/pptx-templates', requireAuth, templateUpload.single('file'), asyncRoute(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+  const { name, template_type } = req.body;
+  if (!name || typeof name !== 'string') return res.status(400).json({ error: 'Name is required' });
+  if (!VALID_TEMPLATE_TYPES.includes(template_type)) {
+    return res.status(400).json({ error: `template_type must be one of ${VALID_TEMPLATE_TYPES.join(', ')}` });
+  }
+
+  // Loose mime check — pptx browsers report inconsistently; check extension as a fallback.
+  const looksLikePptx =
+    req.file.mimetype === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+    (req.file.originalname || '').toLowerCase().endsWith('.pptx');
+  if (!looksLikePptx) return res.status(400).json({ error: 'File must be a .pptx' });
+
+  const userId = req.user.id;
+  const id = uuidv4();
+  const userDir = templateDir(userId);
+  fs.mkdirSync(userDir, { recursive: true });
+  const sourcePath = path.join(userDir, `${id}.pptx`);
+  fs.writeFileSync(sourcePath, req.file.buffer);
+
+  let manifest, thumbnailBuffer;
+  try {
+    const { extractManifest } = await import('./lib/pptx-manifest.js');
+    const result = await extractManifest(sourcePath);
+    manifest = result.manifest;
+    thumbnailBuffer = result.thumbnailBuffer;
+  } catch (err) {
+    try { fs.unlinkSync(sourcePath); } catch {}
+    return res.status(400).json({ error: err.message || 'File is not a valid .pptx' });
+  }
+
+  let thumbnailPath = null;
+  if (thumbnailBuffer) {
+    thumbnailPath = path.join(userDir, `${id}.thumb.jpg`);
+    fs.writeFileSync(thumbnailPath, thumbnailBuffer);
+  }
+
+  const now = new Date().toISOString();
+  // Store paths relative to the configured uploads dir so the location is portable.
+  const relSource = path.relative(uploadsDir, sourcePath);
+  const relThumb = thumbnailPath ? path.relative(uploadsDir, thumbnailPath) : null;
+  dbRun(db, `
+    INSERT INTO pptx_templates
+    (id, user_id, name, template_type, source_pptx_path, thumbnail_path, manifest_json, status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+  `, [id, userId, name, template_type, relSource, relThumb, JSON.stringify(manifest), now, now]);
+
+  res.status(201).json({
+    template: {
+      id,
+      name,
+      template_type,
+      slide_count: manifest.slide_count,
+      has_thumbnail: !!thumbnailBuffer,
+      status: 'active',
+      created_at: now,
+      updated_at: now,
+    },
+  });
+}));
 
 app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   const rows = dbAll(db, 'SELECT * FROM users ORDER BY created_at DESC');

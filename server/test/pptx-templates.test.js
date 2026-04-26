@@ -87,6 +87,69 @@ describe('pptx-templates user endpoints', () => {
     expect(tpl.manifest).toEqual({ version: 1, slide_count: 1, slides: [{ index: 1, title: 'Test' }] });
   });
 
+  it('upload: writes file under user dir, parses manifest, returns row', async () => {
+    const path = await import('path');
+    const url = await import('url');
+    const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+    const samplePath = path.join(__dirname, '../seed-assets/templates/PREP_IC_Memo_Template.pptx');
+
+    const res = await request(app)
+      .post('/api/pptx-templates')
+      .set('X-User-Id', ids.a)
+      .field('name', 'Uploaded Template')
+      .field('template_type', 'ic_memo')
+      .attach('file', samplePath);
+
+    expect(res.status).toBe(201);
+    const tpl = res.body.template || res.body;
+    expect(tpl.id).toBeTruthy();
+    expect(tpl.name).toBe('Uploaded Template');
+    expect(tpl.template_type).toBe('ic_memo');
+    expect(tpl.slide_count).toBeGreaterThan(0);
+
+    const fs = await import('fs');
+    const expectedPath = path.join(paths.uploadsDir, 'templates', ids.a, `${tpl.id}.pptx`);
+    expect(fs.existsSync(expectedPath)).toBe(true);
+
+    const row = dbGet('SELECT user_id, name, status FROM pptx_templates WHERE id = ?', [tpl.id]);
+    expect(row.user_id).toBe(ids.a);
+    expect(row.status).toBe('active');
+
+    ids.aUploadedId = tpl.id;
+  });
+
+  it('upload: rejects non-pptx mime', async () => {
+    const path = await import('path');
+    const url = await import('url');
+    const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+    const notPptx = path.join(__dirname, '../seed-assets/templates/PREP_IC_Memo_Manifest.json');
+
+    const res = await request(app)
+      .post('/api/pptx-templates')
+      .set('X-User-Id', ids.a)
+      .field('name', 'Should Fail')
+      .field('template_type', 'ic_memo')
+      .attach('file', notPptx);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('upload: rejects invalid template_type', async () => {
+    const path = await import('path');
+    const url = await import('url');
+    const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+    const samplePath = path.join(__dirname, '../seed-assets/templates/PREP_IC_Memo_Template.pptx');
+
+    const res = await request(app)
+      .post('/api/pptx-templates')
+      .set('X-User-Id', ids.a)
+      .field('name', 'Bad Type')
+      .field('template_type', 'not_a_real_type')
+      .attach('file', samplePath);
+
+    expect(res.status).toBe(400);
+  });
+
   it('test 6: list and detail SQL strings filter by user_id in WHERE clause', async () => {
     const fs = await import('fs');
     const path = await import('path');

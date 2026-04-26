@@ -926,18 +926,20 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     let result;
 
     if (isClaudeModel) {
-      // Convert MCP + built-in tool declarations to Claude tool format
+      // Convert MCP + built-in tool declarations to Claude tool format.
+      // Anthropic requires input_schema.type to be the literal string 'object';
+      // some MCP servers return "OBJECT", arrays, or omit it, so force it here.
       const claudeTools = [...mcpToolDeclarations, ...builtinToolDeclarations].map(decl => {
         const tool = { name: decl.name, description: decl.description || '' };
-        if (decl.parameters) {
-          tool.input_schema = {
-            type: decl.parameters.type || 'object',
-            properties: decl.parameters.properties || {},
-          };
-          if (decl.parameters.required) tool.input_schema.required = decl.parameters.required;
-        } else {
-          tool.input_schema = { type: 'object', properties: {} };
+        const upstreamType = decl.parameters?.type;
+        if (upstreamType !== undefined && upstreamType !== 'object') {
+          console.warn(`[claude-tools] Coercing input_schema.type for "${decl.name}" from ${JSON.stringify(upstreamType)} to "object"`);
         }
+        tool.input_schema = {
+          type: 'object',
+          properties: decl.parameters?.properties || {},
+        };
+        if (decl.parameters?.required) tool.input_schema.required = decl.parameters.required;
         return tool;
       });
 

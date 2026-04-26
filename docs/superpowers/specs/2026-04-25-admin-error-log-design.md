@@ -37,15 +37,14 @@ New SQLite table `error_log` defined in `server/database.js`:
 CREATE TABLE IF NOT EXISTS error_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   source TEXT NOT NULL,            -- 'server' | 'client'
-  level TEXT NOT NULL,             -- 'error' | 'warn'
   message TEXT NOT NULL,           -- truncated to 2000 chars
-  route TEXT,                      -- request path or background job name; nullable
-  stack TEXT,                      -- truncated to 8000 chars; first occurrence only
+  route TEXT,                      -- Express route pattern or background job name; nullable
+  stack TEXT,                      -- truncated to 8000 chars
   user_agent TEXT,                 -- client errors only
   count INTEGER NOT NULL DEFAULT 1,
   first_seen TEXT NOT NULL,        -- ISO timestamp
   last_seen TEXT NOT NULL,         -- ISO timestamp
-  dedup_key TEXT NOT NULL UNIQUE   -- SHA1 of source|level|message|route
+  dedup_key TEXT NOT NULL UNIQUE   -- SHA1 of source|message|route
 );
 CREATE INDEX IF NOT EXISTS idx_error_log_last_seen ON error_log(last_seen);
 ```
@@ -54,14 +53,18 @@ CREATE INDEX IF NOT EXISTS idx_error_log_last_seen ON error_log(last_seen);
 
 Single owner of the table. Exports:
 
-- `logError({ source, level, message, route, stack, userAgent })` — truncates `message`/`stack`, computes `dedup_key`, runs `INSERT ... ON CONFLICT(dedup_key) DO UPDATE SET count = count + 1, last_seen = ?`. The `ON CONFLICT` branch does not overwrite `stack`, `first_seen`, or `user_agent` — first occurrence keeps its diagnostic context. Never throws (errors during error-logging are swallowed and `console.error`'d).
+- `logError({ source, message, route, stack, userAgent })` — truncates `message`/`stack`, computes `dedup_key`, runs `INSERT ... ON CONFLICT(dedup_key) DO UPDATE SET count = count + 1, last_seen = ?, stack = COALESCE(stack, excluded.stack)`. The `ON CONFLICT` branch does not overwrite `first_seen` or `user_agent`. `stack` is filled lazily — if the first occurrence had no stack (e.g. thrown string), a later occurrence's stack is captured. Never throws (errors during error-logging are swallowed and `console.error`'d).
 - `getErrors({ limit = 500 })` — returns rows ordered by `last_seen DESC`.
 - `clearErrors()` — `DELETE FROM error_log`.
-- `pruneOldErrors()` — `DELETE FROM error_log WHERE last_seen < datetime('now', '-24 hours')`.
+- `pruneOldErrors()` — `DELETE FROM error_log WHERE last_seen < datetime('now', '-24 hours')`. Also enforces a hard cap of 5000 rows by deleting the oldest beyond that.
 
-`dedup_key` is `sha1(source + '|' + level + '|' + message + '|' + (route ?? ''))`. Hashing avoids a multi-column unique constraint with NULL semantics and keeps the key bounded in length.
+`dedup_key` is `sha1(source + '|' + message + '|' + (route ?? ''))`. Hashing avoids a multi-column unique constraint with NULL semantics and keeps the key bounded in length.
 
 ### Coverage strategy
+
+The goal is **one row per logical error**, captured at the layer that has the most context. To avoid double-logging, the rule is:
+
+> **Request-bound errors are logged once, by the Express error middleware. Background/non-request errors are logged at the site that catches them.**
 
 Two layers:
 
@@ -72,17 +75,20 @@ const asyncRoute = (handler) => (req, res, next) =>
   Promise.resolve(handler(req, res, next)).catch(next);
 ```
 
-Async route handlers that currently use `try/catch` to return 500s can opt in by being wrapped with `asyncRoute(...)`; rejected promises then forward to the existing Express error middleware, which already calls `logError`. This is the backstop — it catches anything that wasn't explicitly logged.
+Used to wrap route handlers that currently have **no error handling** or whose `catch` block is just `console.error` + a generic 500 response. Rejected promises then forward to the Express error middleware, which calls `logError` with `route = req.route?.path ?? req.path` (route pattern preferred — `/api/chats/:id/messages`, not `/api/chats/abc-123/messages` — so dedup collapses across resource IDs).
 
-**2. Explicit `logError()` calls** in catch blocks of:
+**Do NOT wrap**: routes whose existing `catch` shapes the response (custom 400 messages, 404s, validation errors, auth failures). Those keep their `try/catch`. They also don't need `logError` — those are intentional, client-facing responses, not the kind of errors we're trying to surface.
 
-- `server/lib/gemini.js` — `ocrPdf`, `extractLeaseData`, `chatWithLeases`, `chatCrossPortfolio`, `chatWithDocuments`
-- `server/lib/claude-direct.js` — `chatWithDocuments` and tool dispatch failures
-- `server/lib/mcp-manager.js` — server start failures, tool listing failures, tool invocation failures
-- `server/lib/rag.js`, `server/lib/embeddings.js`, `server/lib/gcs.js`, `server/lib/firestore.js` — every catch that currently `console.error`s and continues
-- `server/lease-routes.js` — SSE ingestion and chat error events
+**2. Explicit `logError()` calls** are reserved for **background work that has no request to bubble up to**:
 
-Implementation pass: grep for `catch` in `server/lib/**` and `server/lease-routes.js` and add a `logError({ source: 'server', level: 'error', message: err.message, route: '<context>', stack: err.stack })` to each block that previously only logged or silently continued. The `route` field is set to the function/operation name for background work (e.g. `'mcp:start:mcp-memory'`, `'gemini:ocrPdf'`).
+- `server/lib/mcp-manager.js` — server start failures, lazy startup failures, idle reaper errors (these run on timers/spawn callbacks, not in a request context)
+- `server/lease-routes.js` — SSE ingestion error events that are caught and converted to `event: error` SSE frames (the response has already been streamed, so the error middleware can't catch them)
+- Any `setInterval` / `setTimeout` callbacks with their own catches
+- The prune interval itself
+
+Lib functions called from request handlers (`gemini.js`, `claude-direct.js`, `rag.js`, `embeddings.js`, `gcs.js`, `firestore.js`) **rethrow** instead of swallowing — the route layer + error middleware logs them with request context. Existing `console.error` calls in those libs can stay (useful for terminal debugging) but should not also call `logError`. The exception is when a lib function is invoked from a non-request context (e.g. background ingestion) — those callers handle logging.
+
+For background `logError` calls, `route` is the operation name: `'mcp:start:mcp-memory'`, `'mcp:reaper'`, `'lease:ingest:sse'`, `'errorlog:prune'`.
 
 ### Existing capture sites
 
@@ -104,10 +110,10 @@ The four current `pushError` sites in `server/index.js` (Express error middlewar
 
 The "Active Errors" section gets these changes:
 
-- Columns: `Last seen | Count | Source | Level | Message | Route`
+- Columns: `Last seen | Count | Source | Message | Route`
 - Sort: `last_seen DESC` (server-side)
 - Count badge in the section header reflects total rows returned
-- Auto-refresh every 30s using `setInterval` inside a `useEffect` (cleared on unmount)
+- Auto-refresh every 30s using `setInterval` inside a `useEffect` (cleared on unmount). Polling pauses while `document.hidden` is true and resumes on `visibilitychange`
 - Row click expands an inline panel showing: full message, stack trace (monospace), first-seen timestamp, user agent (if present)
 - "Clear all" button next to the section header. Confirms via a dialog/`window.confirm`, then calls `DELETE /api/admin/errors` and refreshes
 - Empty state unchanged ("No errors detected")
@@ -132,18 +138,22 @@ Add `api.admin.clearErrors()` calling `DELETE /api/admin/errors`.
 ## Edge cases
 
 - **Long messages** — truncated to 2000 chars *before* hashing, so a runaway message can't bloat a row and dedup is stable across truncation.
-- **Stack traces** — capped at 8000 chars; only stored on the first occurrence of a dedup_key.
+- **Stack traces** — capped at 8000 chars. First occurrence's stack wins, but if it was missing the next non-null stack is captured (`COALESCE` in the upsert).
 - **Concurrent inserts of the same error** — `INSERT ... ON CONFLICT DO UPDATE` is atomic in SQLite (`sql.js` runs single-threaded), so counts are correct under load.
 - **Errors during error-logging** — the helper swallows its own exceptions and falls back to `console.error`, so a broken DB cannot take down a request path.
 - **Migration** — `CREATE TABLE IF NOT EXISTS` runs at startup; no data migration needed since the current buffer is in-memory.
+- **Persistence prerequisite** — `sql.js` is in-memory WASM; rows survive restarts only if `server/database.js` writes the DB file after each transaction (or close to it). The implementation pass must verify this — if the existing save policy is "on shutdown only," `logError` needs to trigger a save (or piggyback on whatever write policy the rest of the app uses) for the 24h-retention goal to hold.
+- **Resource-ID dedup** — using `req.route?.path` (the Express route pattern) instead of `req.path` is what makes errors in `/api/chats/:id/messages` collapse across different chat IDs. Falling back to `req.path` when the route pattern isn't available is acceptable but degrades dedup quality.
 - **VM bump version** — sidebar version number bumped per project convention.
 
 ## Files touched
 
 - `server/database.js` — add table + index
 - `server/lib/error-log.js` — new module
-- `server/index.js` — replace ring buffer + `pushError`; add `asyncRoute` wrapper; add `DELETE /api/admin/errors`; register prune interval; rewrite `/api/admin/errors` and `/api/admin/client-errors` to use `logError`; convert risky async routes to `asyncRoute(...)` wrapping
-- `server/lib/gemini.js`, `server/lib/claude-direct.js`, `server/lib/mcp-manager.js`, `server/lib/rag.js`, `server/lib/embeddings.js`, `server/lib/gcs.js`, `server/lib/firestore.js`, `server/lease-routes.js` — add `logError` calls in catch blocks
+- `server/index.js` — replace ring buffer + `pushError`; add `asyncRoute` wrapper; add `DELETE /api/admin/errors`; register prune interval; rewrite `/api/admin/errors` and `/api/admin/client-errors` to use `logError`; wrap routes that currently lack error handling (or whose catch is just `console.error` + 500) with `asyncRoute(...)`; leave routes with response-shaping catches alone
+- `server/lib/mcp-manager.js` — add `logError` for background failures (server start, idle reaper, lazy spawn callbacks)
+- `server/lease-routes.js` — add `logError` in SSE error-frame catches where the response stream has already started
+- `server/lib/gemini.js`, `server/lib/claude-direct.js`, `server/lib/rag.js`, `server/lib/embeddings.js`, `server/lib/gcs.js`, `server/lib/firestore.js` — **no `logError` calls added**. These rethrow from request-bound paths so the error middleware logs them with full route context. Existing `console.error` lines may stay.
 - `src/api/index.ts` — add `clearErrors`
 - `src/pages/AdminPage.tsx` — column changes, auto-refresh, expand-on-click, clear button
 - Sidebar version bump

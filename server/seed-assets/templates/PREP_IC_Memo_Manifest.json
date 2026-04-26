@@ -1,0 +1,194 @@
+{
+  "template_id": "ic_memo_v1",
+  "template_type": "ic_memo",
+  "name": "PREP IC Memo",
+  "description": "Investment Committee Memorandum template for Provider Real Estate Partners. Placeholder built during PRD scoping; replace with Bill's real template when provided.",
+  "source_pptx": "PREP_IC_Memo_Template.pptx",
+  "version": "0.1.0-placeholder",
+  "owner_user_email": "wross@prepfunds.net",
+  "slide_count": 12,
+  "slides": [
+    {
+      "index": 1,
+      "title": "Title",
+      "role": "title",
+      "critical": true,
+      "fields": [
+        { "name": "property_name",     "type": "string", "required": true },
+        { "name": "property_city",     "type": "string", "required": true },
+        { "name": "property_state",    "type": "string", "required": true },
+        { "name": "prepared_by",       "type": "string", "required": true },
+        { "name": "ic_meeting_date",   "type": "date",   "required": true }
+      ]
+    },
+    {
+      "index": 2,
+      "title": "Executive Summary",
+      "role": "executive_summary",
+      "critical": true,
+      "fields": [
+        { "name": "recommendation",      "type": "string",     "required": true },
+        { "name": "investment_thesis",   "type": "longtext",   "required": true },
+        { "name": "purchase_price",      "type": "currency",   "required": true },
+        { "name": "going_in_cap_rate",   "type": "percentage", "required": true },
+        { "name": "projected_irr",       "type": "percentage", "required": true },
+        { "name": "equity_multiple",     "type": "multiple",   "required": true },
+        { "name": "hold_period",         "type": "string",     "required": true },
+        { "name": "loan_to_cost",        "type": "percentage", "required": true }
+      ]
+    },
+    {
+      "index": 3,
+      "title": "Investment Thesis",
+      "role": "thesis",
+      "critical": false,
+      "fields": [
+        { "name": "thesis_market_position", "type": "longtext", "required": true },
+        { "name": "thesis_asset_quality",   "type": "longtext", "required": true },
+        { "name": "thesis_return_profile",  "type": "longtext", "required": true }
+      ]
+    },
+    {
+      "index": 4,
+      "title": "Property Overview",
+      "role": "property_overview",
+      "critical": true,
+      "fields": [
+        { "name": "property_address",      "type": "string",  "required": true },
+        { "name": "year_built",            "type": "year",    "required": true },
+        { "name": "rentable_sf",           "type": "integer", "required": true, "format": "comma" },
+        { "name": "occupancy_pct",         "type": "percentage", "required": true },
+        { "name": "walt_years",            "type": "decimal", "required": true },
+        { "name": "hospital_affiliation",  "type": "string",  "required": true },
+        { "name": "property_photo",        "type": "image",   "required": false, "todo_label": "property_photo" }
+      ]
+    },
+    {
+      "index": 5,
+      "title": "Market Context",
+      "role": "market_context",
+      "critical": false,
+      "fields": [
+        { "name": "population_growth",      "type": "percentage", "required": true },
+        { "name": "senior_population",      "type": "string",     "required": true },
+        { "name": "healthcare_employment",  "type": "string",     "required": true },
+        { "name": "market_narrative",       "type": "longtext",   "required": true }
+      ]
+    },
+    {
+      "index": 6,
+      "title": "Financial Highlights",
+      "role": "financial_highlights",
+      "critical": true,
+      "fields": [
+        { "name": "senior_debt",        "type": "currency",   "required": true },
+        { "name": "sponsor_equity",     "type": "currency",   "required": true },
+        { "name": "lp_equity",          "type": "currency",   "required": true },
+        { "name": "total_cap",          "type": "currency",   "required": true },
+        { "name": "levered_irr",        "type": "percentage", "required": true },
+        { "name": "unlevered_irr",      "type": "percentage", "required": true },
+        { "name": "equity_multiple_2",  "type": "multiple",   "required": true },
+        { "name": "cash_on_cash",       "type": "percentage", "required": true }
+      ]
+    },
+    {
+      "index": 7,
+      "title": "Cap Rate Analysis",
+      "role": "cap_rate_analysis",
+      "critical": true,
+      "fields": [
+        { "name": "going_in_cap",            "type": "percentage", "required": true },
+        { "name": "exit_cap",                "type": "percentage", "required": true },
+        { "name": "hold_period_yrs",         "type": "integer",    "required": true },
+        { "name": "cap_rate_compression_bps","type": "integer",    "required": true },
+        { "name": "sensitivity_matrix",      "type": "chart",      "required": false, "todo_label": "sensitivity_matrix" }
+      ]
+    },
+    {
+      "index": 8,
+      "title": "Lease Analysis",
+      "role": "lease_analysis",
+      "critical": true,
+      "prorep_standard_refs": ["§4.operating-costs"],
+      "fields": [
+        { "name": "walt",                       "type": "decimal",    "required": true },
+        { "name": "avg_escalations",            "type": "percentage", "required": true },
+        { "name": "credit_tenant_pct",          "type": "percentage", "required": true },
+        { "name": "prorep_section_4_verbatim",  "type": "verbatim",   "required": true,
+          "source": "skill:prorep-standard-lease",
+          "section": "§4.operating-costs",
+          "constraints": { "must_not_paraphrase": true } },
+        { "name": "rollover_schedule_chart",    "type": "chart",      "required": false, "todo_label": "rollover_schedule_chart" }
+      ]
+    },
+    {
+      "index": 9,
+      "title": "Rent Roll Summary",
+      "role": "rent_roll",
+      "critical": false,
+      "fields": [
+        { "name": "rent_roll", "type": "table", "required": true,
+          "max_rows": 6,
+          "columns": [
+            { "key": "name",   "type": "string",   "header": "Tenant" },
+            { "key": "sf",     "type": "integer",  "header": "SF",            "format": "comma" },
+            { "key": "expiry", "type": "date",     "header": "Lease Expiry" },
+            { "key": "rent",   "type": "currency", "header": "Base Rent" },
+            { "key": "pct",    "type": "percentage","header": "% of NOI" },
+            { "key": "credit", "type": "string",   "header": "Credit" }
+          ]
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "title": "Comparable Sales",
+      "role": "comparable_sales",
+      "critical": false,
+      "fields": [
+        { "name": "comps", "type": "table", "required": true,
+          "max_rows": 5,
+          "columns": [
+            { "key": "property", "type": "string",   "header": "Property" },
+            { "key": "city",     "type": "string",   "header": "City" },
+            { "key": "date",     "type": "date",     "header": "Date" },
+            { "key": "price",    "type": "currency", "header": "Price" },
+            { "key": "psf",      "type": "currency", "header": "$/SF" },
+            { "key": "cap",      "type": "percentage","header": "Cap Rate" }
+          ]
+        },
+        { "name": "purchase_price_short", "type": "currency",   "required": true, "format": "abbreviated" },
+        { "name": "subject_psf",          "type": "currency",   "required": true }
+      ]
+    },
+    {
+      "index": 11,
+      "title": "Risk Register",
+      "role": "risk_register",
+      "critical": false,
+      "fields": [
+        { "name": "risk_tenant_concentration", "type": "longtext", "required": true },
+        { "name": "risk_lease_rollover",       "type": "longtext", "required": true },
+        { "name": "risk_cap_rate",             "type": "longtext", "required": true },
+        { "name": "risk_reimbursement",        "type": "longtext", "required": true }
+      ]
+    },
+    {
+      "index": 12,
+      "title": "Recommendation & Next Steps",
+      "role": "recommendation",
+      "critical": true,
+      "fields": [
+        { "name": "recommendation_headline", "type": "string",   "required": true, "max_chars": 80 },
+        { "name": "ic_ask",                  "type": "longtext", "required": true },
+        { "name": "next_steps",              "type": "longtext", "required": true }
+      ]
+    }
+  ],
+  "notes": [
+    "This manifest is a draft generated during PRD scoping. The dev team will refine field definitions during week 1 of the build (see PRD §9 timeline).",
+    "Field types map to validators in the generation pipeline (PRD §5.3): currency must parse to a number, percentage must be in [0,100], date must parse to ISO format, etc.",
+    "todo_label fields render as visible 'TODO: X' placeholders in the deck if the renderer cannot fill them — see PRD §5.7 (failure modes).",
+    "The 'verbatim' field type pulls source-of-truth content from a skill or named source and must not be paraphrased — see PRD §5.4."
+  ]
+}

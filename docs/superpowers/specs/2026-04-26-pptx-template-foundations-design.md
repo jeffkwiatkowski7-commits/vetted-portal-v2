@@ -25,7 +25,7 @@ The boundary holds because §5.0a (user-scoping) and the management UI in §5.0c
 | 3 | Extend [PptxAppPage.tsx](../../../src/pages/PptxAppPage.tsx); keep existing token extraction below the new template list | Faithful to PRD §5.0c.1; no working feature is removed |
 | 4 | Slide-1 thumbnail extracted from embedded `ppt/thumbnail.jpeg`; preview modal shows slide-title list (no per-slide images) | No new runtime; honest about what is achievable without a renderer |
 | 5 | User selects type at upload; manifest stores `{ version, slide_count, slides: [{index, title}] }` | Simple form, type is reliable, manifest grows additively when generation engine ships |
-| 6 | Bill Ross migration uses [server/seed-assets/templates/PREP_IC_Memo_Template.pptx](../../../server/seed-assets/templates/PREP_IC_Memo_Template.pptx) | File exists; PRD §5.0b can run as written |
+| 6 | Bill Ross template migration sits in the per-boot migrations block at [server/index.js:265-284](../../../server/index.js#L265-L284), next to the wross user migration. **Not** in [server/seed.js](../../../server/seed.js) — that file early-returns when users exist ([server/seed.js:13-16](../../../server/seed.js#L13-L16)) and so never runs against an existing database. Source asset: [server/seed-assets/templates/PREP_IC_Memo_Template.pptx](../../../server/seed-assets/templates/PREP_IC_Memo_Template.pptx). |
 | 7 | Admin UI is read-only — no archive, no edit, no generate-as-user | Silent writes against another user's data have weak consent in v1; deferred to a later cycle if needed |
 | 8 | Identity binding: endpoints read `req.user.id` (the existing `requireAuth` at [server/index.js:322](../../../server/index.js#L322) sets `req.user` to the full user row) | Match the actual middleware, not a guessed shape |
 
@@ -37,7 +37,7 @@ Eight changes, all within the existing repo, no new runtimes:
 2. **New file layout** `data/uploads/templates/{user_id}/{template_id}.pptx` and `.thumb.jpg` next to it.
 3. **New utility** [server/lib/pptx-manifest.js](../../../server/lib/pptx-manifest.js) — extracts `manifest_json` and slide-1 thumbnail buffer using `jszip` + `fast-xml-parser`.
 4. **Seven user endpoints** under `/api/pptx-templates` and one admin endpoint under `/api/admin/pptx-templates`, all in [server/index.js](../../../server/index.js).
-5. **Bill Ross migration** in [server/seed.js](../../../server/seed.js), idempotent across boots.
+5. **Bill Ross template migration** in the per-boot migrations block at [server/index.js:265-284](../../../server/index.js#L265-L284), idempotent across boots.
 6. **Frontend — user UI** in [PptxAppPage.tsx](../../../src/pages/PptxAppPage.tsx): "Your Templates" section above the existing token extractor.
 7. **Frontend — admin UI** in [AdminUsersPage.tsx](../../../src/pages/AdminUsersPage.tsx): TEMPLATES column + per-user side panel.
 8. **Vitest setup** + nine tests (six §5.0a access-control + three smoke) in `server/test/`.
@@ -132,7 +132,7 @@ All in [server/index.js](../../../server/index.js). User identity is `req.user.i
 | POST | `/api/pptx-templates/:id/replace` | user | Same as POST but updates an existing row in place. **404** if not owned. Overwrites source file, re-runs extraction, updates `manifest_json`, `thumbnail_path`, `updated_at`. |
 | PATCH | `/api/pptx-templates/:id` | user | Body `{ name?, status? }` for rename + archive/restore. Status transitions allowed: `active ↔ archived`. **404** if not owned. |
 | DELETE | `/api/pptx-templates/:id` | user | Hard delete: removes row, removes `.pptx` and `.thumb.jpg` from disk. **404** if not owned. |
-| GET | `/api/pptx-templates/:id/thumbnail` | user | Streams `.thumb.jpg`. **404** if not owned or no thumbnail. |
+| GET | `/api/pptx-templates/:id/thumbnail` | user | Streams `.thumb.jpg` with `Content-Type: image/jpeg` and `Cache-Control: private, max-age=86400, immutable` (per-template-id thumbnail is immutable until replace). **404** if not owned or no thumbnail. |
 | GET | `/api/admin/pptx-templates?user_id=X` | admin | Returns templates for X. Writes audit log entry. **400** if no `user_id` param. |
 
 **Cross-cutting rules:**
@@ -141,16 +141,21 @@ All in [server/index.js](../../../server/index.js). User identity is `req.user.i
 - POST/PATCH/DELETE never trust client-supplied `user_id` — always `req.user.id`.
 - The admin endpoint is the **only** path where one user reads another user's data, gated by `requireAdmin` + audit logged.
 
-**Audit log row** (reuses existing `audit_log` table — no schema change):
+**Audit log row** (reuses existing `audit_log` table at [server/database.js:230-239](../../../server/database.js#L230-L239) — no schema change). The table has dedicated `resource_type` and `resource_id` columns, so use them rather than stuffing the queried user id into JSON in `details`. `id` is `TEXT PRIMARY KEY` (NOT NULL) — generate a uuid:
 
 ```json
 {
+  "id": "<uuid>",
   "user_id": "<admin-user-id>",
   "action": "pptx_templates.admin_view",
-  "details": "{\"queried_user_id\":\"<X>\"}",
+  "resource_type": "pptx_template",
+  "resource_id": "<queried-user-id>",
+  "details": null,
   "created_at": "<iso>"
 }
 ```
+
+**Note:** there are zero existing `INSERT INTO audit_log` callsites in the repo today — this is the first one. Build a small `auditLog({ action, userId, resourceType, resourceId, details })` helper in [server/lib/](../../../server/lib/) (or inline near the migrations block) so future audit writes have a canonical shape to copy.
 
 ## 8. User-facing UI — [PptxAppPage.tsx](../../../src/pages/PptxAppPage.tsx)
 
@@ -214,6 +219,8 @@ LEFT JOIN (
 
 One round trip; no per-row N+1.
 
+**Projection note:** the existing handler at [server/index.js:1974-1978](../../../server/index.js#L1974-L1978) destructures `password_hash` out of every row before returning. The new `templates_count` field needs to be aliased in the SELECT and threaded through that map — easy to drop on the floor otherwise.
+
 **Per-user template panel** — right-side slide-over. Opens on cell click. Header: user's display name + email. Body: same row format as user list, plus a small `id` for support purposes. Single action per row: **Preview** (uses the shared `<PreviewModal />`). Empty state: *"This user has no templates."*
 
 **No archive, no delete, no edit on the admin side** (per decision 7). Closing the panel does not write another audit row — one open = one entry.
@@ -224,11 +231,13 @@ Lift `<TemplateRow />` and `<PreviewModal />` into [src/components/templates/](.
 
 `<TemplateRow />` accepts an `actions` prop (array of action buttons) so admin can pass `[Preview]` while the user passes `[Preview, Replace, Archive, Delete]`.
 
-## 11. Bill Ross migration — extends [server/seed.js](../../../server/seed.js)
+## 11. Bill Ross template migration — per-boot block in [server/index.js](../../../server/index.js)
+
+Lands in the migrations block at [server/index.js:265-284](../../../server/index.js#L265-L284), immediately after the existing wross *user* migration. Extracted into a small named function (e.g. `ensureWrossIcMemoTemplate(db)`) so the test S2 can call it directly without booting a full server.
 
 Runs on every server boot, idempotent:
 
-1. Look up user `WHERE email = 'wross@prepfunds.net'`. If not found → log warning, return (don't fail boot).
+1. Look up user `WHERE email = 'wross@prepfunds.net'`. If not found → log warning, return (don't fail boot). On a fresh boot the wross-user migration immediately above this one creates the user, so by the time this runs the user always exists in normal flow.
 2. Existence check — broader than name match to survive renames:
    ```sql
    SELECT id FROM pptx_templates
@@ -248,7 +257,7 @@ Runs on every server boot, idempotent:
 
 **Setup:**
 
-- Add deps: `vitest`, `supertest`, optional `@vitest/coverage-v8`
+- Add to `devDependencies` in [package.json](../../../package.json): `vitest`, `supertest`, optional `@vitest/coverage-v8`. Not runtime deps — production server never imports them.
 - `vitest.config.ts` at repo root, scoped to `server/test/**`, `environment: 'node'` (so it doesn't conflict with frontend Vite config)
 - `npm test` script in [package.json](../../../package.json)
 - Tests use a temp SQLite file (or in-memory) seeded with two regular users + one admin — never the real `data/vetted_portal.db`
@@ -264,7 +273,7 @@ Runs on every server boot, idempotent:
 | 5 | Delete 404 on cross-access | `DELETE /api/pptx-templates/{B_id}` as A → 404; B's row + file still present |
 | 6 | Query inspection | Static check on the SQL strings used by list/detail handlers — contains `WHERE user_id = ?` (or equivalent), bound param matches requesting user |
 | S1 | Manifest extraction smoke | Given the placeholder `.pptx`, `extractManifest` returns expected `slide_count` and a non-empty `slides[]` |
-| S2 | Migration idempotency | Run seed twice; assert exactly one row for Bill exists |
+| S2 | Migration idempotency | Call `ensureWrossIcMemoTemplate(db)` twice against a fresh test DB seeded with the wross user; assert exactly one row for Bill exists and the source `.pptx` was copied once |
 | S3 | Admin endpoint | Non-admin → 403; admin → returns target user's templates AND writes one `audit_log` row |
 
 **Note on PRD Appendix C item 3.** The PRD's "generation rejection" test asserts `POST /api/pptx-generate` rejects cross-user template ids before any LLM call. The generation endpoint does not exist this cycle. Test 3' replaces it — same access-control assertion against a write path that does exist (replace). The original test 3 lands in the generation-engine cycle alongside the endpoint it tests.
@@ -282,17 +291,26 @@ Runs on every server boot, idempotent:
 
 ## 14. Internal sequencing for the implementation plan
 
-1. Vitest setup + the six §5.0a tests stubbed against not-yet-existing API (red).
-2. `pptx_templates` schema in [server/database.js](../../../server/database.js).
-3. `extractManifest` utility + smoke test (S1).
-4. CRUD endpoints, one at a time, each test going green as the endpoint lands.
-5. Bill Ross migration in [server/seed.js](../../../server/seed.js) + idempotency test (S2).
-6. Admin endpoint + audit log + admin test (S3).
-7. Frontend: shared `<TemplateRow />` and `<PreviewModal />` components.
-8. Frontend: extend [PptxAppPage.tsx](../../../src/pages/PptxAppPage.tsx).
-9. Frontend: extend [AdminUsersPage.tsx](../../../src/pages/AdminUsersPage.tsx).
-10. Manual smoke test: log in as Bill → verify migrated row; log in as Jeff K → verify admin column + panel + audit log row.
-11. Sidebar version bump (per project convention).
+Each backend step pairs an endpoint with the test(s) that prove it — red and green land in the same step rather than carrying long-running red tests across multiple steps.
+
+1. Vitest setup (devDeps + `vitest.config.ts` + `npm test` script + test fixtures: temp DB seeded with two users + one admin).
+2. `pptx_templates` schema + indexes in [server/database.js](../../../server/database.js).
+3. `extractManifest` utility in [server/lib/pptx-manifest.js](../../../server/lib/pptx-manifest.js) + smoke test S1 (red → green).
+4. `GET /api/pptx-templates` (list) + test 1 (isolation) + test 4 (empty state).
+5. `GET /api/pptx-templates/:id` (detail) + test 2 (404 on cross-access) + test 6 (SQL inspection).
+6. `POST /api/pptx-templates` (upload) — needed before replace/delete tests have data to act on.
+7. `POST /api/pptx-templates/:id/replace` + test 3' (404 on cross-access).
+8. `PATCH /api/pptx-templates/:id` (rename + archive/restore).
+9. `DELETE /api/pptx-templates/:id` + test 5 (404 on cross-access).
+10. `GET /api/pptx-templates/:id/thumbnail`.
+11. `ensureWrossIcMemoTemplate(db)` migration in the per-boot block at [server/index.js:265-284](../../../server/index.js#L265-L284) (next to the wross user migration) + idempotency test S2.
+12. `auditLog(...)` helper (canonical shape — first callsite in repo) + `GET /api/admin/pptx-templates` + test S3. Helper lives next to its sole caller for now; later audit-log writers copy the shape.
+13. Extend `GET /api/admin/users` with the `templates_count` LEFT JOIN (mind the `password_hash` projection map).
+14. Frontend: shared `<TemplateRow />` and `<PreviewModal />` in [src/components/templates/](../../../src/components/templates/).
+15. Frontend: extend [PptxAppPage.tsx](../../../src/pages/PptxAppPage.tsx).
+16. Frontend: extend [AdminUsersPage.tsx](../../../src/pages/AdminUsersPage.tsx).
+17. Manual smoke test: log in as Bill → verify migrated row; log in as Jeff K → verify admin column + panel + audit log row; log in as Jeff Fox → verify zero-state.
+18. Sidebar version bump (per project convention).
 
 ## 15. Out of scope / explicitly deferred
 

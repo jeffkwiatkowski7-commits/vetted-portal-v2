@@ -2699,15 +2699,18 @@ process.on('unhandledRejection', (reason) => {
   });
 });
 
-// Prune error_log every hour; also run once at startup so a long-down server clears stale rows on boot.
-pruneOldErrors();
-const pruneTimer = setInterval(pruneOldErrors, 60 * 60 * 1000);
-pruneTimer.unref();
+// Skip during tests — supertest imports `app` and we don't want timers or a real port bind.
+if (process.env.NODE_ENV !== 'test') {
+  // Prune error_log every hour; also run once at startup so a long-down server clears stale rows on boot.
+  pruneOldErrors();
+  const pruneTimer = setInterval(pruneOldErrors, 60 * 60 * 1000);
+  pruneTimer.unref();
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT} (${NODE_ENV} mode)`);
-  console.log(`API available at http://localhost:${PORT}/api`);
-});
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT} (${NODE_ENV} mode)`);
+    console.log(`API available at http://localhost:${PORT}/api`);
+  });
+}
 
 // Graceful shutdown
 process.on('SIGINT', async () => {

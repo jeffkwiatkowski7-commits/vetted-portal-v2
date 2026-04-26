@@ -2172,6 +2172,46 @@ app.post('/api/pptx-templates/:id/replace', requireAuth, templateUpload.single('
   });
 }));
 
+// Partial update: rename and/or change status (active <-> archived).
+// Body: { name?, status? }. 404 on cross-user. 400 on invalid status.
+app.patch('/api/pptx-templates/:id', requireAuth, asyncRoute(async (req, res) => {
+  const userId = req.user.id;
+  const row = dbGet(db, 'SELECT * FROM pptx_templates WHERE id = ? AND user_id = ?', [req.params.id, userId]);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+
+  const { name, status } = req.body || {};
+  const updates = [];
+  const params = [];
+
+  if (name !== undefined) {
+    if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Name must be a non-empty string' });
+    updates.push('name = ?'); params.push(name);
+  }
+  if (status !== undefined) {
+    if (status !== 'active' && status !== 'archived') return res.status(400).json({ error: "status must be 'active' or 'archived'" });
+    updates.push('status = ?'); params.push(status);
+  }
+
+  if (updates.length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+  const now = new Date().toISOString();
+  updates.push('updated_at = ?'); params.push(now);
+  params.push(row.id, userId);
+
+  dbRun(db, `UPDATE pptx_templates SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`, params);
+
+  const updated = dbGet(db, 'SELECT * FROM pptx_templates WHERE id = ?', [row.id]);
+  res.json({
+    template: {
+      id: updated.id,
+      name: updated.name,
+      template_type: updated.template_type,
+      status: updated.status,
+      updated_at: updated.updated_at,
+    },
+  });
+}));
+
 app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   const rows = dbAll(db, 'SELECT * FROM users ORDER BY created_at DESC');
   const users = rows.map(({ password_hash, ...u }) => ({ ...u, has_password: !!password_hash }));

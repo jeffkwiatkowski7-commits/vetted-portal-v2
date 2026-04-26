@@ -198,6 +198,52 @@ describe('pptx-templates user endpoints', () => {
     expect(after.updated_at).not.toBe(before.updated_at);
   });
 
+  it('patch: rename own template', async () => {
+    const res = await request(app)
+      .patch(`/api/pptx-templates/${ids.aUploadedId}`)
+      .set('X-User-Id', ids.a)
+      .send({ name: 'Renamed Template' });
+    expect(res.status).toBe(200);
+    const row = dbGet('SELECT name FROM pptx_templates WHERE id = ?', [ids.aUploadedId]);
+    expect(row.name).toBe('Renamed Template');
+  });
+
+  it('patch: archive then restore own template', async () => {
+    const r1 = await request(app)
+      .patch(`/api/pptx-templates/${ids.aUploadedId}`)
+      .set('X-User-Id', ids.a)
+      .send({ status: 'archived' });
+    expect(r1.status).toBe(200);
+    let row = dbGet('SELECT status FROM pptx_templates WHERE id = ?', [ids.aUploadedId]);
+    expect(row.status).toBe('archived');
+
+    const r2 = await request(app)
+      .patch(`/api/pptx-templates/${ids.aUploadedId}`)
+      .set('X-User-Id', ids.a)
+      .send({ status: 'active' });
+    expect(r2.status).toBe(200);
+    row = dbGet('SELECT status FROM pptx_templates WHERE id = ?', [ids.aUploadedId]);
+    expect(row.status).toBe('active');
+  });
+
+  it('patch: rejects unknown status', async () => {
+    const res = await request(app)
+      .patch(`/api/pptx-templates/${ids.aUploadedId}`)
+      .set('X-User-Id', ids.a)
+      .send({ status: 'deleted' });
+    expect(res.status).toBe(400);
+  });
+
+  it('patch: 404 on cross-user access', async () => {
+    const res = await request(app)
+      .patch(`/api/pptx-templates/${ids.bTplId}`)
+      .set('X-User-Id', ids.a)
+      .send({ name: 'Hijack' });
+    expect(res.status).toBe(404);
+    const row = dbGet('SELECT name FROM pptx_templates WHERE id = ?', [ids.bTplId]);
+    expect(row.name).toBe('B Template');
+  });
+
   it('test 6: list and detail SQL strings filter by user_id in WHERE clause', async () => {
     const fs = await import('fs');
     const path = await import('path');

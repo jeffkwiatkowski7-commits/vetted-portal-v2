@@ -268,7 +268,7 @@ export default function AdminPage() {
                               <td></td>
                               <td colSpan={5} className="px-4 py-3 space-y-2">
                                 <div className="text-xs text-vetted-text-secondary">
-                                  First seen: <span className="text-vetted-primary">{err.first_seen}</span>
+                                  First seen: <span className="text-vetted-primary" title={err.first_seen}>{formatRelativeTime(err.first_seen)}</span>
                                   {err.user_agent && (
                                     <> · UA: <span className="text-vetted-primary">{err.user_agent}</span></>
                                   )}

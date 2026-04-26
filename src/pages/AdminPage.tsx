@@ -1,8 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import * as api from '../api';
-import { Wrench, Users, Zap, AlertCircle, CheckCircle, CheckCircle2, BarChart2, MessageSquare, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  Wrench,
+  Users,
+  Zap,
+  AlertCircle,
+  CheckCircle2,
+  BarChart2,
+  MessageSquare,
+  FolderOpen,
+  BookOpen,
+  Activity,
+  AlertTriangle,
+} from 'lucide-react';
 
 interface Stats {
   total_users?: number;
@@ -27,7 +39,6 @@ export default function AdminPage() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<any[]>([]);
-  const [expandedErrorId, setExpandedErrorId] = useState<number | null>(null);
 
   const loadAdminData = async () => {
     try {
@@ -83,32 +94,62 @@ export default function AdminPage() {
     );
   }
 
-  const resourceCards = [
+  const configCards = [
     {
       label: 'MCP Servers',
+      description: 'Connected tool servers and integrations',
       count: stats?.mcp_servers || 0,
       icon: Wrench,
       path: '/admin/tool-sets',
+      healthy: health?.tool_sets?.status !== 'down',
     },
     {
       label: 'Model Configuration',
+      description: 'Active AI models and routing',
       count: stats?.models || 0,
       icon: Zap,
       path: '/admin/models',
+      healthy: health?.models?.status !== 'down',
     },
     {
       label: 'System Prompts',
+      description: 'Custom system instructions and guardrails',
       count: stats?.system_prompts || 0,
       icon: AlertCircle,
       path: '/admin/system-prompts',
+      healthy: true,
     },
   ];
 
   const statCards = [
-    { label: 'Total Users', value: stats?.total_users || 0 },
-    { label: 'Active Today', value: stats?.active_today || 0 },
-    { label: 'Projects', value: stats?.total_projects || 0 },
-    { label: 'Library Files', value: stats?.total_library_files || 0 },
+    { label: 'Total Users', value: stats?.total_users || 0, path: '/admin/users' },
+    { label: 'Active Today', value: stats?.active_today || 0, path: '/admin/usage' },
+    { label: 'Projects', value: stats?.total_projects || 0, path: '/projects' },
+    { label: 'Library Files', value: stats?.total_library_files || 0, path: '/library' },
+  ];
+
+  const userManagementCards = [
+    {
+      label: 'Manage Users',
+      description: 'Add, edit, and remove user accounts',
+      icon: Users,
+      path: '/admin/users',
+      meta: stats?.total_users != null ? `${stats.total_users} users` : null,
+    },
+    {
+      label: 'Chat History',
+      description: 'Audit conversations across the workspace',
+      icon: MessageSquare,
+      path: '/admin/chats',
+      meta: null,
+    },
+    {
+      label: 'Usage Log',
+      description: 'Activity and usage analytics',
+      icon: BarChart2,
+      path: '/admin/usage',
+      meta: stats?.active_today != null ? `${stats.active_today} active today` : null,
+    },
   ];
 
   const formatRelativeTime = (isoString: string) => {
@@ -121,17 +162,18 @@ export default function AdminPage() {
     return `${Math.floor(hours / 24)}d ago`;
   };
 
-  const handleClearErrors = async () => {
-    if (!window.confirm('Clear all errors? This cannot be undone.')) return;
-    try {
-      await api.admin.clearErrors();
-      setExpandedErrorId(null);
-      await loadAdminData();
-      addToast({ type: 'success', title: 'Errors cleared' });
-    } catch (err) {
-      addToast({ type: 'error', title: 'Failed to clear errors' });
-    }
+  const statIcon = (label: string) => {
+    if (label === 'Total Users') return Users;
+    if (label === 'Active Today') return Activity;
+    if (label === 'Projects') return FolderOpen;
+    if (label === 'Library Files') return BookOpen;
+    return Activity;
   };
+
+  const errorCount = errors.length;
+  const totalOccurrences = errors.reduce((sum, e) => sum + (e.count || 0), 0);
+  const mostRecent = errors.length > 0 ? errors[0] : null;
+  const hasErrors = errorCount > 0;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -148,210 +190,181 @@ export default function AdminPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* Resources Section */}
-        <div>
-          <h2 className="text-lg font-medium text-vetted-primary mb-4">Resources</h2>
+      <div className="flex-1 overflow-y-auto p-6 space-y-8">
+        {/* Quick Stats — top */}
+        <section>
+          <div className="mb-4">
+            <h2 className="text-lg font-medium text-vetted-primary">Quick Stats</h2>
+            <p className="text-sm text-vetted-text-secondary">At-a-glance workspace metrics</p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {statCards.map(({ label, value, path }) => {
+              const Icon = statIcon(label);
+              return (
+                <button
+                  key={label}
+                  onClick={() => navigate(path)}
+                  className="card text-left hover:shadow-lg transition-all hover:border-vetted-accent group"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <Icon size={16} className="text-vetted-accent" />
+                    <span className="text-[10px] uppercase tracking-wide text-vetted-text-muted group-hover:text-vetted-accent transition-colors">
+                      View →
+                    </span>
+                  </div>
+                  <p className="text-vetted-text-secondary text-xs mb-1">{label}</p>
+                  <p className="text-3xl font-serif font-bold text-vetted-primary leading-none">{value}</p>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Configuration */}
+        <section>
+          <div className="mb-4">
+            <h2 className="text-lg font-medium text-vetted-primary">Configuration</h2>
+            <p className="text-sm text-vetted-text-secondary">Workspace-wide AI and tooling settings</p>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {resourceCards.map(({ label, count, icon: Icon, path }) => (
+            {configCards.map(({ label, description, count, icon: Icon, path, healthy }) => (
               <button
                 key={label}
                 onClick={() => navigate(path)}
-                className="card text-left hover:shadow-lg transition-all hover:border-vetted-accent"
+                className="card text-left hover:shadow-lg transition-all hover:border-vetted-accent group"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <Icon size={24} className="text-vetted-accent" />
+                <div className="flex items-start justify-between mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-vetted-accent/10 flex items-center justify-center text-vetted-accent">
+                    <Icon size={20} />
+                  </div>
+                  <span
+                    className={`flex items-center gap-1 text-xs font-medium ${
+                      healthy ? 'text-vetted-success' : 'text-red-600'
+                    }`}
+                    title={healthy ? 'Operational' : 'Issue detected'}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        healthy ? 'bg-vetted-success' : 'bg-red-600'
+                      }`}
+                    />
+                    {healthy ? 'Operational' : 'Down'}
+                  </span>
                 </div>
-                <p className="text-sm text-vetted-text-secondary mb-1">{label}</p>
-                <p className="text-2xl font-serif font-bold text-vetted-primary">{count}</p>
+                <p className="font-medium text-vetted-primary mb-0.5">{label}</p>
+                <p className="text-xs text-vetted-text-secondary mb-3 line-clamp-2">{description}</p>
+                <div className="flex items-end justify-between">
+                  <p className="text-3xl font-serif font-bold text-vetted-primary leading-none">{count}</p>
+                  <span className="text-xs text-vetted-text-muted group-hover:text-vetted-accent transition-colors">
+                    Manage →
+                  </span>
+                </div>
               </button>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* Quick Stats */}
-        <div>
-          <h2 className="text-lg font-medium text-vetted-primary mb-4">Quick Stats</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {statCards.map(({ label, value }) => (
-              <div key={label} className="card text-center">
-                <p className="text-vetted-text-secondary text-sm mb-2">{label}</p>
-                <p className="text-4xl font-serif font-bold text-vetted-primary">{value}</p>
-              </div>
-            ))}
+        {/* System Health (Errors card) */}
+        <section>
+          <div className="mb-4">
+            <h2 className="text-lg font-medium text-vetted-primary">System Health</h2>
+            <p className="text-sm text-vetted-text-secondary">Operational status and error log</p>
           </div>
-        </div>
-
-        {/* Active Errors */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-medium text-vetted-primary">Active Errors</h2>
-              {errors.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-xs font-medium">
-                  {errors.length}
-                </span>
-              )}
+          <button
+            onClick={() => navigate('/admin/errors')}
+            className={`card text-left w-full hover:shadow-lg transition-all group ${
+              hasErrors
+                ? 'border-red-200 hover:border-red-400 bg-red-50/30'
+                : 'hover:border-vetted-accent'
+            }`}
+          >
+            <div className="flex items-start gap-4">
+              <div
+                className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+                  hasErrors ? 'bg-red-100 text-red-600' : 'bg-vetted-success/10 text-vetted-success'
+                }`}
+              >
+                {hasErrors ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="font-medium text-vetted-primary">Error Log</p>
+                  {hasErrors && (
+                    <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-xs font-medium">
+                      {errorCount}
+                    </span>
+                  )}
+                </div>
+                {hasErrors ? (
+                  <>
+                    <p className="text-xs text-vetted-text-secondary mb-2">
+                      {errorCount} distinct {errorCount === 1 ? 'error' : 'errors'} · {totalOccurrences} total{' '}
+                      {totalOccurrences === 1 ? 'occurrence' : 'occurrences'}
+                    </p>
+                    {mostRecent && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-vetted-text-muted whitespace-nowrap">
+                          {formatRelativeTime(mostRecent.last_seen)}
+                        </span>
+                        <span className="text-vetted-text-muted">·</span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            mostRecent.source === 'server'
+                              ? 'bg-gray-200 text-gray-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}
+                        >
+                          {mostRecent.source}
+                        </span>
+                        <span className="text-vetted-primary truncate" title={mostRecent.message}>
+                          {mostRecent.message?.length > 80
+                            ? mostRecent.message.slice(0, 80) + '…'
+                            : mostRecent.message}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs text-vetted-text-secondary">All systems operational. No errors detected.</p>
+                )}
+              </div>
+              <span className="text-xs text-vetted-text-muted group-hover:text-vetted-accent transition-colors shrink-0">
+                View log →
+              </span>
             </div>
-            {errors.length > 0 && (
+          </button>
+        </section>
+
+        {/* User Management */}
+        <section>
+          <div className="mb-4">
+            <h2 className="text-lg font-medium text-vetted-primary">User Management</h2>
+            <p className="text-sm text-vetted-text-secondary">Accounts, conversations, and activity</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {userManagementCards.map(({ label, description, icon: Icon, path, meta }) => (
               <button
-                onClick={handleClearErrors}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-vetted-text-secondary hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                key={label}
+                onClick={() => navigate(path)}
+                className="card text-left hover:shadow-lg transition-all hover:border-vetted-accent group"
               >
-                <Trash2 size={14} />
-                Clear all
+                <div className="flex items-start justify-between mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-vetted-accent/10 flex items-center justify-center text-vetted-accent">
+                    <Icon size={20} />
+                  </div>
+                  {meta && (
+                    <span className="text-xs text-vetted-text-muted">{meta}</span>
+                  )}
+                </div>
+                <p className="font-medium text-vetted-primary mb-0.5">{label}</p>
+                <p className="text-xs text-vetted-text-secondary mb-4 line-clamp-2">{description}</p>
+                <span className="text-xs text-vetted-text-muted group-hover:text-vetted-accent transition-colors">
+                  Open →
+                </span>
               </button>
-            )}
-          </div>
-
-          {errors.length === 0 ? (
-            <div className="card flex items-center gap-3 text-vetted-success">
-              <CheckCircle2 size={20} />
-              <span className="text-sm">No errors detected</span>
-            </div>
-          ) : (
-            <div className="card p-0 overflow-hidden">
-              <div className="overflow-x-auto max-h-96 overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-vetted-surface border-b border-vetted-border sticky top-0">
-                    <tr>
-                      <th className="w-6 px-2 py-2"></th>
-                      <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Last seen</th>
-                      <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Count</th>
-                      <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Source</th>
-                      <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Message</th>
-                      <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Route</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {errors.map((err) => {
-                      const isExpanded = expandedErrorId === err.id;
-                      return (
-                        <React.Fragment key={err.id}>
-                          <tr
-                            onClick={() => setExpandedErrorId(isExpanded ? null : err.id)}
-                            className="border-b border-vetted-border last:border-0 hover:bg-vetted-surface/50 cursor-pointer"
-                          >
-                            <td className="px-2 py-2 text-vetted-text-secondary">
-                              {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                            </td>
-                            <td className="px-4 py-2 text-vetted-text-secondary whitespace-nowrap" title={err.last_seen}>
-                              {formatRelativeTime(err.last_seen)}
-                            </td>
-                            <td className="px-4 py-2">
-                              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                                err.count >= 10
-                                  ? 'bg-red-100 text-red-700 font-bold'
-                                  : 'bg-gray-100 text-gray-700'
-                              }`}>
-                                {err.count}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2">
-                              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                                err.source === 'server'
-                                  ? 'bg-gray-200 text-gray-700'
-                                  : 'bg-blue-100 text-blue-700'
-                              }`}>
-                                {err.source}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2 text-vetted-primary max-w-md" title={err.message}>
-                              {err.message?.length > 100 ? err.message.slice(0, 100) + '…' : err.message}
-                            </td>
-                            <td className="px-4 py-2 text-vetted-text-secondary">
-                              {err.route || '—'}
-                            </td>
-                          </tr>
-                          {isExpanded && (
-                            <tr className="bg-vetted-surface/30 border-b border-vetted-border last:border-0">
-                              <td></td>
-                              <td colSpan={5} className="px-4 py-3 space-y-2">
-                                <div className="text-xs text-vetted-text-secondary">
-                                  First seen: <span className="text-vetted-primary" title={err.first_seen}>{formatRelativeTime(err.first_seen)}</span>
-                                  {err.user_agent && (
-                                    <> · UA: <span className="text-vetted-primary">{err.user_agent}</span></>
-                                  )}
-                                </div>
-                                <div className="text-xs">
-                                  <div className="text-vetted-text-secondary mb-1">Message</div>
-                                  <pre className="whitespace-pre-wrap break-words font-mono bg-vetted-bg p-2 rounded border border-vetted-border text-vetted-primary">
-                                    {err.message}
-                                  </pre>
-                                </div>
-                                {err.stack && (
-                                  <div className="text-xs">
-                                    <div className="text-vetted-text-secondary mb-1">Stack</div>
-                                    <pre className="whitespace-pre-wrap break-words font-mono bg-vetted-bg p-2 rounded border border-vetted-border text-vetted-text-secondary max-h-64 overflow-y-auto">
-                                      {err.stack}
-                                    </pre>
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Support Tools */}
-        <div>
-          <h2 className="text-lg font-medium text-vetted-primary mb-4">Support Tools</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[
-              { label: 'MCP Servers Health', icon: Wrench },
-              { label: 'Model Health', icon: Zap },
-            ].map(({ label, icon: Icon }) => (
-              <div key={label} className="card p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-medium text-vetted-primary">{label}</h3>
-                  <Icon size={20} className="text-vetted-accent" />
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle size={16} className="text-vetted-success" />
-                  <span className="text-sm text-vetted-success">Operational</span>
-                </div>
-              </div>
             ))}
           </div>
-        </div>
-
-        {/* Navigation Buttons */}
-        <div className="pt-4 space-y-2">
-          <button
-            onClick={() => navigate('/admin/users')}
-            className="w-full btn-primary flex items-center justify-between"
-          >
-            <span className="flex items-center gap-2">
-              <Users size={18} />
-              Manage Users
-            </span>
-          </button>
-          <button
-            onClick={() => navigate('/admin/chats')}
-            className="w-full btn-primary flex items-center justify-between"
-          >
-            <span className="flex items-center gap-2">
-              <MessageSquare size={18} />
-              Chat History
-            </span>
-          </button>
-          <button
-            onClick={() => navigate('/admin/usage')}
-            className="w-full btn-primary flex items-center justify-between"
-          >
-            <span className="flex items-center gap-2">
-              <BarChart2 size={18} />
-              Usage Log
-            </span>
-          </button>
-        </div>
+        </section>
       </div>
     </div>
   );

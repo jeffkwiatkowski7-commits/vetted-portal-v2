@@ -86,7 +86,7 @@ export default function PptxAppPage() {
       addToast({ type: 'success', title: t.status === 'active' ? 'Archived' : 'Restored' });
       await refreshTemplates();
     } catch (err) {
-      addToast({ type: 'error', title: (err as Error).message });
+      addToast({ type: 'error', title: (err as Error).message || 'Failed to update template' });
     }
   };
 
@@ -102,7 +102,7 @@ export default function PptxAppPage() {
         addToast({ type: 'success', title: 'Template replaced' });
         await refreshTemplates();
       } catch (err) {
-        addToast({ type: 'error', title: (err as Error).message });
+        addToast({ type: 'error', title: (err as Error).message || 'Replace failed' });
       }
     };
     input.click();
@@ -115,7 +115,7 @@ export default function PptxAppPage() {
       setConfirmDeleteId(null);
       await refreshTemplates();
     } catch (err) {
-      addToast({ type: 'error', title: (err as Error).message });
+      addToast({ type: 'error', title: (err as Error).message || 'Delete failed' });
     }
   };
 
@@ -272,7 +272,7 @@ export default function PptxAppPage() {
 
           {templates.length === 0 ? (
             <div className="p-6 text-center text-sm text-vetted-text-muted border border-dashed border-vetted-border rounded-lg">
-              You don't have any templates yet. Upload a <code>.pptx</code> below to get started.
+              You don't have any templates yet. Use the Upload button above to get started.
             </div>
           ) : (
             <div className="space-y-2">

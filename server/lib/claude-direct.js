@@ -180,7 +180,21 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
 
   // Tool-calling loop
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
-    const response = await client.messages.create(params);
+    let response;
+    try {
+      response = await client.messages.create(params);
+    } catch (err) {
+      // On schema errors, dump the tool the API is complaining about so we
+      // can see exactly what the offending MCP server is sending.
+      const msg = err?.message || '';
+      const m = msg.match(/tools\.(\d+)\.custom\.input_schema/);
+      if (m && Array.isArray(params.tools)) {
+        const idx = Number(m[1]);
+        const bad = params.tools[idx];
+        console.error(`[claude-direct] Anthropic rejected tool index ${idx}:`, JSON.stringify(bad, null, 2));
+      }
+      throw err;
+    }
 
     totalInputTokens += response.usage?.input_tokens || 0;
     totalOutputTokens += response.usage?.output_tokens || 0;

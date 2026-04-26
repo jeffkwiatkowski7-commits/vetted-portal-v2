@@ -926,20 +926,39 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     let result;
 
     if (isClaudeModel) {
+      // Recursively normalize a JSON Schema for Anthropic (draft 2020-12):
+      // lowercase `type` values (Gemini-style "STRING"/"OBJECT" etc. → "string"/"object")
+      // and recurse into properties / items / array-of-schemas.
+      const normalizeSchema = (node) => {
+        if (Array.isArray(node)) return node.map(normalizeSchema);
+        if (!node || typeof node !== 'object') return node;
+        const out = { ...node };
+        if (typeof out.type === 'string') out.type = out.type.toLowerCase();
+        else if (Array.isArray(out.type)) out.type = out.type.map(t => typeof t === 'string' ? t.toLowerCase() : t);
+        if (out.properties && typeof out.properties === 'object') {
+          out.properties = Object.fromEntries(
+            Object.entries(out.properties).map(([k, v]) => [k, normalizeSchema(v)])
+          );
+        }
+        if (out.items) out.items = normalizeSchema(out.items);
+        for (const key of ['oneOf', 'anyOf', 'allOf']) {
+          if (Array.isArray(out[key])) out[key] = out[key].map(normalizeSchema);
+        }
+        return out;
+      };
+
       // Convert MCP + built-in tool declarations to Claude tool format.
-      // Anthropic requires input_schema.type to be the literal string 'object';
-      // some MCP servers return "OBJECT", arrays, or omit it, so force it here.
+      // Anthropic requires input_schema.type === 'object' (literal lowercase string)
+      // and the rest of the schema to be valid JSON Schema draft 2020-12.
       const claudeTools = [...mcpToolDeclarations, ...builtinToolDeclarations].map(decl => {
         const tool = { name: decl.name, description: decl.description || '' };
-        const upstreamType = decl.parameters?.type;
-        if (upstreamType !== undefined && upstreamType !== 'object') {
-          console.warn(`[claude-tools] Coercing input_schema.type for "${decl.name}" from ${JSON.stringify(upstreamType)} to "object"`);
-        }
+        const params = decl.parameters || {};
+        const normalized = normalizeSchema(params);
         tool.input_schema = {
           type: 'object',
-          properties: decl.parameters?.properties || {},
+          properties: normalized.properties || {},
         };
-        if (decl.parameters?.required) tool.input_schema.required = decl.parameters.required;
+        if (normalized.required) tool.input_schema.required = normalized.required;
         return tool;
       });
 

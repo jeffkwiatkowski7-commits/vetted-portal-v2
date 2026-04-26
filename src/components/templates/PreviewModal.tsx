@@ -23,7 +23,9 @@ export function PreviewModal({ templateId, onClose, loader }: PreviewModalProps)
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
-    if (!templateId) { setDetail(null); setError(''); return; }
+    setDetail(null);
+    setError('');
+    if (!templateId) return;
     const fetchFn = loader || pptxTemplates.get;
     fetchFn(templateId)
       .then(setDetail)
@@ -36,7 +38,7 @@ export function PreviewModal({ templateId, onClose, loader }: PreviewModalProps)
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-vetted-border">
-          <h3 className="font-display text-lg text-vetted-primary">{detail?.name || 'Loading...'}</h3>
+          <h3 className="font-serif text-lg text-vetted-primary">{detail?.name || 'Loading...'}</h3>
           <button onClick={onClose} className="p-1 hover:bg-vetted-surface rounded text-vetted-text-muted">
             <X size={18} />
           </button>

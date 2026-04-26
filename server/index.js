@@ -1971,6 +1971,37 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
   });
 });
 
+// ============================================================================
+// PPTX TEMPLATES
+// ============================================================================
+
+// Lists templates for the requesting user. Defaults to status='active';
+// pass ?include=archived to get all statuses. Returns the minimal row data
+// the management UI needs (no manifest_json, no source paths).
+app.get('/api/pptx-templates', requireAuth, (req, res) => {
+  const userId = req.user.id;
+  const includeArchived = req.query.include === 'archived';
+  const sql = includeArchived
+    ? 'SELECT * FROM pptx_templates WHERE user_id = ? ORDER BY created_at DESC'
+    : "SELECT * FROM pptx_templates WHERE user_id = ? AND status = 'active' ORDER BY created_at DESC";
+  const rows = dbAll(db, sql, [userId]);
+  const templates = rows.map(r => {
+    let slideCount = 0;
+    try { slideCount = JSON.parse(r.manifest_json).slide_count || 0; } catch {}
+    return {
+      id: r.id,
+      name: r.name,
+      template_type: r.template_type,
+      slide_count: slideCount,
+      has_thumbnail: r.thumbnail_path != null,
+      status: r.status,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+    };
+  });
+  res.json({ templates });
+});
+
 app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   const rows = dbAll(db, 'SELECT * FROM users ORDER BY created_at DESC');
   const users = rows.map(({ password_hash, ...u }) => ({ ...u, has_password: !!password_hash }));

@@ -23,21 +23,17 @@ import mcpManager from './lib/mcp-manager.js';
 import { hasTavily, tavilySearch } from './lib/tavily.js';
 import { parsePptxTemplate } from './lib/pptx-parser.js';
 import { buildDocx, buildXlsx } from './lib/exports.js';
+import { logError, getErrors, clearErrors, pruneOldErrors } from './lib/error-log.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// In-memory error ring buffer
-const errorLog = [];
-const ERROR_LOG_MAX = 100;
-let errorCounter = 0;
-
-function pushError(entry) {
-  errorLog.unshift({ id: ++errorCounter, ...entry });
-  if (errorLog.length > ERROR_LOG_MAX) errorLog.length = ERROR_LOG_MAX;
-}
+// Wrap async route handlers so rejected promises forward to the error middleware.
+// Use this for handlers that DON'T have a custom try/catch shaping the response.
+const asyncRoute = (handler) => (req, res, next) =>
+  Promise.resolve(handler(req, res, next)).catch(next);
 
 // Ensure data directory exists
 const dataDir = path.join(__dirname, '../data');
@@ -2223,18 +2219,21 @@ app.get('/api/admin/health', (req, res) => {
 });
 
 app.get('/api/admin/errors', requireAuth, requireAdmin, (req, res) => {
-  res.json({ errors: errorLog });
+  res.json({ errors: getErrors({ limit: 500 }) });
+});
+
+app.delete('/api/admin/errors', requireAuth, requireAdmin, (req, res) => {
+  clearErrors();
+  res.json({ ok: true });
 });
 
 app.post('/api/admin/client-errors', requireAuth, (req, res) => {
-  const { message, stack, url, userAgent } = req.body;
-  pushError({
-    timestamp: new Date().toISOString(),
+  const { message, stack, url, userAgent } = req.body || {};
+  logError({
     source: 'client',
-    level: 'error',
     message: message || 'Unknown client error',
-    stack,
     route: url,
+    stack,
     userAgent,
   });
   res.json({ ok: true });
@@ -2608,13 +2607,11 @@ if (NODE_ENV === 'production') {
 
 app.use((err, req, res, next) => {
   console.error('Error:', err);
-  pushError({
-    timestamp: new Date().toISOString(),
+  logError({
     source: 'server',
-    level: 'error',
     message: err.message || 'Internal server error',
+    route: req.route?.path ?? req.path,
     stack: err.stack,
-    route: req.path,
   });
   if (!res.headersSent) {
     res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
@@ -2626,23 +2623,26 @@ app.use((err, req, res, next) => {
 // ============================================================================
 
 process.on('uncaughtException', (err) => {
-  pushError({
-    timestamp: new Date().toISOString(),
+  logError({
     source: 'server',
-    level: 'error',
-    message: err.message,
+    message: err.message || String(err),
+    route: 'process:uncaughtException',
     stack: err.stack,
   });
 });
 
 process.on('unhandledRejection', (reason) => {
-  pushError({
-    timestamp: new Date().toISOString(),
+  logError({
     source: 'server',
-    level: 'error',
-    message: String(reason),
+    message: reason?.message ?? String(reason),
+    route: 'process:unhandledRejection',
+    stack: reason?.stack,
   });
 });
+
+// Prune error_log every hour; also run once at startup so a long-down server clears stale rows on boot.
+pruneOldErrors();
+setInterval(pruneOldErrors, 60 * 60 * 1000);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT} (${NODE_ENV} mode)`);

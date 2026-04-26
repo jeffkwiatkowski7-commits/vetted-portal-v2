@@ -285,6 +285,68 @@ async function runMigrations(db) {
     dbRun(db, "INSERT INTO users (id, email, display_name, job_title, role, status, password_hash, created_at, updated_at) VALUES (?, 'wross@prepfunds.net', 'Bill Ross', 'Owner', 'user', 'active', ?, ?, ?)", [newId, hash, now, now]);
     console.log('Migration: created wross@prepfunds.net');
   }
+
+  // Ensure Bill Ross has his IC Memo template (idempotent across boots)
+  await ensureWrossIcMemoTemplate(db);
+}
+
+// Per-boot migration: ensure Bill Ross has an IC Memo template seeded.
+// Idempotent: missing-user tolerance, broad existence check by template_type, file-copy skip.
+// Exported so tests can call it directly without booting a server.
+export async function ensureWrossIcMemoTemplate(database) {
+  const bill = dbGet(database, "SELECT id FROM users WHERE email = 'wross@prepfunds.net'", []);
+  if (!bill) {
+    console.warn('Migration: wross@prepfunds.net not found, skipping IC Memo template seed');
+    return;
+  }
+
+  const existing = dbGet(
+    database,
+    "SELECT id FROM pptx_templates WHERE user_id = ? AND template_type = 'ic_memo'",
+    [bill.id]
+  );
+  if (existing) return;
+
+  const sourceAsset = path.join(__dirname, 'seed-assets/templates/PREP_IC_Memo_Template.pptx');
+  if (!fs.existsSync(sourceAsset)) {
+    console.warn(`Migration: seed asset not found at ${sourceAsset}, skipping IC Memo template seed`);
+    return;
+  }
+
+  const templateId = uuidv4();
+  const userDir = path.join(uploadsDir, 'templates', bill.id);
+  fs.mkdirSync(userDir, { recursive: true });
+  const destPath = path.join(userDir, `${templateId}.pptx`);
+  if (!fs.existsSync(destPath)) {
+    fs.copyFileSync(sourceAsset, destPath);
+  }
+
+  let manifest, thumbnailBuffer;
+  try {
+    const { extractManifest } = await import('./lib/pptx-manifest.js');
+    const result = await extractManifest(destPath);
+    manifest = result.manifest;
+    thumbnailBuffer = result.thumbnailBuffer;
+  } catch (err) {
+    console.warn(`Migration: failed to parse seed pptx (${err.message}), skipping`);
+    return;
+  }
+
+  let thumbAbs = null;
+  if (thumbnailBuffer) {
+    thumbAbs = path.join(userDir, `${templateId}.thumb.jpg`);
+    fs.writeFileSync(thumbAbs, thumbnailBuffer);
+  }
+
+  const now = new Date().toISOString();
+  const relSource = path.relative(uploadsDir, destPath);
+  const relThumb = thumbAbs ? path.relative(uploadsDir, thumbAbs) : null;
+  dbRun(database, `
+    INSERT INTO pptx_templates
+    (id, user_id, name, template_type, source_pptx_path, thumbnail_path, manifest_json, status, created_at, updated_at)
+    VALUES (?, ?, 'PREP IC Memo', 'ic_memo', ?, ?, ?, 'active', ?, ?)
+  `, [templateId, bill.id, relSource, relThumb, JSON.stringify(manifest), now, now]);
+  console.log(`Migration: seeded IC Memo template for wross@prepfunds.net (id=${templateId})`);
 }
 
 // Initialize database on startup

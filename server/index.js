@@ -2244,7 +2244,12 @@ app.get('/api/pptx-templates/:id/thumbnail', requireAuth, (req, res) => {
 
   res.set('Content-Type', 'image/jpeg');
   res.set('Cache-Control', 'private, max-age=86400, immutable');
-  fs.createReadStream(abs).pipe(res);
+  fs.createReadStream(abs)
+    .on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: 'Stream error' });
+      else res.destroy();
+    })
+    .pipe(res);
 });
 
 app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import * as api from '../api';
-import { Wrench, Users, Zap, AlertCircle, CheckCircle, CheckCircle2, BarChart2, MessageSquare } from 'lucide-react';
+import { Wrench, Users, Zap, AlertCircle, CheckCircle, CheckCircle2, BarChart2, MessageSquare, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 
 interface Stats {
   total_users?: number;
@@ -27,6 +27,7 @@ export default function AdminPage() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<any[]>([]);
+  const [expandedErrorId, setExpandedErrorId] = useState<number | null>(null);
 
   const loadAdminData = async () => {
     try {
@@ -51,8 +52,27 @@ export default function AdminPage() {
       return;
     }
     loadAdminData();
-    const interval = setInterval(loadAdminData, 30000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const startPolling = () => {
+      if (interval) return;
+      interval = setInterval(loadAdminData, 30000);
+    };
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+    if (!document.hidden) startPolling();
+    const onVisibility = () => {
+      if (document.hidden) stopPolling();
+      else { loadAdminData(); startPolling(); }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [user, navigate]);
 
   if (loading) {
@@ -99,6 +119,18 @@ export default function AdminPage() {
     const hours = Math.floor(mins / 60);
     if (hours < 24) return `${hours}h ago`;
     return `${Math.floor(hours / 24)}d ago`;
+  };
+
+  const handleClearErrors = async () => {
+    if (!window.confirm('Clear all errors? This cannot be undone.')) return;
+    try {
+      await api.admin.clearErrors();
+      setExpandedErrorId(null);
+      await loadAdminData();
+      addToast({ type: 'success', title: 'Errors cleared' });
+    } catch (err) {
+      addToast({ type: 'error', title: 'Failed to clear errors' });
+    }
   };
 
   return (
@@ -152,12 +184,23 @@ export default function AdminPage() {
 
         {/* Active Errors */}
         <div>
-          <div className="flex items-center gap-2 mb-4">
-            <h2 className="text-lg font-medium text-vetted-primary">Active Errors</h2>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-medium text-vetted-primary">Active Errors</h2>
+              {errors.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-xs font-medium">
+                  {errors.length}
+                </span>
+              )}
+            </div>
             {errors.length > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-xs font-medium">
-                {errors.length}
-              </span>
+              <button
+                onClick={handleClearErrors}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-vetted-text-secondary hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+              >
+                <Trash2 size={14} />
+                Clear all
+              </button>
             )}
           </div>
 
@@ -168,49 +211,88 @@ export default function AdminPage() {
             </div>
           ) : (
             <div className="card p-0 overflow-hidden">
-              <div className="overflow-x-auto max-h-80 overflow-y-auto">
+              <div className="overflow-x-auto max-h-96 overflow-y-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-vetted-surface border-b border-vetted-border sticky top-0">
                     <tr>
-                      <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Time</th>
+                      <th className="w-6 px-2 py-2"></th>
+                      <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Last seen</th>
+                      <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Count</th>
                       <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Source</th>
-                      <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Level</th>
                       <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Message</th>
                       <th className="text-left px-4 py-2 text-vetted-text-secondary font-medium">Route</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {errors.map((err) => (
-                      <tr key={err.id} className="border-b border-vetted-border last:border-0 hover:bg-vetted-surface/50">
-                        <td className="px-4 py-2 text-vetted-text-secondary whitespace-nowrap" title={err.timestamp}>
-                          {formatRelativeTime(err.timestamp)}
-                        </td>
-                        <td className="px-4 py-2">
-                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                            err.source === 'server'
-                              ? 'bg-gray-200 text-gray-700'
-                              : 'bg-blue-100 text-blue-700'
-                          }`}>
-                            {err.source}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2">
-                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                            err.level === 'error'
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-yellow-100 text-yellow-700'
-                          }`}>
-                            {err.level}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-vetted-primary max-w-xs" title={err.message}>
-                          {err.message?.length > 80 ? err.message.slice(0, 80) + '…' : err.message}
-                        </td>
-                        <td className="px-4 py-2 text-vetted-text-secondary">
-                          {err.route || '—'}
-                        </td>
-                      </tr>
-                    ))}
+                    {errors.map((err) => {
+                      const isExpanded = expandedErrorId === err.id;
+                      return (
+                        <React.Fragment key={err.id}>
+                          <tr
+                            onClick={() => setExpandedErrorId(isExpanded ? null : err.id)}
+                            className="border-b border-vetted-border last:border-0 hover:bg-vetted-surface/50 cursor-pointer"
+                          >
+                            <td className="px-2 py-2 text-vetted-text-secondary">
+                              {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            </td>
+                            <td className="px-4 py-2 text-vetted-text-secondary whitespace-nowrap" title={err.last_seen}>
+                              {formatRelativeTime(err.last_seen)}
+                            </td>
+                            <td className="px-4 py-2">
+                              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                err.count >= 10
+                                  ? 'bg-red-100 text-red-700 font-bold'
+                                  : 'bg-gray-100 text-gray-700'
+                              }`}>
+                                {err.count}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2">
+                              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                err.source === 'server'
+                                  ? 'bg-gray-200 text-gray-700'
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {err.source}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-vetted-primary max-w-md" title={err.message}>
+                              {err.message?.length > 100 ? err.message.slice(0, 100) + '…' : err.message}
+                            </td>
+                            <td className="px-4 py-2 text-vetted-text-secondary">
+                              {err.route || '—'}
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr className="bg-vetted-surface/30 border-b border-vetted-border last:border-0">
+                              <td></td>
+                              <td colSpan={5} className="px-4 py-3 space-y-2">
+                                <div className="text-xs text-vetted-text-secondary">
+                                  First seen: <span className="text-vetted-primary" title={err.first_seen}>{formatRelativeTime(err.first_seen)}</span>
+                                  {err.user_agent && (
+                                    <> · UA: <span className="text-vetted-primary">{err.user_agent}</span></>
+                                  )}
+                                </div>
+                                <div className="text-xs">
+                                  <div className="text-vetted-text-secondary mb-1">Message</div>
+                                  <pre className="whitespace-pre-wrap break-words font-mono bg-vetted-bg p-2 rounded border border-vetted-border text-vetted-primary">
+                                    {err.message}
+                                  </pre>
+                                </div>
+                                {err.stack && (
+                                  <div className="text-xs">
+                                    <div className="text-vetted-text-secondary mb-1">Stack</div>
+                                    <pre className="whitespace-pre-wrap break-words font-mono bg-vetted-bg p-2 rounded border border-vetted-border text-vetted-text-secondary max-h-64 overflow-y-auto">
+                                      {err.stack}
+                                    </pre>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

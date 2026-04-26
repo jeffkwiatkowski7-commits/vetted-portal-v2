@@ -23,21 +23,17 @@ import mcpManager from './lib/mcp-manager.js';
 import { hasTavily, tavilySearch } from './lib/tavily.js';
 import { parsePptxTemplate } from './lib/pptx-parser.js';
 import { buildDocx, buildXlsx } from './lib/exports.js';
+import { logError, getErrors, clearErrors, pruneOldErrors } from './lib/error-log.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// In-memory error ring buffer
-const errorLog = [];
-const ERROR_LOG_MAX = 100;
-let errorCounter = 0;
-
-function pushError(entry) {
-  errorLog.unshift({ id: ++errorCounter, ...entry });
-  if (errorLog.length > ERROR_LOG_MAX) errorLog.length = ERROR_LOG_MAX;
-}
+// Wrap async route handlers so rejected promises forward to the error middleware.
+// Use this for handlers that DON'T have a custom try/catch shaping the response.
+const asyncRoute = (handler) => (req, res, next) =>
+  Promise.resolve(handler(req, res, next)).catch(next);
 
 // Ensure data directory exists
 const dataDir = path.join(__dirname, '../data');
@@ -1047,6 +1043,12 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     aiContent = aiText;
     step('Response received');
   } catch (err) {
+    logError({
+      source: 'server',
+      message: err.message || 'Chat AI error',
+      route: 'chat:messages:sse',
+      stack: err.stack,
+    });
     console.error('[chat] AI error:', err.message, err.stack);
     const msg = err.message || '';
     if (msg.includes('invalid_grant') || msg.includes('invalid_rapt') || msg.includes('reauth') || msg.includes('Unable to authenticate') || msg.includes('401') || msg.includes('403')) {
@@ -1099,6 +1101,12 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
 
     dbRun(db, 'UPDATE chats SET updated_at = ? WHERE id = ?', [now, req.params.id]);
   } catch (err) {
+    logError({
+      source: 'server',
+      message: err.message || 'Chat DB error after AI response',
+      route: 'chat:messages:db',
+      stack: err.stack,
+    });
     console.error('[chat] DB error after AI response:', err.message);
   }
 
@@ -1448,7 +1456,7 @@ app.post('/api/library/:id/promote', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-app.put('/api/library/:id', requireAuth, async (req, res) => {
+app.put('/api/library/:id', requireAuth, asyncRoute(async (req, res) => {
   const { original_name, project_id } = req.body;
 
   const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
@@ -1479,9 +1487,9 @@ app.put('/api/library/:id', requireAuth, async (req, res) => {
 
   const updated = dbGet(db, 'SELECT * FROM library_files WHERE id = ?', [req.params.id]);
   res.json({ file: updated });
-});
+}));
 
-app.delete('/api/library/:id', requireAuth, async (req, res) => {
+app.delete('/api/library/:id', requireAuth, asyncRoute(async (req, res) => {
   const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
   if (!file) {
@@ -1506,7 +1514,7 @@ app.delete('/api/library/:id', requireAuth, async (req, res) => {
   dbRun(db, 'DELETE FROM library_files WHERE id = ?', [req.params.id]);
 
   res.json({ success: true });
-});
+}));
 
 app.get('/api/library/stats', requireAuth, (req, res) => {
   const stats = dbGet(db, `
@@ -1704,6 +1712,12 @@ app.post('/api/projects/:id/files/upload', requireAuth, memoryUpload.single('fil
       },
     });
   } catch (err) {
+    logError({
+      source: 'server',
+      message: err.message || 'File indexing failed',
+      route: 'project:files:upload',
+      stack: err.stack,
+    });
     console.error('File indexing error:', err);
     dbRun(db, 'UPDATE library_files SET index_status = ? WHERE id = ?', ['error', fileId]);
     sendEvent({ type: 'error', message: err.message || 'Indexing failed' });
@@ -1742,6 +1756,12 @@ app.post('/api/projects/:id/files/:fileId/reindex', requireAuth, async (req, res
     dbRun(db, 'UPDATE library_files SET index_status = ? WHERE id = ?', ['ready', file.id]);
     sendEvent({ type: 'done', file: { id: file.id, index_status: 'ready', chunks: result.chunks } });
   } catch (err) {
+    logError({
+      source: 'server',
+      message: err.message || 'File re-indexing failed',
+      route: 'project:files:reindex',
+      stack: err.stack,
+    });
     console.error('Re-index error:', err);
     dbRun(db, 'UPDATE library_files SET index_status = ? WHERE id = ?', ['error', file.id]);
     sendEvent({ type: 'error', message: err.message || 'Re-indexing failed' });
@@ -1956,7 +1976,7 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   res.json({ users });
 });
 
-app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+app.post('/api/admin/users', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
   const { email, display_name, job_title, department, role = 'user', password, status = 'active' } = req.body;
   if (!email || !display_name) return res.status(400).json({ error: 'Email and name required' });
   if (!['user', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
@@ -1975,9 +1995,9 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
   const user = dbGet(db, 'SELECT * FROM users WHERE id = ?', [id]);
   const { password_hash: _, ...safeUser } = user;
   res.status(201).json({ user: { ...safeUser, has_password: !!user.password_hash } });
-});
+}));
 
-app.put('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
+app.put('/api/admin/users/:id', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
   const { id } = req.params;
   const body = req.body;
   const existing = dbGet(db, 'SELECT id FROM users WHERE id = ?', [id]);
@@ -1998,9 +2018,9 @@ app.put('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
   const updated = dbGet(db, 'SELECT * FROM users WHERE id = ?', [id]);
   const { password_hash, ...safeUser } = updated;
   res.json({ user: { ...safeUser, has_password: !!password_hash } });
-});
+}));
 
-app.put('/api/admin/users/:id/password', requireAuth, requireAdmin, async (req, res) => {
+app.put('/api/admin/users/:id/password', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
   const { id } = req.params;
   const { password } = req.body;
   if (!password || typeof password !== 'string' || password.length === 0) {
@@ -2011,7 +2031,7 @@ app.put('/api/admin/users/:id/password', requireAuth, requireAdmin, async (req, 
   const hash = await bcrypt.hash(password, 10);
   dbRun(db, 'UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?', [hash, new Date().toISOString(), id]);
   res.json({ success: true });
-});
+}));
 
 app.delete('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
   const { id } = req.params;
@@ -2223,18 +2243,39 @@ app.get('/api/admin/health', (req, res) => {
 });
 
 app.get('/api/admin/errors', requireAuth, requireAdmin, (req, res) => {
-  res.json({ errors: errorLog });
+  res.json({ errors: getErrors({ limit: 500 }) });
 });
 
+app.delete('/api/admin/errors', requireAuth, requireAdmin, (req, res) => {
+  clearErrors();
+  res.json({ ok: true });
+});
+
+// Per-user rate limit for client error reports: 60 per rolling minute.
+// Prevents a non-admin user from filling the error_log table.
+const _clientErrorBuckets = new Map(); // userId → { count, windowStart }
+const CLIENT_ERROR_LIMIT = 60;
+const CLIENT_ERROR_WINDOW_MS = 60_000;
+
 app.post('/api/admin/client-errors', requireAuth, (req, res) => {
-  const { message, stack, url, userAgent } = req.body;
-  pushError({
-    timestamp: new Date().toISOString(),
+  const userId = req.user.id;
+  const now = Date.now();
+  const bucket = _clientErrorBuckets.get(userId);
+  if (bucket && now - bucket.windowStart < CLIENT_ERROR_WINDOW_MS) {
+    if (bucket.count >= CLIENT_ERROR_LIMIT) {
+      return res.status(429).json({ error: 'Too many client errors' });
+    }
+    bucket.count++;
+  } else {
+    _clientErrorBuckets.set(userId, { count: 1, windowStart: now });
+  }
+
+  const { message, stack, url, userAgent } = req.body || {};
+  logError({
     source: 'client',
-    level: 'error',
     message: message || 'Unknown client error',
-    stack,
     route: url,
+    stack,
     userAgent,
   });
   res.json({ ok: true });
@@ -2330,7 +2371,7 @@ app.post('/api/admin/mcp-servers', requireAuth, requireAdmin, (req, res) => {
   res.status(201).json({ server });
 });
 
-app.put('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, async (req, res) => {
+app.put('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
   const existing = dbGet(db, 'SELECT * FROM mcp_servers WHERE id = ?', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'MCP server not found' });
   const { name, description, icon, command, args, env_vars, enabled } = req.body;
@@ -2351,15 +2392,15 @@ app.put('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, async (req, res
   await mcpManager.stopServer(req.params.id);
   const server = dbGet(db, 'SELECT * FROM mcp_servers WHERE id = ?', [req.params.id]);
   res.json({ server });
-});
+}));
 
-app.delete('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, async (req, res) => {
+app.delete('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
   const existing = dbGet(db, 'SELECT * FROM mcp_servers WHERE id = ?', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'MCP server not found' });
   await mcpManager.stopServer(req.params.id);
   dbRun(db, 'DELETE FROM mcp_servers WHERE id = ?', [req.params.id]);
   res.json({ success: true });
-});
+}));
 
 // -- User MCP Servers (enabled only, env_vars stripped) ------------------
 app.get('/api/mcp-servers', requireAuth, (req, res) => {
@@ -2608,13 +2649,21 @@ if (NODE_ENV === 'production') {
 
 app.use((err, req, res, next) => {
   console.error('Error:', err);
-  pushError({
-    timestamp: new Date().toISOString(),
+
+  // Body-parser/multer errors fire before route matching, so req.route is undefined
+  // and req.path includes resource IDs. Use a fixed route so dedup collapses them.
+  let route = req.route?.path ?? req.path;
+  if (err.type === 'entity.parse.failed' || (err instanceof SyntaxError && 'body' in err)) {
+    route = 'bodyParser:json';
+  } else if (err.code === 'LIMIT_FILE_SIZE') {
+    route = 'multer:limit';
+  }
+
+  logError({
     source: 'server',
-    level: 'error',
     message: err.message || 'Internal server error',
+    route,
     stack: err.stack,
-    route: req.path,
   });
   if (!res.headersSent) {
     res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
@@ -2626,23 +2675,27 @@ app.use((err, req, res, next) => {
 // ============================================================================
 
 process.on('uncaughtException', (err) => {
-  pushError({
-    timestamp: new Date().toISOString(),
+  logError({
     source: 'server',
-    level: 'error',
-    message: err.message,
+    message: err.message || String(err),
+    route: 'process:uncaughtException',
     stack: err.stack,
   });
 });
 
 process.on('unhandledRejection', (reason) => {
-  pushError({
-    timestamp: new Date().toISOString(),
+  logError({
     source: 'server',
-    level: 'error',
-    message: String(reason),
+    message: reason?.message ?? String(reason),
+    route: 'process:unhandledRejection',
+    stack: reason?.stack,
   });
 });
+
+// Prune error_log every hour; also run once at startup so a long-down server clears stale rows on boot.
+pruneOldErrors();
+const pruneTimer = setInterval(pruneOldErrors, 60 * 60 * 1000);
+pruneTimer.unref();
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT} (${NODE_ENV} mode)`);

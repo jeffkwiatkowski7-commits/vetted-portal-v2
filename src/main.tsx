@@ -10,7 +10,7 @@ window.addEventListener('error', (event) => {
   api.admin.reportClientError({
     message: String(event.message),
     stack: event.error?.stack,
-    url: window.location.href,
+    url: window.location.pathname,
   });
 });
 
@@ -18,7 +18,7 @@ window.addEventListener('unhandledrejection', (event) => {
   if (!localStorage.getItem('userId')) return;
   api.admin.reportClientError({
     message: String(event.reason),
-    url: window.location.href,
+    url: window.location.pathname,
   });
 });
 

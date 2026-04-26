@@ -31,11 +31,12 @@ export function logError({ source, message, route, stack, userAgent }) {
     const db = getDatabase();
     if (!db) return;
 
+    const safeSource = source ?? 'server';
     const safeMessage = truncate(message ?? 'Unknown error', MESSAGE_MAX);
     const safeStack = truncate(stack, STACK_MAX);
     const safeRoute = route ?? null;
     const safeUserAgent = userAgent ?? null;
-    const key = dedupKey(source, safeMessage, safeRoute);
+    const key = dedupKey(safeSource, safeMessage, safeRoute);
     const now = new Date().toISOString();
 
     dbRun(
@@ -48,7 +49,7 @@ export function logError({ source, message, route, stack, userAgent }) {
         last_seen = excluded.last_seen,
         stack = COALESCE(error_log.stack, excluded.stack)
       `,
-      [source, safeMessage, safeRoute, safeStack, safeUserAgent, now, now, key]
+      [safeSource, safeMessage, safeRoute, safeStack, safeUserAgent, now, now, key]
     );
   } catch (err) {
     // Never let error-logging break a request path
@@ -85,7 +86,7 @@ export function pruneOldErrors() {
     const db = getDatabase();
     if (!db) return;
 
-    dbRun(db, `DELETE FROM error_log WHERE last_seen < datetime('now', '-24 hours')`, []);
+    dbRun(db, `DELETE FROM error_log WHERE datetime(last_seen) < datetime('now', '-24 hours')`, []);
 
     const countRow = dbGet(db, `SELECT COUNT(*) AS c FROM error_log`, []);
     const total = countRow?.c ?? 0;

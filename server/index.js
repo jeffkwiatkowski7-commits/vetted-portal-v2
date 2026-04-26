@@ -2642,7 +2642,8 @@ process.on('unhandledRejection', (reason) => {
 
 // Prune error_log every hour; also run once at startup so a long-down server clears stale rows on boot.
 pruneOldErrors();
-setInterval(pruneOldErrors, 60 * 60 * 1000);
+const pruneTimer = setInterval(pruneOldErrors, 60 * 60 * 1000);
+pruneTimer.unref();
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT} (${NODE_ENV} mode)`);

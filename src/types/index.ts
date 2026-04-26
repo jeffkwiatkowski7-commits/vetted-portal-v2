@@ -371,3 +371,29 @@ export interface LeaseDashboardStats {
   avgMonthlyRent: number;
   totalSquareFootage: number;
 }
+
+// ════════════════════════════════════════════════════════════════════
+// PPTX Template Types
+// ════════════════════════════════════════════════════════════════════
+
+export type PptxTemplateType = 'ic_memo' | 'one_pager' | 'investor_update' | 'custom';
+export type PptxTemplateStatus = 'active' | 'archived';
+
+export interface PptxTemplate {
+  id: string;
+  name: string;
+  template_type: PptxTemplateType;
+  slide_count: number;
+  has_thumbnail: boolean;
+  status: PptxTemplateStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PptxTemplateDetail extends PptxTemplate {
+  manifest: {
+    version: number;
+    slide_count: number;
+    slides: Array<{ index: number; title: string }>;
+  } | null;
+}

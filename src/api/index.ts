@@ -404,3 +404,68 @@ export const notifications = {
   markRead: (id: string) => request(`/notifications/${id}/read`, { method: 'PUT' }),
   markAllRead: () => request('/notifications/read-all', { method: 'PUT' }),
 };
+
+// PPTX Templates
+export const pptxTemplates = {
+  list: (opts?: { includeArchived?: boolean }) => {
+    const q = opts?.includeArchived ? '?include=archived' : '';
+    return request(`/pptx-templates${q}`).then((d: any) => d.templates || d || []);
+  },
+  get: (id: string) => request(`/pptx-templates/${id}`).then((d: any) => d.template || d),
+  upload: (file: File, body: { name: string; template_type: string }, onProgress?: (pct: number) => void): Promise<any> =>
+    new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('name', body.name);
+      formData.append('template_type', body.template_type);
+      const userId = localStorage.getItem('userId') || '';
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${BASE}/pptx-templates`);
+      xhr.setRequestHeader('X-User-Id', userId);
+      if (onProgress) {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+        };
+      }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({}); }
+        } else {
+          let msg = 'Upload failed';
+          try { msg = JSON.parse(xhr.responseText).error || msg; } catch {}
+          reject(new Error(msg));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.send(formData);
+    }),
+  replace: (id: string, file: File): Promise<any> =>
+    new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const userId = localStorage.getItem('userId') || '';
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${BASE}/pptx-templates/${id}/replace`);
+      xhr.setRequestHeader('X-User-Id', userId);
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({}); }
+        } else {
+          let msg = 'Replace failed';
+          try { msg = JSON.parse(xhr.responseText).error || msg; } catch {}
+          reject(new Error(msg));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Replace failed'));
+      xhr.send(formData);
+    }),
+  patch: (id: string, body: { name?: string; status?: 'active' | 'archived' }) =>
+    request(`/pptx-templates/${id}`, { method: 'PATCH', body: JSON.stringify(body) }).then((d: any) => d.template || d),
+  remove: (id: string) => request(`/pptx-templates/${id}`, { method: 'DELETE' }),
+  thumbnailUrl: (id: string) => `${BASE}/pptx-templates/${id}/thumbnail`,
+};
+
+export const adminPptxTemplates = {
+  forUser: (userId: string) =>
+    request(`/admin/pptx-templates?user_id=${encodeURIComponent(userId)}`).then((d: any) => d.templates || d || []),
+};

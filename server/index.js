@@ -2365,7 +2365,17 @@ app.get('/api/admin/pptx-templates', requireAuth, requireAdmin, (req, res) => {
 });
 
 app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
-  const rows = dbAll(db, 'SELECT * FROM users ORDER BY created_at DESC');
+  const rows = dbAll(db, `
+    SELECT users.*, COALESCE(t.c, 0) AS templates_count
+    FROM users
+    LEFT JOIN (
+      SELECT user_id, COUNT(*) AS c
+      FROM pptx_templates
+      WHERE status = 'active'
+      GROUP BY user_id
+    ) t ON t.user_id = users.id
+    ORDER BY users.created_at DESC
+  `);
   const users = rows.map(({ password_hash, ...u }) => ({ ...u, has_password: !!password_hash }));
   res.json({ users });
 });

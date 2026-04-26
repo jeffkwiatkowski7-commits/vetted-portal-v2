@@ -69,4 +69,24 @@ describe('admin pptx-templates endpoint', () => {
       .set('X-User-Id', ids.admin);
     expect(res.status).toBe(400);
   });
+
+  it('admin user list now includes templates_count and excludes archived', async () => {
+    const dbMod2 = await import('../database.js');
+    const db2 = dbMod2.getDatabase();
+    dbMod2.dbRun(db2, "UPDATE pptx_templates SET status = 'archived' WHERE id = ?", [ids.aTplId]);
+
+    const res = await request(app).get('/api/admin/users').set('X-User-Id', ids.admin);
+    expect(res.status).toBe(200);
+    const users = res.body.users || res.body;
+    const aUser = users.find(u => u.id === ids.a);
+    expect(aUser).toBeTruthy();
+    expect(aUser.templates_count).toBe(0);
+    expect(aUser.password_hash).toBeUndefined();
+
+    dbMod2.dbRun(db2, "UPDATE pptx_templates SET status = 'active' WHERE id = ?", [ids.aTplId]);
+
+    const res2 = await request(app).get('/api/admin/users').set('X-User-Id', ids.admin);
+    const aUser2 = (res2.body.users || res2.body).find(u => u.id === ids.a);
+    expect(aUser2.templates_count).toBe(1);
+  });
 });

@@ -63,7 +63,7 @@ function extractTitleFromSlide(slideObj) {
  * @throws {InvalidPptxError} if the file isn't a valid pptx zip or lacks ppt/presentation.xml
  */
 export async function extractManifest(filePath) {
-  const buf = fs.readFileSync(filePath);
+  const buf = await fs.promises.readFile(filePath);
 
   let zip;
   try {

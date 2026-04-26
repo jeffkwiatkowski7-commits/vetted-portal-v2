@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
-import { Upload, CheckCircle, AlertCircle, Loader2, ArrowLeft, Plus, Eye, RefreshCw, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
+import { Upload, CheckCircle, AlertCircle, Loader2, ArrowLeft, Plus, Eye, Pencil, RefreshCw, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
 import { TemplateRow, PreviewModal } from '../components/templates';
 import { pptxTemplates } from '../api';
 import type { PptxTemplate } from '../types';
@@ -48,6 +48,8 @@ export default function PptxAppPage() {
   const [uploadType, setUploadType] = useState<'ic_memo' | 'one_pager' | 'investor_update' | 'custom'>('ic_memo');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
 
   const refreshTemplates = useCallback(async () => {
     try {
@@ -106,6 +108,19 @@ export default function PptxAppPage() {
       }
     };
     input.click();
+  };
+
+  const handleRename = async () => {
+    if (!renameId || !renameDraft.trim()) return;
+    try {
+      await pptxTemplates.patch(renameId, { name: renameDraft.trim() });
+      addToast({ type: 'success', title: 'Template renamed' });
+      setRenameId(null);
+      setRenameDraft('');
+      await refreshTemplates();
+    } catch (err) {
+      addToast({ type: 'error', title: (err as Error).message || 'Rename failed' });
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -285,6 +300,13 @@ export default function PptxAppPage() {
                       <button onClick={() => setPreviewId(t.id)} title="Preview" className="p-1.5 hover:bg-vetted-surface rounded text-vetted-text-muted">
                         <Eye size={14} />
                       </button>
+                      <button
+                        onClick={() => { setRenameId(t.id); setRenameDraft(t.name); }}
+                        title="Rename"
+                        className="p-1.5 hover:bg-vetted-surface rounded text-vetted-text-muted"
+                      >
+                        <Pencil size={14} />
+                      </button>
                       <button onClick={() => handleReplace(t)} title="Replace" className="p-1.5 hover:bg-vetted-surface rounded text-vetted-text-muted">
                         <RefreshCw size={14} />
                       </button>
@@ -456,6 +478,33 @@ export default function PptxAppPage() {
         )}
 
         <PreviewModal templateId={previewId} onClose={() => setPreviewId(null)} />
+
+        {renameId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => { setRenameId(null); setRenameDraft(''); }}>
+            <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+              <h3 className="font-medium text-vetted-primary mb-3">Rename template</h3>
+              <input
+                type="text"
+                value={renameDraft}
+                onChange={e => setRenameDraft(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleRename(); }}
+                autoFocus
+                className="w-full px-3 py-1.5 border border-vetted-border rounded text-sm mb-4"
+                placeholder="Template name"
+              />
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => { setRenameId(null); setRenameDraft(''); }} className="px-3 py-1.5 border border-vetted-border rounded text-sm">Cancel</button>
+                <button
+                  onClick={handleRename}
+                  disabled={!renameDraft.trim()}
+                  className="px-3 py-1.5 bg-vetted-primary text-white rounded text-sm font-medium disabled:opacity-50"
+                >
+                  Rename
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {confirmDeleteId && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setConfirmDeleteId(null)}>

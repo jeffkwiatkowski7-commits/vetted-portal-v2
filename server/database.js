@@ -387,6 +387,23 @@ export async function initializeDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_task_runs_task_id ON scheduled_task_runs(task_id);
     CREATE INDEX IF NOT EXISTS idx_task_runs_started_at ON scheduled_task_runs(started_at);
+
+    CREATE TABLE IF NOT EXISTS pptx_templates (
+      id               TEXT PRIMARY KEY,
+      user_id          TEXT NOT NULL,
+      name             TEXT NOT NULL,
+      template_type    TEXT NOT NULL,
+      source_pptx_path TEXT NOT NULL,
+      thumbnail_path   TEXT,
+      manifest_json    TEXT NOT NULL,
+      status           TEXT NOT NULL DEFAULT 'active',
+      created_at       TEXT NOT NULL,
+      updated_at       TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_pptx_templates_user_id     ON pptx_templates(user_id);
+    CREATE INDEX IF NOT EXISTS idx_pptx_templates_user_type   ON pptx_templates(user_id, template_type);
+    CREATE INDEX IF NOT EXISTS idx_pptx_templates_user_status ON pptx_templates(user_id, status);
   `);
 
   // Add index_status column to existing databases (ignore if already exists)

@@ -244,6 +244,58 @@ describe('pptx-templates user endpoints', () => {
     expect(row.name).toBe('B Template');
   });
 
+  it('test 5: delete returns 404 on cross-user access; row + file preserved', async () => {
+    const path = await import('path');
+    const url = await import('url');
+    const fs = await import('fs');
+    const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+    const samplePath = path.join(__dirname, '../seed-assets/templates/PREP_IC_Memo_Template.pptx');
+    const upload = await request(app)
+      .post('/api/pptx-templates')
+      .set('X-User-Id', ids.b)
+      .field('name', 'B For Delete Test')
+      .field('template_type', 'custom')
+      .attach('file', samplePath);
+    const targetId = (upload.body.template || upload.body).id;
+    const diskPath = path.join(paths.uploadsDir, 'templates', ids.b, `${targetId}.pptx`);
+    expect(fs.existsSync(diskPath)).toBe(true);
+
+    const res = await request(app)
+      .delete(`/api/pptx-templates/${targetId}`)
+      .set('X-User-Id', ids.a);
+    expect(res.status).toBe(404);
+
+    const row = dbGet('SELECT id FROM pptx_templates WHERE id = ?', [targetId]);
+    expect(row).toBeTruthy();
+    expect(fs.existsSync(diskPath)).toBe(true);
+  });
+
+  it('delete: own template removes row and both files', async () => {
+    const path = await import('path');
+    const url = await import('url');
+    const fs = await import('fs');
+    const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+    const samplePath = path.join(__dirname, '../seed-assets/templates/PREP_IC_Memo_Template.pptx');
+    const upload = await request(app)
+      .post('/api/pptx-templates')
+      .set('X-User-Id', ids.a)
+      .field('name', 'Doomed')
+      .field('template_type', 'custom')
+      .attach('file', samplePath);
+    const id = (upload.body.template || upload.body).id;
+    const sourcePath = path.join(paths.uploadsDir, 'templates', ids.a, `${id}.pptx`);
+    const thumbPath = path.join(paths.uploadsDir, 'templates', ids.a, `${id}.thumb.jpg`);
+    expect(fs.existsSync(sourcePath)).toBe(true);
+
+    const res = await request(app).delete(`/api/pptx-templates/${id}`).set('X-User-Id', ids.a);
+    expect(res.status).toBe(204);
+
+    const row = dbGet('SELECT id FROM pptx_templates WHERE id = ?', [id]);
+    expect(row).toBeNull();
+    expect(fs.existsSync(sourcePath)).toBe(false);
+    expect(fs.existsSync(thumbPath)).toBe(false);
+  });
+
   it('test 6: list and detail SQL strings filter by user_id in WHERE clause', async () => {
     const fs = await import('fs');
     const path = await import('path');

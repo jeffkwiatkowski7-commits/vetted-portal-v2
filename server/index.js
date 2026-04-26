@@ -2212,6 +2212,24 @@ app.patch('/api/pptx-templates/:id', requireAuth, asyncRoute(async (req, res) =>
   });
 }));
 
+// Hard delete: row + on-disk source + thumbnail. 404 on cross-user. 204 on success.
+app.delete('/api/pptx-templates/:id', requireAuth, (req, res) => {
+  const userId = req.user.id;
+  const row = dbGet(db, 'SELECT * FROM pptx_templates WHERE id = ? AND user_id = ?', [req.params.id, userId]);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+
+  if (row.source_pptx_path) {
+    const abs = path.join(uploadsDir, row.source_pptx_path);
+    try { fs.unlinkSync(abs); } catch {}
+  }
+  if (row.thumbnail_path) {
+    const abs = path.join(uploadsDir, row.thumbnail_path);
+    try { fs.unlinkSync(abs); } catch {}
+  }
+  dbRun(db, 'DELETE FROM pptx_templates WHERE id = ? AND user_id = ?', [row.id, userId]);
+  res.status(204).end();
+});
+
 app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   const rows = dbAll(db, 'SELECT * FROM users ORDER BY created_at DESC');
   const users = rows.map(({ password_hash, ...u }) => ({ ...u, has_password: !!password_hash }));

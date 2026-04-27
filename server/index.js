@@ -270,6 +270,9 @@ async function runMigrations(db) {
 
   // Ensure Bill Ross has his IC Memo template (idempotent across boots)
   await ensureWrossIcMemoTemplate(db);
+
+  // Upgrade any v1 manifests to v2 (idempotent across boots)
+  await upgradeManifestsToV2(db);
 }
 
 // Per-boot migration: ensure Bill Ross has an IC Memo template seeded.
@@ -332,6 +335,34 @@ export async function ensureWrossIcMemoTemplate(database) {
     console.log(`Migration: seeded IC Memo template for wross@prepfunds.net (id=${templateId})`);
   } catch (err) {
     console.warn(`Migration: ensureWrossIcMemoTemplate failed (${err.message}), skipping`);
+  }
+}
+
+// Per-boot migration: upgrade any v1 manifest rows to v2 by re-running extractManifest.
+// Idempotent — rows already at version >= 2 are skipped. Failures (missing files,
+// malformed pptx) are logged and the row is left at v1; the renderer's getDesignTokens
+// fallback handles v1 manifests gracefully so this is non-fatal.
+export async function upgradeManifestsToV2(database) {
+  const rows = dbAll(
+    database,
+    `SELECT id, source_pptx_path, manifest_json FROM pptx_templates`
+  );
+  for (const row of rows) {
+    let parsed;
+    try { parsed = JSON.parse(row.manifest_json); } catch { continue; }
+    if (parsed?.version >= 2) continue;
+    try {
+      const { extractManifest } = await import('./lib/pptx-manifest.js');
+      const { manifest: v2 } = await extractManifest(
+        path.isAbsolute(row.source_pptx_path)
+          ? row.source_pptx_path
+          : path.join(uploadsDir, row.source_pptx_path)
+      );
+      dbRun(database, 'UPDATE pptx_templates SET manifest_json = ?, updated_at = ? WHERE id = ?',
+        [JSON.stringify(v2), new Date().toISOString(), row.id]);
+    } catch (err) {
+      console.warn(`[migration] manifest v2 upgrade skipped for template ${row.id}: ${err.message}`);
+    }
   }
 }
 

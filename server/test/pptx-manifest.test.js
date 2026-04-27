@@ -7,10 +7,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SAMPLE_PPTX = path.join(__dirname, '../seed-assets/templates/PREP_IC_Memo_Template.pptx');
 
 describe('extractManifest', () => {
-  it('S1: returns manifest with slide_count and titled slides for the seed pptx', async () => {
+  it('S1: returns v2 manifest with design_tokens for the seed pptx', async () => {
     const { manifest, thumbnailBuffer } = await extractManifest(SAMPLE_PPTX);
 
-    expect(manifest.version).toBe(1);
+    expect(manifest.version).toBe(2);
     expect(manifest.slide_count).toBeGreaterThan(0);
     expect(Array.isArray(manifest.slides)).toBe(true);
     expect(manifest.slides.length).toBe(manifest.slide_count);
@@ -21,15 +21,19 @@ describe('extractManifest', () => {
       expect(s.title.length).toBeGreaterThan(0);
     }
 
-    // The seed pptx ships a thumbnail at docProps/thumbnail.jpeg — the parser
-    // checks docProps/* first per the OOXML spec, so we expect a real Buffer.
+    // Design tokens — three colors and two fonts, all non-empty strings.
+    expect(manifest.design_tokens).toBeDefined();
+    expect(typeof manifest.design_tokens.colors.primary).toBe('string');
+    expect(typeof manifest.design_tokens.colors.accent).toBe('string');
+    expect(typeof manifest.design_tokens.colors.background).toBe('string');
+    expect(manifest.design_tokens.colors.primary.length).toBeGreaterThan(0);
+    expect(typeof manifest.design_tokens.fonts.heading).toBe('string');
+    expect(typeof manifest.design_tokens.fonts.body).toBe('string');
+    expect(manifest.design_tokens.fonts.heading.length).toBeGreaterThan(0);
+
     expect(Buffer.isBuffer(thumbnailBuffer)).toBe(true);
     expect(thumbnailBuffer.length).toBeGreaterThan(0);
 
-    // With the enhanced fallback chain, the seed pptx should produce SOME real
-    // titles (not just "Slide N"). Specifically, given that the seed deck has
-    // designed slides with named title shapes, at least one slide title should
-    // NOT match the /^Slide \d+$/ fallback pattern.
     const realTitles = manifest.slides.filter(s => !/^Slide \d+( \(parse error\))?$/.test(s.title));
     expect(realTitles.length).toBeGreaterThan(0);
   });

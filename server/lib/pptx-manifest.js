@@ -1,6 +1,7 @@
 import fs from 'fs';
 import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
+import { extractColors, extractFonts } from './pptx-parser.js';
 
 export class InvalidPptxError extends Error {
   constructor(msg) {
@@ -148,8 +149,47 @@ export async function extractManifest(filePath) {
     zip.file('ppt/thumbnail.png');
   const thumbnailBuffer = thumbFile ? Buffer.from(await thumbFile.async('uint8array')) : null;
 
+  // Design tokens (v2). Extracted from ppt/theme/theme1.xml. Wrapped — a
+  // missing or malformed theme falls back to brand defaults; never throws.
+  let designTokens = {
+    colors:
+      { primary: '#1A1A1A', accent: '#C4A962', background: '#FFFFFF' },
+    fonts:
+      { heading: 'Playfair Display', body: 'Inter' },
+  };
+  try {
+    const themeFile = zip.file('ppt/theme/theme1.xml');
+    if (themeFile) {
+      const themeXml = await themeFile.async('string');
+      const themeObj = parser.parse(themeXml);
+      const themeElements = themeObj?.theme?.themeElements;
+      const colors = extractColors(themeElements?.clrScheme);
+      const fonts = extractFonts(themeElements?.fontScheme);
+      // Map pptx semantic names to our three-key vocabulary.
+      // dark1/dk1 = primary text, accent1 = brand accent, light1/lt1 = background.
+      designTokens = {
+        colors: {
+          primary:    colors.dark1   || designTokens.colors.primary,
+          accent:     colors.accent1 || designTokens.colors.accent,
+          background: colors.light1  || designTokens.colors.background,
+        },
+        fonts: {
+          heading: fonts.heading || designTokens.fonts.heading,
+          body:    fonts.body    || designTokens.fonts.body,
+        },
+      };
+    }
+  } catch {
+    // Keep defaults.
+  }
+
   return {
-    manifest: { version: 1, slide_count: slideCount, slides },
+    manifest: {
+      version: 2,
+      slide_count: slideCount,
+      slides,
+      design_tokens: designTokens,
+    },
     thumbnailBuffer,
   };
 }

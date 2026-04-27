@@ -84,6 +84,7 @@ Three AI integrations coexist — which one is used depends on configuration:
 - **Demo seed runs once.** `SEED_DEMO_DATA=true` only takes effect on first boot when the DB is empty. To reseed: delete `./data/vetted_portal.db` and restart, or run `npm run seed`.
 - **Two upload dirs.** Local dev uses `./data/uploads/`; the deployed VM uses `/data/uploads/` (absolute). Don't conflate them when debugging file paths.
 - **VM `/data/.env` is separate from repo `.env`.** Editing the local `.env` does not affect production. The VM env file is updated manually via SSH.
+- **`pandoc` is a runtime dep for `export_to_word`.** `server/lib/exports.js` shells out to the `pandoc` binary to convert markdown → docx. Install with `brew install pandoc` (macOS) or `apt install pandoc` (Debian/Ubuntu — required on the GCP VM). Override the binary path with `PANDOC_BIN` if needed. The `export_to_word` tool now takes a single `markdown` string (not the old `sections` JSON schema).
 
 ## Design System
 

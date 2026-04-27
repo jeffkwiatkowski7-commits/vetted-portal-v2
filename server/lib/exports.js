@@ -1,38 +1,76 @@
 /**
  * Server-side .docx and .xlsx generation for AI-driven chat exports.
  *
- * Pure builders consumed by the export_to_word / export_to_excel tools
- * registered in server/index.js. Input shape mirrors the JSON Schema
- * exposed to the model so the AI can pass structured content directly.
+ * buildDocx shells out to `pandoc` to convert markdown → docx. The AI passes
+ * a single markdown string and pandoc handles tables, headings, lists, bold/
+ * italic, blockquotes, code, etc. natively — no JSON-section schema to drift
+ * out of sync with what the model actually wants to emit.
+ *
+ * Excel export still uses ExcelJS since that's already row/column structured.
  */
-import {
-  Document,
-  Packer,
-  Paragraph,
-  HeadingLevel,
-  Table,
-  TableRow,
-  TableCell,
-  WidthType,
-  TextRun,
-} from 'docx';
+import { spawn } from 'node:child_process';
 import ExcelJS from 'exceljs';
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-export async function buildDocx({ title, sections }) {
-  const children = [];
-  if (title) children.push(new Paragraph({ text: title, heading: HeadingLevel.TITLE }));
-  for (const sec of sections || []) {
-    if (sec.heading) children.push(new Paragraph({ text: sec.heading, heading: HeadingLevel.HEADING_2 }));
-    for (const p of sec.paragraphs || []) children.push(new Paragraph({ children: [new TextRun(p)] }));
-    for (const b of sec.bullets || []) children.push(new Paragraph({ text: b, bullet: { level: 0 } }));
-    if (sec.table) children.push(buildDocxTable(sec.table));
+const PANDOC_BIN = process.env.PANDOC_BIN || 'pandoc';
+
+export async function buildDocx({ title, markdown }) {
+  const body = typeof markdown === 'string' ? markdown : '';
+  const trimmed = body.trim();
+  // Prepend the title as an H1 unless the markdown already opens with one.
+  // Match a single `#` followed by whitespace (not `##`+).
+  const startsWithH1 = /^#\s/.test(trimmed);
+  const doc = title && !startsWithH1
+    ? `# ${title}\n\n${body}`
+    : body;
+
+  if (!doc.trim()) {
+    throw new Error('buildDocx requires non-empty markdown');
   }
-  const doc = new Document({ sections: [{ children }] });
-  const buffer = await Packer.toBuffer(doc);
+
+  const buffer = await runPandoc(doc);
   return { buffer, mimeType: DOCX_MIME };
+}
+
+function runPandoc(markdown) {
+  return new Promise((resolve, reject) => {
+    let proc;
+    try {
+      proc = spawn(PANDOC_BIN, ['-f', 'markdown', '-t', 'docx', '-o', '-'], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    } catch (err) {
+      reject(new Error(`Failed to spawn pandoc: ${err.message}`));
+      return;
+    }
+
+    const stdoutChunks = [];
+    const stderrChunks = [];
+    proc.stdout.on('data', (chunk) => stdoutChunks.push(chunk));
+    proc.stderr.on('data', (chunk) => stderrChunks.push(chunk));
+
+    proc.on('error', (err) => {
+      if (err.code === 'ENOENT') {
+        reject(new Error('pandoc binary not found. Install with `brew install pandoc` (macOS) or `apt install pandoc` (Debian/Ubuntu).'));
+      } else {
+        reject(err);
+      }
+    });
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
+        reject(new Error(`pandoc exited with code ${code}${stderr ? `: ${stderr}` : ''}`));
+        return;
+      }
+      resolve(Buffer.concat(stdoutChunks));
+    });
+
+    proc.stdin.on('error', (err) => reject(err));
+    proc.stdin.end(markdown, 'utf8');
+  });
 }
 
 export async function buildXlsx({ sheets }) {
@@ -47,29 +85,6 @@ export async function buildXlsx({ sheets }) {
   }
   const buffer = Buffer.from(await wb.xlsx.writeBuffer());
   return { buffer, mimeType: XLSX_MIME };
-}
-
-function buildDocxTable({ headers, rows }) {
-  const headerRow = new TableRow({
-    children: (headers || []).map(
-      (h) =>
-        new TableCell({
-          children: [new Paragraph({ children: [new TextRun({ text: h, bold: true })] })],
-        })
-    ),
-  });
-  const bodyRows = (rows || []).map(
-    (r) =>
-      new TableRow({
-        children: r.map(
-          (cell) => new TableCell({ children: [new Paragraph(String(cell ?? ''))] })
-        ),
-      })
-  );
-  return new Table({
-    rows: [headerRow, ...bodyRows],
-    width: { size: 100, type: WidthType.PERCENTAGE },
-  });
 }
 
 export { DOCX_MIME, XLSX_MIME };

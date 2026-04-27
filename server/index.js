@@ -60,33 +60,15 @@ function resolveFilePath(filePathValue) {
 const BUILTIN_EXPORT_TOOLS = [
   {
     name: 'export_to_word',
-    description: 'Generate a downloadable Microsoft Word (.docx) file from structured content. ONLY call this tool when the user explicitly asks for a downloadable file using language like "export to Word", "save as Word", "download as a doc", "make a Word document", "give me a .docx", or similar. DO NOT call this tool just because the user asks to "format", "structure", "show", "list", "summarize", or "write up" something — those requests should produce a normal markdown response, not a file. When in doubt, do NOT call this tool; just respond with formatted markdown.',
+    description: 'Generate a downloadable Microsoft Word (.docx) file from a markdown string. ONLY call this tool when the user explicitly asks for a downloadable file using language like "export to Word", "save as Word", "download as a doc", "make a Word document", "give me a .docx", or similar. DO NOT call this tool just because the user asks to "format", "structure", "show", "list", "summarize", or "write up" something — those requests should produce a normal markdown response, not a file. When in doubt, do NOT call this tool; just respond with formatted markdown.\n\nThe `markdown` field accepts standard markdown: # / ## / ### headings, **bold**, *italic*, bullet and numbered lists, pipe tables, blockquotes, fenced code blocks, and links. Use pipe tables for any key/value or tabular data (e.g. lease terms, financial summaries). The server converts markdown → docx via pandoc, so anything pandoc accepts will render correctly.',
     parameters: {
       type: 'object',
       properties: {
-        title: { type: 'string', description: 'Document title shown at the top of the file.' },
+        title: { type: 'string', description: 'Document title. Rendered as the top H1 unless the markdown already starts with a heading.' },
         filename: { type: 'string', description: 'Suggested filename without extension.' },
-        sections: {
-          type: 'array',
-          description: 'Ordered sections of the document.',
-          items: {
-            type: 'object',
-            properties: {
-              heading: { type: 'string', description: 'Optional section heading.' },
-              paragraphs: { type: 'array', items: { type: 'string' }, description: 'Body paragraphs.' },
-              bullets: { type: 'array', items: { type: 'string' }, description: 'Bullet list items.' },
-              table: {
-                type: 'object',
-                properties: {
-                  headers: { type: 'array', items: { type: 'string' } },
-                  rows: { type: 'array', items: { type: 'array', items: { type: 'string' } } },
-                },
-              },
-            },
-          },
-        },
+        markdown: { type: 'string', description: 'The full document body as markdown. Use #/##/### for headings, **bold**, bullet/numbered lists, and pipe tables for tabular data. Do not wrap in code fences.' },
       },
-      required: ['title', 'sections'],
+      required: ['title', 'markdown'],
     },
   },
   {
@@ -938,8 +920,8 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     // Handlers close over the chat context so they can persist files for this user/chat.
     const builtinToolMap = {
       export_to_word: async (args) => {
-        if (!args || !Array.isArray(args.sections) || args.sections.length === 0) {
-          return 'Error: export_to_word requires a non-empty `sections` array. Build the document content from the conversation and retry.';
+        if (!args || typeof args.markdown !== 'string' || !args.markdown.trim()) {
+          return 'Error: export_to_word requires a non-empty `markdown` string. Build the document content as markdown (with #/## headings, **bold**, lists, and pipe tables) and retry.';
         }
         const { buffer, mimeType } = await buildDocx(args);
         const file = persistExportFile({

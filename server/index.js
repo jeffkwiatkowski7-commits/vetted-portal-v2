@@ -345,14 +345,16 @@ export async function ensureWrossIcMemoTemplate(database) {
 export async function upgradeManifestsToV2(database) {
   const rows = dbAll(
     database,
-    `SELECT id, source_pptx_path, manifest_json FROM pptx_templates`
+    `SELECT id, source_pptx_path, manifest_json FROM pptx_templates
+     WHERE json_extract(manifest_json, '$.version') IS NULL
+        OR json_extract(manifest_json, '$.version') < 2`
   );
+  const { extractManifest } = await import('./lib/pptx-manifest.js');
   for (const row of rows) {
     let parsed;
     try { parsed = JSON.parse(row.manifest_json); } catch { continue; }
     if (parsed?.version >= 2) continue;
     try {
-      const { extractManifest } = await import('./lib/pptx-manifest.js');
       const { manifest: v2 } = await extractManifest(
         path.isAbsolute(row.source_pptx_path)
           ? row.source_pptx_path

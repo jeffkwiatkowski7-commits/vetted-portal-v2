@@ -137,8 +137,15 @@ export async function extractManifest(filePath) {
     slides.push({ index: i, title: title && title.length > 0 ? title : `Slide ${i}` });
   }
 
-  // Slide-1 thumbnail (optional)
-  const thumbFile = zip.file('ppt/thumbnail.jpeg');
+  // Document thumbnail (optional). The OOXML spec puts it at docProps/thumbnail.jpeg;
+  // some tools alternately use ppt/thumbnail.jpeg or .png variants.
+  const thumbFile =
+    zip.file('docProps/thumbnail.jpeg') ||
+    zip.file('docProps/thumbnail.jpg') ||
+    zip.file('docProps/thumbnail.png') ||
+    zip.file('ppt/thumbnail.jpeg') ||
+    zip.file('ppt/thumbnail.jpg') ||
+    zip.file('ppt/thumbnail.png');
   const thumbnailBuffer = thumbFile ? Buffer.from(await thumbFile.async('uint8array')) : null;
 
   return {

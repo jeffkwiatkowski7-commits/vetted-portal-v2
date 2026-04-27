@@ -1298,14 +1298,23 @@ app.get('/api/projects', requireAuth, (req, res) => {
 });
 
 app.post('/api/projects', requireAuth, (req, res) => {
-  const { name, description, default_model, system_prompt, temperature, tool_sets } = req.body;
+  const { name, description, default_model, system_prompt, temperature, tool_sets, pptx_template_id } = req.body;
+
+  // Validate template ownership when attaching.
+  if (pptx_template_id) {
+    const tpl = dbGet(db,
+      `SELECT id FROM pptx_templates WHERE id = ? AND user_id = ? AND status != 'archived'`,
+      [pptx_template_id, req.user.id]
+    );
+    if (!tpl) return res.status(400).json({ error: 'template not found or not owned' });
+  }
 
   const projectId = uuidv4();
   const now = new Date().toISOString();
 
   dbRun(db, `
-    INSERT INTO projects (id, owner_id, name, description, default_model, system_prompt, temperature, tool_sets, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO projects (id, owner_id, name, description, default_model, system_prompt, temperature, tool_sets, status, pptx_template_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     projectId,
     req.user.id,
@@ -1316,6 +1325,7 @@ app.post('/api/projects', requireAuth, (req, res) => {
     temperature || 0.7,
     tool_sets ? JSON.stringify(tool_sets) : JSON.stringify([]),
     'active',
+    pptx_template_id || null,
     now,
     now
   ]);
@@ -1344,7 +1354,7 @@ app.get('/api/projects/:id', requireAuth, (req, res) => {
 });
 
 app.put('/api/projects/:id', requireAuth, (req, res) => {
-  const { name, description, default_model, system_prompt, temperature, tool_sets, mcp_servers } = req.body;
+  const { name, description, default_model, system_prompt, temperature, tool_sets, mcp_servers, pptx_template_id } = req.body;
 
   const project = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [req.params.id]);
   if (!project) {
@@ -1358,10 +1368,20 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
     return res.status(403).json({ error: 'Not authorized to update this project' });
   }
 
+  // Validate template ownership when attaching a non-null value.
+  // Null is a valid detach signal and skips validation.
+  if (pptx_template_id !== undefined && pptx_template_id !== null) {
+    const tpl = dbGet(db,
+      `SELECT id FROM pptx_templates WHERE id = ? AND user_id = ? AND status != 'archived'`,
+      [pptx_template_id, project.owner_id]
+    );
+    if (!tpl) return res.status(400).json({ error: 'template not found or not owned' });
+  }
+
   const now = new Date().toISOString();
   dbRun(db, `
     UPDATE projects
-    SET name = ?, description = ?, default_model = ?, system_prompt = ?, temperature = ?, tool_sets = ?, mcp_servers = ?, updated_at = ?
+    SET name = ?, description = ?, default_model = ?, system_prompt = ?, temperature = ?, tool_sets = ?, mcp_servers = ?, pptx_template_id = ?, updated_at = ?
     WHERE id = ?
   `, [
     name !== undefined ? name : project.name,
@@ -1371,6 +1391,7 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
     temperature !== undefined ? temperature : project.temperature,
     tool_sets !== undefined ? JSON.stringify(tool_sets) : project.tool_sets,
     mcp_servers !== undefined ? JSON.stringify(mcp_servers) : project.mcp_servers,
+    pptx_template_id !== undefined ? pptx_template_id : project.pptx_template_id,
     now,
     req.params.id
   ]);

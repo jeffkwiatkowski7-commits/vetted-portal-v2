@@ -462,7 +462,12 @@ export const pptxTemplates = {
   patch: (id: string, body: { name?: string; status?: 'active' | 'archived' }) =>
     request(`/pptx-templates/${id}`, { method: 'PATCH', body: JSON.stringify(body) }).then((d: any) => d.template || d),
   remove: (id: string) => request(`/pptx-templates/${id}`, { method: 'DELETE' }),
-  thumbnailUrl: (id: string) => `${BASE}/pptx-templates/${id}/thumbnail`,
+  // <img> tags can't send custom headers, so fall back to the userId query param
+  // which requireAuth accepts as an alternative to X-User-Id.
+  thumbnailUrl: (id: string) => {
+    const userId = localStorage.getItem('userId') || '';
+    return `${BASE}/pptx-templates/${id}/thumbnail?userId=${encodeURIComponent(userId)}`;
+  },
 };
 
 export const adminPptxTemplates = {

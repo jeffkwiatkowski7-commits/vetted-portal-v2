@@ -67,7 +67,7 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const handleUpdateProject = async (data: { name: string; description: string; system_prompt: string; tool_sets: string[]; mcp_servers: string[]; file_ids: string[] }) => {
+  const handleUpdateProject = async (data: { name: string; description: string; system_prompt: string; tool_sets: string[]; mcp_servers: string[]; file_ids: string[]; pptx_template_id: string | null }) => {
     if (!project || !id) return;
     setSaving(true);
     try {
@@ -76,6 +76,7 @@ export default function ProjectDetailPage() {
         description: data.description,
         system_prompt: data.system_prompt,
         mcp_servers: data.mcp_servers || [],
+        pptx_template_id: data.pptx_template_id,
       });
 
       // Sync file assignments
@@ -92,7 +93,7 @@ export default function ProjectDetailPage() {
       setProjectFiles(updatedFiles);
       if (updatedFiles.length > 0) setRightPanelOpen(true);
 
-      setProject({ ...project, name: data.name, description: data.description, system_prompt: data.system_prompt, mcp_servers: data.mcp_servers as any });
+      setProject({ ...project, name: data.name, description: data.description, system_prompt: data.system_prompt, mcp_servers: data.mcp_servers as any, pptx_template_id: data.pptx_template_id });
       setProjectMcpIds(data.mcp_servers || []);
       setShowSettings(false);
       addToast({ type: 'success', title: 'Project updated' });
@@ -192,6 +193,7 @@ export default function ProjectDetailPage() {
             tool_sets: project.tool_sets as unknown as string[],
             mcp_servers: project.mcp_servers as unknown as string[],
             file_ids: projectFiles.map((f) => f.id),
+            pptx_template_id: (project as any).pptx_template_id ?? null,
           }}
           projectId={project.id}
           onSave={handleUpdateProject}

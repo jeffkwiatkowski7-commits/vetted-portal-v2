@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Upload, ChevronDown, ChevronUp, FileText, Check, Sparkles } from 'lucide-react';
 import * as api from '../../api';
 import type { LibraryFile, ProjectSkill } from '../../types';
+import TemplatePickerModal from '../templates/TemplatePickerModal';
 
 export interface ProjectFormData {
   name: string;
@@ -11,6 +12,7 @@ export interface ProjectFormData {
   mcp_servers: string[];
   default_model: string;
   file_ids: string[];
+  pptx_template_id: string | null;
 }
 
 interface Props {
@@ -120,6 +122,25 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
   const [allFiles, setAllFiles] = useState<LibraryFile[]>([]);
   const [showLibrary, setShowLibrary] = useState(false);
   const [projectSkills, setProjectSkills] = useState<ProjectSkill[]>([]);
+  const [pptxTemplateId, setPptxTemplateId] = useState<string | null>(initialData?.pptx_template_id ?? null);
+  const [pptxTemplateName, setPptxTemplateName] = useState<string>('');
+  const [pptxTemplateStatus, setPptxTemplateStatus] = useState<string>('active');
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+
+  // Hydrate the chip with the template's name when initialData provides an id.
+  useEffect(() => {
+    if (!pptxTemplateId) { setPptxTemplateName(''); return; }
+    api.pptxTemplates.list({ includeArchived: true })
+      .then((data: any) => {
+        const list = data.templates || data || [];
+        const tpl = list.find((t: any) => t.id === pptxTemplateId);
+        if (tpl) {
+          setPptxTemplateName(tpl.name);
+          setPptxTemplateStatus(tpl.status);
+        }
+      })
+      .catch(() => {});
+  }, [pptxTemplateId]);
 
   useEffect(() => { api.library.list().then(setAllFiles).catch(() => {}); }, []);
   useEffect(() => { api.mcpServers.list().then(setAvailableMcps).catch(() => {}); }, []);
@@ -147,7 +168,7 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    const result = await onSave({ name, description, system_prompt: systemPrompt, tool_sets: [], mcp_servers: enabledMcps, default_model: selectedModel, file_ids: selectedFileIds });
+    const result = await onSave({ name, description, system_prompt: systemPrompt, tool_sets: [], mcp_servers: enabledMcps, default_model: selectedModel, file_ids: selectedFileIds, pptx_template_id: pptxTemplateId });
     // Save project skills — use existing projectId or the newly created one
     const resolvedId = projectId || (result as any)?.id;
     const enabledSkills = projectSkills.filter((s) => s.enabled);
@@ -308,6 +329,39 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
                 </div>
               </div>
 
+              {/* Branding Template */}
+              <div>
+                <label className="block text-sm font-medium text-vetted-primary mb-1">Branding template</label>
+                <p className="text-xs text-vetted-text-muted mb-2">When set, presentation-style requests render as a branded slide deck.</p>
+                {pptxTemplateId ? (
+                  <div className="flex items-center gap-3 px-3 py-2 border border-vetted-border rounded-lg">
+                    <FileText size={14} className="text-vetted-text-muted flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate">
+                        {pptxTemplateName || pptxTemplateId}
+                        {pptxTemplateStatus === 'archived' && <span className="ml-2 text-xs text-vetted-text-muted">(archived)</span>}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPptxTemplateId(null)}
+                      className="p-0.5 hover:bg-vetted-surface rounded"
+                      title="Detach template"
+                    >
+                      <X size={13} className="text-vetted-text-muted" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowTemplatePicker(true)}
+                    className="text-sm px-3 py-2 border border-dashed border-vetted-border rounded-lg w-full text-vetted-text-muted hover:border-vetted-accent hover:text-vetted-primary transition-colors"
+                  >
+                    Choose template…
+                  </button>
+                )}
+              </div>
+
               {/* Skills */}
               {projectSkills.length > 0 && (
                 <div>
@@ -361,6 +415,18 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
           selected={selectedFileIds}
           onClose={() => setShowLibrary(false)}
           onConfirm={(ids) => { setSelectedFileIds(ids); setShowLibrary(false); }}
+        />
+      )}
+
+      {showTemplatePicker && (
+        <TemplatePickerModal
+          selectedId={pptxTemplateId}
+          onClose={() => setShowTemplatePicker(false)}
+          onSelect={(tpl) => {
+            setPptxTemplateId(tpl.id);
+            setPptxTemplateName(tpl.name);
+            setPptxTemplateStatus(tpl.status);
+          }}
         />
       )}
     </>

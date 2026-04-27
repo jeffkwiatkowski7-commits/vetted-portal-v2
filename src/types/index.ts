@@ -74,6 +74,7 @@ export interface Project {
   file_count?: number;
   member_count?: number;
   permission?: string;
+  pptx_template_id?: string | null;
 }
 
 export interface ProjectMember {

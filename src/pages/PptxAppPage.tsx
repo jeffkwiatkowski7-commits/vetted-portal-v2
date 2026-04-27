@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
-import { Upload, CheckCircle, AlertCircle, Loader2, ArrowLeft, Plus, Eye, Pencil, RefreshCw, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
+import { Upload, CheckCircle, AlertCircle, Loader2, ArrowLeft, Plus, Eye, Pencil, RefreshCw, Archive, ArchiveRestore, Trash2, Send } from 'lucide-react';
 import { TemplateRow, PreviewModal } from '../components/templates';
+import ProjectPickerModal from '../components/projects/ProjectPickerModal';
 import { pptxTemplates } from '../api';
 import type { PptxTemplate } from '../types';
 
@@ -50,6 +51,8 @@ export default function PptxAppPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+  const [applyForId, setApplyForId] = useState<string | null>(null);
+  const [applyForName, setApplyForName] = useState<string>('');
 
   const refreshTemplates = useCallback(async () => {
     try {
@@ -311,6 +314,13 @@ export default function PptxAppPage() {
                         <RefreshCw size={14} />
                       </button>
                       <button
+                        onClick={() => { setApplyForId(t.id); setApplyForName(t.name); }}
+                        title="Apply to project…"
+                        className="p-1.5 hover:bg-vetted-surface rounded text-vetted-text-muted"
+                      >
+                        <Send size={14} />
+                      </button>
+                      <button
                         onClick={() => handleArchiveToggle(t)}
                         title={t.status === 'active' ? 'Archive' : 'Restore'}
                         className="p-1.5 hover:bg-vetted-surface rounded text-vetted-text-muted"
@@ -517,6 +527,15 @@ export default function PptxAppPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {applyForId && (
+          <ProjectPickerModal
+            templateId={applyForId}
+            templateName={applyForName}
+            onClose={() => { setApplyForId(null); setApplyForName(''); }}
+            onApplied={() => addToast({ type: 'success', title: 'Applied to project' })}
+          />
         )}
       </div>
     </div>

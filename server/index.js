@@ -23,6 +23,7 @@ import { chunkText, embedTexts } from './lib/embeddings.js';
 import mcpManager from './lib/mcp-manager.js';
 import { hasTavily, tavilySearch } from './lib/tavily.js';
 import { parsePptxTemplate } from './lib/pptx-parser.js';
+import { buildBrandedCanvasBlock, getDesignTokens } from './lib/branded-canvas.js';
 import { buildDocx, buildXlsx } from './lib/exports.js';
 import { logError, getErrors, clearErrors, pruneOldErrors } from './lib/error-log.js';
 
@@ -273,6 +274,25 @@ async function runMigrations(db) {
 
   // Upgrade any v1 manifests to v2 (idempotent across boots)
   await upgradeManifestsToV2(db);
+}
+
+// Append the branded-canvas system-prompt block to `parts` if the project has
+// a template attached AND the template is owned by the project owner.
+// The owner_id check is defense-in-depth: PUT /api/projects validates ownership
+// at attach time, but we re-verify here so a database-state anomaly cannot
+// silently leak another user's branding into a chat.
+export function applyBrandedCanvasBlock(database, project, parts) {
+  if (!project?.pptx_template_id) return;
+  const tmpl = dbGet(
+    database,
+    'SELECT name, manifest_json FROM pptx_templates WHERE id = ? AND user_id = ?',
+    [project.pptx_template_id, project.owner_id]
+  );
+  if (!tmpl) return;
+  let manifest;
+  try { manifest = JSON.parse(tmpl.manifest_json); } catch { return; }
+  const tokens = getDesignTokens(manifest);
+  parts.push(buildBrandedCanvasBlock(tmpl.name, tokens));
 }
 
 // Per-boot migration: ensure Bill Ross has an IC Memo template seeded.
@@ -767,6 +787,12 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     if (hasProjectPrompt) {
       step('Applying project system prompt');
       parts.push(project.system_prompt.trim());
+    }
+
+    // Project-scoped branded canvas mode
+    if (project?.pptx_template_id) {
+      applyBrandedCanvasBlock(db, project, parts);
+      step('Branded canvas mode active');
     }
 
     // Tool sets

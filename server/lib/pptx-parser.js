@@ -22,7 +22,7 @@ const MAX_MEDIA_COUNT = 10;
  * Extract a hex color string from a PowerPoint color element.
  * Handles <a:srgbClr val="RRGGBB"/> and <a:sysClr lastClr="RRGGBB"/>.
  */
-function extractColor(el) {
+export function extractColor(el) {
   if (!el) return null;
   if (el.srgbClr) {
     let hex = el.srgbClr['@_val'] || (typeof el.srgbClr === 'string' ? el.srgbClr : null);
@@ -40,7 +40,7 @@ function extractColor(el) {
 /**
  * Apply lumMod/lumOff tint/shade modifiers to a hex color.
  */
-function applyLumModifiers(hex, node) {
+export function applyLumModifiers(hex, node) {
   if (!node || typeof node !== 'object') return `#${hex}`;
   const lumMod = node.lumMod?.['@_val'] || node.lumMod;
   const lumOff = node.lumOff?.['@_val'] || node.lumOff;
@@ -91,7 +91,7 @@ function applyLumModifiers(hex, node) {
 /**
  * Extract theme colors from a:clrScheme element.
  */
-function extractColors(clrScheme) {
+export function extractColors(clrScheme) {
   if (!clrScheme) return {};
   const colorNames = ['dk1', 'lt1', 'dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'hlink', 'folHlink'];
   const outputNames = ['dark1', 'light1', 'dark2', 'light2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'hyperlink', 'followedHyperlink'];
@@ -106,7 +106,7 @@ function extractColors(clrScheme) {
 /**
  * Extract heading and body fonts from theme font scheme.
  */
-function extractFonts(fontScheme) {
+export function extractFonts(fontScheme) {
   if (!fontScheme) return {};
   const fonts = {};
   const major = fontScheme.majorFont;

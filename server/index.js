@@ -2369,6 +2369,9 @@ app.delete('/api/pptx-templates/:id', requireAuth, (req, res) => {
     const abs = path.join(uploadsDir, row.thumbnail_path);
     try { fs.unlinkSync(abs); } catch {}
   }
+  // Cascading detach: null out the column on any projects that referenced this template.
+  // SQLite FKs are off, so we do it in application code. The index from Task 1 keeps it cheap.
+  dbRun(db, 'UPDATE projects SET pptx_template_id = NULL WHERE pptx_template_id = ?', [row.id]);
   dbRun(db, 'DELETE FROM pptx_templates WHERE id = ? AND user_id = ?', [row.id, userId]);
   res.status(204).end();
 });

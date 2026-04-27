@@ -31,6 +31,19 @@ describe('extractManifest', () => {
     expect(typeof manifest.design_tokens.fonts.body).toBe('string');
     expect(manifest.design_tokens.fonts.heading.length).toBeGreaterThan(0);
 
+    // Verify extraction actually pulls from the deck's theme.xml — not just
+    // the per-key fallback to brand defaults. The seed deck's primary color
+    // (theme dark1) is "#000000", which differs from the default "#1A1A1A".
+    // If extraction silently failed, this assertion would fail.
+    const brandDefaults = { primary: '#1A1A1A', accent: '#C4A962', background: '#FFFFFF', heading: 'Playfair Display', body: 'Inter' };
+    const extractedDiffersFromDefaults =
+      manifest.design_tokens.colors.primary !== brandDefaults.primary ||
+      manifest.design_tokens.colors.accent !== brandDefaults.accent ||
+      manifest.design_tokens.colors.background !== brandDefaults.background ||
+      manifest.design_tokens.fonts.heading !== brandDefaults.heading ||
+      manifest.design_tokens.fonts.body !== brandDefaults.body;
+    expect(extractedDiffersFromDefaults).toBe(true);
+
     expect(Buffer.isBuffer(thumbnailBuffer)).toBe(true);
     expect(thumbnailBuffer.length).toBeGreaterThan(0);
 

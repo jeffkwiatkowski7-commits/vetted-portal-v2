@@ -5,6 +5,7 @@ import * as api from '../../api';
 import { Copy, ThumbsUp, ThumbsDown, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import ModelReasoning from '../pipeline/ModelReasoning';
 import CanvasBlock from './CanvasBlock';
+import CanvasDeckBlock from './CanvasDeckBlock';
 import { MessageAttachment } from './MessageAttachment';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -83,6 +84,9 @@ function MarkdownContent({ content }: { content: string }) {
           code: ({ children, className }) => {
             if (className?.includes('language-canvas-html')) {
               return <CanvasBlock html={String(children)} />;
+            }
+            if (className?.includes('language-canvas-deck')) {
+              return <CanvasDeckBlock body={String(children)} />;
             }
             const isBlock = className?.includes('language-');
             if (isBlock) {

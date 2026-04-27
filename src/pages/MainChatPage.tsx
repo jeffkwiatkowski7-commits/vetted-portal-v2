@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Send, Loader2, Paperclip, X, ChevronDown, ChevronUp, Check, Download, Plus } from 'lucide-react';
 import LibraryPickerModal from '../components/chat/LibraryPickerModal';
 import CanvasBlock from '../components/chat/CanvasBlock';
+import CanvasDeckBlock from '../components/chat/CanvasDeckBlock';
 import ExportModal from '../components/chat/ExportModal';
 import { MessageAttachment } from '../components/chat/MessageAttachment';
 import { LibraryFile } from '../types';
@@ -257,6 +258,9 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
                 code: ({ className, children }) => {
                   if (className?.includes('language-canvas-html')) {
                     return <CanvasBlock html={String(children)} />;
+                  }
+                  if (className?.includes('language-canvas-deck')) {
+                    return <CanvasDeckBlock body={String(children)} />;
                   }
                   const isBlock = className?.includes('language-');
                   if (isBlock) {

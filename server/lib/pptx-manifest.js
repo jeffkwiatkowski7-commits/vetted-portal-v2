@@ -35,23 +35,55 @@ function collectText(node, out = []) {
   return out;
 }
 
-// Within a parsed slide XML, find the <p:sp> whose <p:nvSpPr><p:nvPr><p:ph type="title|ctrTitle"/>
-// is set, and pull the concatenated text out of its txBody.
+// Within a parsed slide XML, find the title shape using a 4-strategy fallback chain.
+// Handles both standard OOXML decks and custom-designed/Keynote-export decks where
+// the title placeholder may not carry an explicit type attribute.
 function extractTitleFromSlide(slideObj) {
   const sld = slideObj?.sld;
   if (!sld) return null;
-  const cSld = sld.cSld;
-  const spTree = cSld?.spTree;
+  const spTree = sld.cSld?.spTree;
   if (!spTree) return null;
   const sps = Array.isArray(spTree.sp) ? spTree.sp : (spTree.sp ? [spTree.sp] : []);
+
+  // Extract trimmed text from a shape's txBody. Returns null if empty.
+  const shapeText = (sp) => {
+    const text = collectText(sp.txBody).join('').trim();
+    return text.length > 0 ? text : null;
+  };
+
+  // Strategy 1: explicit title/ctrTitle placeholder type
   for (const sp of sps) {
-    const ph = sp?.nvSpPr?.nvPr?.ph;
-    const phType = ph?.['@_type'];
+    const phType = sp?.nvSpPr?.nvPr?.ph?.['@_type'];
     if (phType === 'title' || phType === 'ctrTitle') {
-      const text = collectText(sp.txBody).join('').trim();
-      if (text.length > 0) return text;
+      const t = shapeText(sp);
+      if (t) return t;
     }
   }
+
+  // Strategy 2: shape named "Title*" (Keynote/PowerPoint convention for designed decks)
+  for (const sp of sps) {
+    const name = sp?.nvSpPr?.cNvPr?.['@_name'];
+    if (name && /^title/i.test(name)) {
+      const t = shapeText(sp);
+      if (t) return t;
+    }
+  }
+
+  // Strategy 3: placeholder at idx=0 (conventionally the title slot)
+  for (const sp of sps) {
+    const ph = sp?.nvSpPr?.nvPr?.ph;
+    if (ph && ph['@_idx'] === '0') {
+      const t = shapeText(sp);
+      if (t) return t;
+    }
+  }
+
+  // Strategy 4: first text-bearing shape (heuristic, truncated to 80 chars)
+  for (const sp of sps) {
+    const t = shapeText(sp);
+    if (t) return t.length > 80 ? t.slice(0, 77) + '...' : t;
+  }
+
   return null;
 }
 

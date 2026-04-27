@@ -26,6 +26,13 @@ describe('extractManifest', () => {
       expect(Buffer.isBuffer(thumbnailBuffer)).toBe(true);
       expect(thumbnailBuffer.length).toBeGreaterThan(0);
     }
+
+    // With the enhanced fallback chain, the seed pptx should produce SOME real
+    // titles (not just "Slide N"). Specifically, given that the seed deck has
+    // designed slides with named title shapes, at least one slide title should
+    // NOT match the /^Slide \d+$/ fallback pattern.
+    const realTitles = manifest.slides.filter(s => !/^Slide \d+( \(parse error\))?$/.test(s.title));
+    expect(realTitles.length).toBeGreaterThan(0);
   });
 
   it('throws InvalidPptxError when given a non-zip file', async () => {

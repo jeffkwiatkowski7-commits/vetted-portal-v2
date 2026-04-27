@@ -108,19 +108,19 @@ export default function Sidebar() {
       </div>
 
       {/* New Chat Button */}
-      <div className="px-3 pb-1">
+      <div className="px-3 pb-0.5">
         <button
           onClick={handleNewChat}
           title={sidebarCollapsed ? (isInProjectChat ? 'New Chat (Projects)' : 'New Chat') : ''}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors border-l-4 border-l-transparent text-vetted-text-secondary hover:bg-white hover:bg-opacity-50"
+          className="w-full flex items-center gap-2.5 px-3 py-1 rounded-lg transition-colors border-l-4 border-l-transparent text-vetted-text-secondary hover:bg-white hover:bg-opacity-50"
         >
-          <Plus size={16} />
-          {!sidebarCollapsed && <span className="text-sm">{isInProjectChat ? 'New Chat (Projects)' : 'New Chat'}</span>}
+          <Plus size={14} />
+          {!sidebarCollapsed && <span className="text-xs">{isInProjectChat ? 'New Chat (Projects)' : 'New Chat'}</span>}
         </button>
       </div>
 
       {/* Navigation */}
-      <nav className="px-3 space-y-1 mb-6">
+      <nav className="px-3 space-y-0 mb-4">
         {[
           { path: '/projects', icon: FolderOpen, label: 'Projects' },
           { path: '/library', icon: BookOpen, label: 'Library' },
@@ -135,14 +135,14 @@ export default function Sidebar() {
             key={path}
             onClick={() => navigate(path)}
             title={sidebarCollapsed ? label : ''}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors border-l-4 ${
+            className={`w-full flex items-center gap-2.5 px-3 py-1 rounded-lg transition-colors border-l-4 ${
               isActive(path)
                 ? 'bg-white border-l-vetted-accent text-vetted-primary'
                 : 'border-l-transparent text-vetted-text-secondary hover:bg-white hover:bg-opacity-50'
             }`}
           >
-            <Icon size={16} />
-            {!sidebarCollapsed && <span className="text-sm">{label}</span>}
+            <Icon size={14} />
+            {!sidebarCollapsed && <span className="text-xs">{label}</span>}
           </button>
         ))}
       </nav>
@@ -208,7 +208,7 @@ export default function Sidebar() {
 
       {/* User Footer */}
       <div className="p-3 border-t border-vetted-border">
-        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.12.0</p>
+        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.12.1</p>
       </div>
 
       {/* Context Menu */}

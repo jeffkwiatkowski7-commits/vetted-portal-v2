@@ -2324,7 +2324,7 @@ app.get('/api/pptx-templates/:id/thumbnail', requireAuth, (req, res) => {
   if (!fs.existsSync(abs)) return res.status(404).json({ error: 'Not found' });
 
   res.set('Content-Type', 'image/jpeg');
-  res.set('Cache-Control', 'private, max-age=86400, immutable');
+  res.set('Cache-Control', 'private, max-age=86400');
   fs.createReadStream(abs)
     .on('error', (err) => {
       if (!res.headersSent) res.status(500).json({ error: 'Stream error' });

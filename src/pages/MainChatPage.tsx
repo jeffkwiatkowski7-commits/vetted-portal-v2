@@ -390,6 +390,14 @@ export default function MainChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const attachButtonRef = useRef<HTMLButtonElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 240) + 'px';
+    }
+  }, [input]);
   const mcpButtonRef = useRef<HTMLButtonElement>(null);
   const mcpPopoverRef = useRef<HTMLDivElement>(null);
 
@@ -660,6 +668,7 @@ export default function MainChatPage() {
 
       {/* Textarea */}
       <textarea
+        ref={textareaRef}
         value={input}
         onChange={e => setInput(e.target.value)}
         onKeyDown={e => {
@@ -671,8 +680,8 @@ export default function MainChatPage() {
         onPaste={handlePaste}
         placeholder="Ask anything…"
         disabled={chatting}
-        rows={3}
-        className="w-full resize-none text-sm text-vetted-primary placeholder-vetted-text-muted focus:outline-none disabled:opacity-50 bg-transparent"
+        rows={1}
+        className="w-full resize-none text-sm text-vetted-primary placeholder-vetted-text-muted focus:outline-none disabled:opacity-50 bg-transparent min-h-[72px] max-h-[240px]"
       />
 
       {/* Bottom toolbar */}

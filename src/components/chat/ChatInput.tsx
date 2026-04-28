@@ -365,7 +365,7 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
               spellCheck={true}
               autoComplete="on"
               placeholder="Ask anything..."
-              className="w-full px-3 pt-2.5 pb-10 text-sm leading-relaxed resize-none bg-transparent outline-none placeholder:text-vetted-text-muted min-h-[56px] max-h-[160px]"
+              className="w-full px-3 pt-2.5 pb-10 text-sm leading-relaxed resize-none bg-transparent outline-none placeholder:text-vetted-text-muted min-h-[56px] max-h-[240px]"
               rows={1}
             />
 

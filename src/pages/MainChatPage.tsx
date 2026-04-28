@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, Loader2, Paperclip, X, ChevronDown, ChevronUp, Check, Download, Plus } from 'lucide-react';
+import { Send, Square, Paperclip, X, ChevronDown, ChevronUp, Check, Download, Plus } from 'lucide-react';
 import LibraryPickerModal from '../components/chat/LibraryPickerModal';
 import CanvasBlock from '../components/chat/CanvasBlock';
 import CanvasDeckBlock from '../components/chat/CanvasDeckBlock';
@@ -453,6 +453,11 @@ export default function MainChatPage() {
 
   // Track whether we're mid-send so navigation after chat creation doesn't clobber messages
   const sendingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const handleStop = () => {
+    abortRef.current?.abort('user-stopped');
+  };
 
   // Load existing chat when navigating to /chat/:id
   useEffect(() => {
@@ -572,6 +577,7 @@ export default function MainChatPage() {
     // Seed assistant placeholder with immediate step — user sees it right away
     setMessages(prev => [...prev, { role: 'assistant', content: '', steps: ['Sending request…'] }]);
 
+    abortRef.current = new AbortController();
     try {
       const result = await (api.chats as any).streamMessage(
         activeChatId!,
@@ -584,25 +590,40 @@ export default function MainChatPage() {
             updated[updated.length - 1] = last;
             return updated;
           });
-        }
+        },
+        abortRef.current.signal,
       );
 
-      // Done event is minimal — fetch full messages from API
-      const doneChatId = result.chatId || activeChatId;
-      const chat = await api.chats.get(doneChatId);
-      const lastMsg = (chat.messages ?? []).filter((m: any) => m.role === 'assistant').pop();
-      setMessages(prev => {
-        const updated = [...prev];
-        updated[updated.length - 1] = {
-          ...updated[updated.length - 1],
-          content: lastMsg?.content ?? '',
-          citations: lastMsg?.citations ?? undefined,
-          reasoning: lastMsg?.reasoning ?? undefined,
-          attachments: lastMsg?.attachments ?? undefined,
-          timestamp: lastMsg?.created_at ?? new Date().toISOString(),
-        };
-        return updated;
-      });
+      // User-stopped: avoid racing the server's async DB write — show the marker
+      // immediately. The server saves the same marker; nothing to fetch.
+      if (result?.type === 'stopped') {
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            content: '*[Response stopped by user]*',
+            timestamp: new Date().toISOString(),
+          };
+          return updated;
+        });
+      } else {
+        // Done event is minimal — fetch full messages from API
+        const doneChatId = result.chatId || activeChatId;
+        const chat = await api.chats.get(doneChatId);
+        const lastMsg = (chat.messages ?? []).filter((m: any) => m.role === 'assistant').pop();
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            content: lastMsg?.content ?? '',
+            citations: lastMsg?.citations ?? undefined,
+            reasoning: lastMsg?.reasoning ?? undefined,
+            attachments: lastMsg?.attachments ?? undefined,
+            timestamp: lastMsg?.created_at ?? new Date().toISOString(),
+          };
+          return updated;
+        });
+      }
 
     } catch (err: any) {
       setMessages(prev => {
@@ -616,6 +637,7 @@ export default function MainChatPage() {
     } finally {
       setChatting(false);
       sendingRef.current = false;
+      abortRef.current = null;
       // Refresh sidebar chat list so new chat appears
       api.chats.list().then(setChats).catch(() => {});
     }
@@ -628,7 +650,7 @@ export default function MainChatPage() {
   const firstName = user?.display_name?.split(' ')[0] ?? 'there';
 
   const inputCard = (
-    <div className={`rounded-2xl border border-vetted-border bg-white p-3 shadow-sm ${chatting ? 'opacity-60 pointer-events-none' : ''}`}>
+    <div className={`rounded-2xl border border-vetted-border bg-white p-3 shadow-sm ${chatting ? 'opacity-60' : ''}`}>
       {/* File chips — shown when files are pending */}
       {pendingFiles.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
@@ -771,11 +793,14 @@ export default function MainChatPage() {
             )}
           </div>
           <button
-            onClick={handleSend}
-            disabled={!input.trim() || chatting}
-            className="p-1.5 rounded-lg bg-vetted-primary text-white disabled:opacity-40 hover:bg-opacity-80 transition-colors"
+            onClick={chatting ? handleStop : handleSend}
+            disabled={!chatting && !input.trim()}
+            title={chatting ? 'Stop generating' : 'Send'}
+            className={`p-1.5 rounded-lg text-white disabled:opacity-40 transition-colors ${
+              chatting ? 'bg-red-600 hover:bg-red-700' : 'bg-vetted-primary hover:bg-opacity-80'
+            }`}
           >
-            {chatting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+            {chatting ? <Square size={16} className="fill-white" /> : <Send size={16} />}
           </button>
         </div>
       </div>

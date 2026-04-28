@@ -23,7 +23,7 @@ function getClient() {
  * General document Q&A / project chat via Claude direct API.
  * Supports MCP tools via the mcpToolMap + mcpManager passed from the caller.
  */
-export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null, modelOverride = null, { claudeTools = [], mcpToolMap = {}, mcpManager = null, builtinToolMap = {}, images = [] } = {}) {
+export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null, modelOverride = null, { claudeTools = [], mcpToolMap = {}, mcpManager = null, builtinToolMap = {}, images = [], signal = null } = {}) {
   let textDocs = docs.filter((d) => d.text !== undefined);
   let pdfDocs = docs.filter((d) => d.base64 !== undefined);
 
@@ -180,9 +180,10 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
 
   // Tool-calling loop
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+    if (signal?.aborted) throw new Error('aborted');
     let response;
     try {
-      response = await client.messages.create(params);
+      response = await client.messages.create(params, signal ? { signal } : undefined);
     } catch (err) {
       // On schema errors, dump the tool the API is complaining about so we
       // can see exactly what the offending MCP server is sending.
@@ -264,7 +265,8 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
 
   // Exhausted iterations — do a final call without tools
   delete params.tools;
-  const finalResponse = await client.messages.create(params);
+  if (signal?.aborted) throw new Error('aborted');
+  const finalResponse = await client.messages.create(params, signal ? { signal } : undefined);
   totalInputTokens += finalResponse.usage?.input_tokens || 0;
   totalOutputTokens += finalResponse.usage?.output_tokens || 0;
 

@@ -670,7 +670,20 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
 
   // Send a heartbeat comment every 15s to keep the SSE connection alive through proxies
   const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 15000);
-  req.on('close', () => clearInterval(heartbeat));
+
+  // Per-request abort controller — fires when the SSE socket closes (user-stopped or
+  // network drop). Threaded into the AI SDK so the in-flight HTTP request is cancelled
+  // and Anthropic/Gemini stop generating tokens we'll never display.
+  const aiAbort = new AbortController();
+  // NOTE: Use `res.on('close')`, not `req.on('close')`. In modern Node, `req` emits
+  // 'close' the moment the request body stream ends (i.e., right after Express has
+  // parsed the POST body) — which is well before any AI call returns. `res` only
+  // emits 'close' when the response stream terminates, and pairs with
+  // `res.writableEnded` to distinguish a normal end() from a client disconnect.
+  res.on('close', () => {
+    clearInterval(heartbeat);
+    if (!res.writableEnded) aiAbort.abort('client-disconnected');
+  });
 
   const now = new Date().toISOString();
 
@@ -1071,10 +1084,10 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       });
 
       step('Calling Claude');
-      result = await claudeDirectChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, { claudeTools, mcpToolMap, mcpManager, builtinToolMap, images });
+      result = await claudeDirectChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, { claudeTools, mcpToolMap, mcpManager, builtinToolMap, images, signal: aiAbort.signal });
     } else {
       step('Calling Gemini');
-      result = await geminiChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, geminiTools, images);
+      result = await geminiChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, geminiTools, images, aiAbort.signal);
     }
 
     if (result.text) {
@@ -1086,6 +1099,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       const MAX_ITERATIONS = 10;
 
       for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+        if (aiAbort.signal.aborted) throw new Error('aborted');
         loopContents.push({ role: 'model', parts: modelParts });
 
         const fnCalls = modelParts.filter(p => p.functionCall);
@@ -1133,7 +1147,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
 
         loopContents.push({ role: 'user', parts: fnResponseParts });
 
-        const nextResult = await geminiGenerate(loopContents, {}, geminiTools, modelId);
+        const nextResult = await geminiGenerate(loopContents, {}, geminiTools, modelId, aiAbort.signal);
         const candidate = nextResult.candidates?.[0];
         const nextParts = candidate?.content?.parts ?? [];
 
@@ -1147,7 +1161,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       }
 
       if (!aiText) {
-        const fallback = await geminiGenerate(loopContents, {}, [], modelId);
+        const fallback = await geminiGenerate(loopContents, {}, [], modelId, aiAbort.signal);
         aiText = extractGroundedResponse(fallback).text;
       }
     }
@@ -1155,6 +1169,20 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     aiContent = aiText;
     step('Response received');
   } catch (err) {
+    const isUserAbort = err?.name === 'AbortError' || err?.message === 'aborted' || aiAbort.signal.aborted;
+    if (isUserAbort) {
+      console.log('[chat] AI request aborted by client');
+      // partialText is empty for non-streaming requests; the marker still records the intent.
+      const partialText = '';
+      aiContent = partialText.trim() + (partialText ? '\n\n' : '') + '*[Response stopped by user]*';
+      // Skip the keyword-based error mapping below — it would mistake AbortError for an
+      // auth/quota failure and overwrite the marker with a misleading message.
+      logError({
+        source: 'server',
+        message: 'Chat AI aborted by client',
+        route: 'chat:messages:sse',
+      });
+    } else {
     logError({
       source: 'server',
       message: err.message || 'Chat AI error',
@@ -1172,6 +1200,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       aiContent = `The AI model \`${failedModel}\` is not available in project \`${process.env.GCP_PROJECT || 'bill-leases'}\` (location: \`${process.env.GCP_LOCATION || 'global'}\`).\n\nError: \`${msg.slice(0, 200)}\``;
     } else {
       aiContent = `Sorry, I was unable to generate a response. Please try again.\n\nError: \`${msg.slice(0, 200)}\``;
+    }
     }
   }
 

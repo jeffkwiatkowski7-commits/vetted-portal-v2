@@ -55,6 +55,15 @@ interface AppState {
   addLiveStep: (step: { message: string; ts: string }) => void;
   clearLiveSteps: () => void;
 
+  // Stop-mid-stream: lifted out of <ChatInput> so the loading flag survives remounts
+  // (e.g., when the project chat layout flips from empty-state to with-messages on
+  // the first send, which previously unmounted the input mid-stream and lost both
+  // the loading state and the abort controller).
+  chatStreaming: boolean;
+  chatAbort: AbortController | null;
+  setChatStreaming: (v: boolean) => void;
+  setChatAbort: (c: AbortController | null) => void;
+
   // Quick actions
   quickActionText: string;
   setQuickActionText: (v: string) => void;
@@ -150,6 +159,11 @@ export const useStore = create<AppState>((set, get) => ({
   liveSteps: [],
   addLiveStep: (step) => set((s) => ({ liveSteps: [...s.liveSteps, step] })),
   clearLiveSteps: () => set({ liveSteps: [] }),
+
+  chatStreaming: false,
+  chatAbort: null,
+  setChatStreaming: (v) => set({ chatStreaming: v }),
+  setChatAbort: (c) => set({ chatAbort: c }),
 
   quickActionText: '',
   setQuickActionText: (v) => set({ quickActionText: v }),

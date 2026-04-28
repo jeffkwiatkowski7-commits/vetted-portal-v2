@@ -76,12 +76,13 @@ export const chats = {
     id: string,
     data: any,
     onStep: (step: { message: string; ts: string }) => void,
+    externalSignal?: AbortSignal,
   ): Promise<any> =>
     new Promise(async (resolve, reject) => {
       const controller = new AbortController();
       // 3-minute overall timeout for the entire stream
       const timeout = setTimeout(() => {
-        controller.abort();
+        controller.abort('timeout');
         reject(new Error('Request timed out — the AI took too long to respond'));
       }, 180000);
       let settled = false;
@@ -89,8 +90,18 @@ export const chats = {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
+        if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort);
         fn(val);
       };
+      const onExternalAbort = () => {
+        controller.abort('user-stopped');
+        // Resolve (not reject) so callers can clean up UI without showing an error toast
+        settle(resolve, { type: 'stopped' });
+      };
+      if (externalSignal) {
+        if (externalSignal.aborted) return onExternalAbort();
+        externalSignal.addEventListener('abort', onExternalAbort);
+      }
       try {
         const userId = localStorage.getItem('userId') || '';
         const res = await fetch(`${BASE}/chats/${id}/messages`, {
@@ -127,7 +138,10 @@ export const chats = {
         // Stream ended without a done event — connection was likely dropped
         if (!settled) settle(reject, new Error('Connection lost — please try again'));
       } catch (err: any) {
-        if (err?.name === 'AbortError') return; // timeout already rejected
+        if (err?.name === 'AbortError') {
+          // User-stopped already settled via onExternalAbort; timeout already rejected.
+          return;
+        }
         settle(reject, err);
       }
     }),

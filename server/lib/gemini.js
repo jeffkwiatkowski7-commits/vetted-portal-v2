@@ -53,12 +53,13 @@ function getClient() {
   return _client;
 }
 
-async function generate(contents, genConfig = {}, tools = [], modelOverride = null) {
+async function generate(contents, genConfig = {}, tools = [], modelOverride = null, signal = null) {
   const client = getClient();
   const primaryModel = resolveModelId(modelOverride) || config.modelId;
   const modelsToTry = [primaryModel, ...(MODEL_FALLBACK_CHAIN[primaryModel] || [])];
 
   for (let modelIdx = 0; modelIdx < modelsToTry.length; modelIdx++) {
+    if (signal?.aborted) throw new Error('aborted');
     const model = modelsToTry[modelIdx];
     const req = {
       model,
@@ -74,7 +75,11 @@ async function generate(contents, genConfig = {}, tools = [], modelOverride = nu
     // Retry with exponential backoff for transient 429/quota errors
     const MAX_RETRIES = 3;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (signal?.aborted) throw new Error('aborted');
       try {
+        // The @google/genai SDK doesn't accept AbortSignal in the request, so
+        // cancellation is best-effort: we check signal.aborted between attempts
+        // and at the top of each tool-loop iteration upstream.
         const result = await client.models.generateContent(req);
         if (modelIdx > 0) {
           console.log(`[gemini] Succeeded with fallback model: ${model}`);
@@ -114,8 +119,8 @@ async function generate(contents, genConfig = {}, tools = [], modelOverride = nu
  */
 const MAX_CONTINUATIONS = 3;
 
-async function generateWithContinuation(contents, genConfig = {}, tools = [], modelOverride = null) {
-  let result = await generate(contents, genConfig, tools, modelOverride);
+async function generateWithContinuation(contents, genConfig = {}, tools = [], modelOverride = null, signal = null) {
+  let result = await generate(contents, genConfig, tools, modelOverride, signal);
   let fullText = "";
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
@@ -145,7 +150,8 @@ async function generateWithContinuation(contents, genConfig = {}, tools = [], mo
       { role: "user", parts: [{ text: "Continue exactly where you left off. Do not repeat any content already provided." }] },
     ];
 
-    result = await generate(continuationContents, genConfig, tools, modelOverride);
+    if (signal?.aborted) throw new Error('aborted');
+    result = await generate(continuationContents, genConfig, tools, modelOverride, signal);
     lastResult = result;
   }
 
@@ -210,12 +216,13 @@ const MAX_SEARCH_ITERATIONS = 5;
  * Run a Gemini generate call with Tavily web_search tool-calling loop.
  * Returns { text, searchQueries }.
  */
-async function generateWithTavily(contents, genConfig = {}, modelOverride = null, onStep = null) {
+async function generateWithTavily(contents, genConfig = {}, modelOverride = null, onStep = null, signal = null) {
   const searchQueries = [];
   let currentContents = [...contents];
 
   for (let i = 0; i < MAX_SEARCH_ITERATIONS; i++) {
-    const result = await generate(currentContents, genConfig, TAVILY_TOOL_DECL, modelOverride);
+    if (signal?.aborted) throw new Error('aborted');
+    const result = await generate(currentContents, genConfig, TAVILY_TOOL_DECL, modelOverride, signal);
     const candidate = result.candidates?.[0];
     const parts = candidate?.content?.parts ?? [];
 
@@ -557,7 +564,7 @@ Today's date is ${today}.
 
 // ── General document Q&A / project chat ─────────────────────────────
 
-export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null, modelOverride = null, tools = [], images = []) {
+export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null, modelOverride = null, tools = [], images = [], signal = null) {
   const textDocs = docs.filter((d) => d.text !== undefined);
   const pdfDocs = docs.filter((d) => d.base64 !== undefined);
 
@@ -602,11 +609,11 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
   if (tools.length === 0) {
     let result, searchQueries = [];
     if (hasTavily()) {
-      const tavilyResult = await generateWithTavily(contents, {}, modelOverride, onStep);
+      const tavilyResult = await generateWithTavily(contents, {}, modelOverride, onStep, signal);
       result = tavilyResult.result;
       searchQueries = tavilyResult.searchQueries;
     } else {
-      result = await generateWithContinuation(contents, {}, [], modelOverride);
+      result = await generateWithContinuation(contents, {}, [], modelOverride, signal);
     }
     const usageMeta = result?.response?.usageMetadata;
     const inputTokens = result._totalInputTokens || usageMeta?.promptTokenCount || 0;
@@ -620,7 +627,7 @@ export async function chatWithDocuments(docs, userMessage, chatHistory = [], sys
   }
 
   // With tools — single generate call, return raw parts for caller's tool loop
-  const result = await generate(contents, {}, tools, modelOverride);
+  const result = await generate(contents, {}, tools, modelOverride, signal);
   const candidate = result.candidates?.[0];
   const parts = candidate?.content?.parts ?? [];
 

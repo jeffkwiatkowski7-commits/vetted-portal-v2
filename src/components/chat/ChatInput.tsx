@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../../store';
 import * as api from '../../api';
-import { Send, Paperclip, Share2, ChevronDown, Plus } from 'lucide-react';
+import { Send, Square, Paperclip, Share2, ChevronDown, Plus } from 'lucide-react';
 import { LibraryFile } from '../../types';
 import LibraryPickerModal from './LibraryPickerModal';
 import FileTypeBadge from './FileTypeBadge';
@@ -58,10 +58,12 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
     quickActionText, setQuickActionText,
     setAiThinking, addLiveStep, clearLiveSteps,
     chatAttachedFiles, setChatAttachedFiles, setProjectFiles, setRightPanelOpen,
+    chatStreaming, chatAbort, setChatStreaming, setChatAbort,
   } = useStore();
   const [message, setMessage] = useState('');
   const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const loading = chatStreaming;
+  const setLoading = setChatStreaming;
   const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState<ModelOption | null>(null);
 
@@ -86,6 +88,10 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
   const [showModelSelect, setShowModelSelect] = useState(false);
   const [pastedImages, setPastedImages] = useState<Array<{ base64: string; mimeType: string }>>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleStop = () => {
+    chatAbort?.abort('user-stopped');
+  };
   const paperclipButtonRef = useRef<HTMLButtonElement>(null);
 
   // MCP Tools state
@@ -231,14 +237,31 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
 
       if (!hidden) { clearLiveSteps(); setAiThinking(true); }
       const modelValue = selectedModel?.value || 'gemini';
+      const controller = new AbortController();
+      setChatAbort(controller);
       const sendResult = await api.chats.streamMessage(
         chatId!,
         { content, model: modelValue, modelId: selectedModel?.modelId, temperature, attachments: files.map((f) => f.id), images: pastedImages.length > 0 ? pastedImages : undefined },
         hidden ? () => {} : (step) => addLiveStep(step),
+        controller.signal,
       );
       if (!hidden) { setAiThinking(false); clearLiveSteps(); }
 
-      if (chatId) {
+      // User-stopped: server's DB write is async; append the marker locally so the
+      // user sees stop took effect without racing the persistence path.
+      if (sendResult?.type === 'stopped') {
+        if (chatId) {
+          setActiveChat({
+            ...(activeChat || { id: chatId, title: content.slice(0, 50), messages: [] }),
+            id: chatId,
+            messages: [
+              ...((activeChat?.messages) || []).filter((m: any) => !String(m.id || '').startsWith('optimistic-')),
+              { id: `optimistic-${Date.now()}`, role: 'user', content, created_at: new Date().toISOString(), images: pastedImages.length > 0 ? pastedImages : null },
+              { id: `optimistic-asst-${Date.now()}`, role: 'assistant', content: '*[Response stopped by user]*', created_at: new Date().toISOString() },
+            ],
+          } as any);
+        }
+      } else if (chatId) {
         const updated = await api.chats.get(chatId);
         // Merge steps from send response into the assistant message
         if (sendResult?.messages) {
@@ -255,7 +278,7 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
         setActiveChat(updated);
       }
 
-      if (!hidden) addToast({ type: 'success', title: 'Message sent' });
+      if (!hidden && sendResult?.type !== 'stopped') addToast({ type: 'success', title: 'Message sent' });
     } catch (err) {
       if (!hidden) { setAiThinking(false); clearLiveSteps(); }
       if (!hidden) addToast({
@@ -265,6 +288,7 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
       });
     } finally {
       setLoading(false);
+      setChatAbort(null);
       textareaRef.current?.focus();
       // Refresh sidebar chat list so new/updated chats appear
       api.chats.list().then(setChats).catch(() => {});
@@ -274,6 +298,7 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      if (loading) return; // Stop button is the only action while streaming
       handleSendMessage();
     }
   };
@@ -505,18 +530,20 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
                 </div>
 
                 <button
-                  onClick={handleSendMessage}
-                  disabled={loading || (!message.trim() && pastedImages.length === 0 && !demoActive)}
+                  onClick={loading ? handleStop : handleSendMessage}
+                  disabled={!loading && !message.trim() && pastedImages.length === 0 && !demoActive}
                   className={`p-2 rounded-full transition-all ${
-                    demoActive && demoHighlight === 'send-button'
-                      ? 'bg-vetted-accent text-vetted-primary ring-2 ring-vetted-accent/40'
-                      : (message.trim() || pastedImages.length > 0) && !loading
-                        ? 'bg-vetted-primary text-white hover:bg-gray-800'
-                        : 'bg-vetted-border text-vetted-text-muted cursor-not-allowed'
+                    loading
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : demoActive && demoHighlight === 'send-button'
+                        ? 'bg-vetted-accent text-vetted-primary ring-2 ring-vetted-accent/40'
+                        : (message.trim() || pastedImages.length > 0)
+                          ? 'bg-vetted-primary text-white hover:bg-gray-800'
+                          : 'bg-vetted-border text-vetted-text-muted cursor-not-allowed'
                   }`}
-                  title="Send (Enter)"
+                  title={loading ? 'Stop generating' : 'Send (Enter)'}
                 >
-                  <Send size={16} />
+                  {loading ? <Square size={16} className="fill-white" /> : <Send size={16} />}
                 </button>
               </div>
             </div>

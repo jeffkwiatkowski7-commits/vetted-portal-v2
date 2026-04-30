@@ -269,11 +269,51 @@ async function runMigrations(db) {
     console.log('Migration: created wross@prepfunds.net');
   }
 
+  // Ensure the PowerPoint Template Extractor app row exists. Production DBs were
+  // seeded before this app was added to seed.js, so the row is missing. Idempotent
+  // by route uniqueness.
+  ensurePptxParserApp(db);
+
   // Ensure Bill Ross has his IC Memo template (idempotent across boots)
   await ensureWrossIcMemoTemplate(db);
 
   // Upgrade any v1 manifests to v2 (idempotent across boots)
   await upgradeManifestsToV2(db);
+}
+
+function ensurePptxParserApp(database) {
+  const existing = dbGet(database, "SELECT id FROM apps WHERE route = '/apps/pptx-parser'");
+  if (existing) return;
+
+  const owner = dbGet(database, "SELECT id FROM users WHERE email = 'jeffk@vettedbot.com'")
+    || dbGet(database, "SELECT id FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1");
+  if (!owner) {
+    console.warn('Migration: no admin user available, skipping PowerPoint Template Extractor app seed');
+    return;
+  }
+
+  const now = new Date().toISOString();
+  dbRun(database, `
+    INSERT INTO apps (id, name, description, icon, category, model, temperature, tool_sets, visibility, status, usage_count, route, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    uuidv4(),
+    'PowerPoint Template Extractor',
+    'Extract design tokens from PowerPoint templates — colors, fonts, backgrounds, and layouts — saved as JSON to your Library for use with Canvas Mode',
+    '📊',
+    'data',
+    'gemini-3',
+    0.5,
+    JSON.stringify([]),
+    'all',
+    'active',
+    0,
+    '/apps/pptx-parser',
+    owner.id,
+    now,
+    now
+  ]);
+  console.log('Migration: inserted PowerPoint Template Extractor app row');
 }
 
 // Append the branded-canvas system-prompt block to `parts` if the project has

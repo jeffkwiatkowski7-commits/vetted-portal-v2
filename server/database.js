@@ -427,6 +427,9 @@ export async function initializeDatabase() {
   try { db.run(`ALTER TABLE projects ADD COLUMN pptx_template_id TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
   try { db.run(`CREATE INDEX IF NOT EXISTS idx_projects_pptx_template ON projects(pptx_template_id)`); } catch (e) { /* already exists */ }
 
+  // Add route to apps for route-based apps (e.g. /apps/pptx-parser)
+  try { db.run(`ALTER TABLE apps ADD COLUMN route TEXT`); } catch (e) { /* already exists */ }
+
   // Migrate MCP servers: remove broken packages, fix Sequential Thinking package name
   try {
     db.run(`DELETE FROM mcp_servers WHERE id IN ('mcp-brave-search', 'mcp-fetch', 'mcp-puppeteer')`);

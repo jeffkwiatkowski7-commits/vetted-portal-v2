@@ -1661,7 +1661,10 @@ app.post('/api/library/:id/promote', requireAuth, (req, res) => {
 app.put('/api/library/:id', requireAuth, asyncRoute(async (req, res) => {
   const { original_name, project_id } = req.body;
 
-  const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+  const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
+  const file = isAdmin
+    ? dbGet(db, 'SELECT * FROM library_files WHERE id = ?', [req.params.id])
+    : dbGet(db, 'SELECT * FROM library_files WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
   if (!file) {
     return res.status(404).json({ error: 'File not found' });
   }

@@ -208,7 +208,7 @@ export default function Sidebar() {
 
       {/* User Footer */}
       <div className="p-3 border-t border-vetted-border">
-        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.13.3</p>
+        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.13.4</p>
       </div>
 
       {/* Context Menu */}

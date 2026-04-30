@@ -42,19 +42,47 @@ const BASE = '/api';
 
 async function request(path: string, options: RequestInit = {}) {
   const userId = localStorage.getItem('userId') || '';
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-User-Id': userId,
-      ...options.headers,
-    },
-  });
+  const method = (options.method || 'GET').toUpperCase();
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Id': userId,
+        ...options.headers,
+      },
+    });
+  } catch (networkErr) {
+    reportApiFailure({ method, path, status: 0, message: (networkErr as Error)?.message || 'Network error' });
+    throw networkErr;
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(err.error || `HTTP ${res.status}`);
+    const message = err.error || `HTTP ${res.status}`;
+    reportApiFailure({ method, path, status: res.status, message });
+    throw new Error(message);
   }
   return res.json();
+}
+
+// Report API failures to the server error log so admins can see what users hit.
+// Skips 401s (normal auth bounces) and never reports failures of the reporter itself.
+function reportApiFailure({ method, path, status, message }: { method: string; path: string; status: number; message: string }) {
+  if (status === 401) return;
+  if (path.startsWith('/admin/client-errors')) return;
+  if (!localStorage.getItem('userId')) return;
+  fetch(`${BASE}/admin/client-errors`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': localStorage.getItem('userId') || '',
+    },
+    body: JSON.stringify({
+      message: `${method} ${path} → ${status || 'network'}: ${message}`,
+      url: typeof window !== 'undefined' ? window.location.pathname : undefined,
+    }),
+  }).catch(() => {});
 }
 
 // Auth

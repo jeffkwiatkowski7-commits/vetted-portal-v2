@@ -58,6 +58,9 @@ export async function runDispatch({ project, prompt, onEvent = null, userId = nu
 
   emit('started', { run_id, project_id: project.id, project_name: project.name, prompt_summary: summarize(prompt) });
 
+  // Hoist localCtrl so the catch block can inspect localCtrl.signal.aborted.
+  const localCtrl = new AbortController();
+
   try {
     const preamble = `You are a sub-agent named "${project.name}" dispatched by an orchestrator. Use your tools and knowledge to handle the prompt below. Return ONE final assistant message — no recursion, no further dispatch. Be thorough and direct.`;
     const systemPromptOverride = `${preamble}\n\n${(project.system_prompt || '').trim()}`.trim();
@@ -111,9 +114,14 @@ export async function runDispatch({ project, prompt, onEvent = null, userId = nu
 
     const onStep = (msg) => emit('thinking', { delta: msg + '\n' });
 
-    const timeout = setTimeout(() => {
-      try { signal?.dispatchEvent?.(new Event('abort')); } catch { /* signal may be a basic AbortController.signal */ }
-    }, RUN_TIMEOUT_MS);
+    // Wire localCtrl to the caller's signal and the timeout so either actually aborts the run.
+    // Manual forwarding is used instead of AbortSignal.any() for Node < 19 compatibility.
+    const externalAbortHandler = () => localCtrl.abort('external');
+    if (signal) {
+      if (signal.aborted) localCtrl.abort('external');
+      else signal.addEventListener('abort', externalAbortHandler, { once: true });
+    }
+    const timeout = setTimeout(() => localCtrl.abort('timeout'), RUN_TIMEOUT_MS);
 
     let result;
     try {
@@ -130,18 +138,19 @@ export async function runDispatch({ project, prompt, onEvent = null, userId = nu
         }));
         result = await claudeChatWithDocuments(
           docs, prompt, [], finalSystem, userId, onStep, project.default_model,
-          { claudeTools, mcpToolMap, mcpManager, builtinToolMap: {}, images: [], signal },
+          { claudeTools, mcpToolMap, mcpManager, builtinToolMap: {}, images: [], signal: localCtrl.signal },
         );
       } else {
         const geminiTools = mcpToolDeclarations.length > 0
           ? [{ functionDeclarations: mcpToolDeclarations }]
           : [];
         result = await geminiChatWithDocuments(
-          docs, prompt, [], finalSystem, userId, onStep, project.default_model, geminiTools, [], signal,
+          docs, prompt, [], finalSystem, userId, onStep, project.default_model, geminiTools, [], localCtrl.signal,
         );
       }
     } finally {
       clearTimeout(timeout);
+      if (signal) signal.removeEventListener?.('abort', externalAbortHandler);
     }
 
     const final_message = (result?.text || '').trim();
@@ -152,7 +161,7 @@ export async function runDispatch({ project, prompt, onEvent = null, userId = nu
 
     return { run_id, project_id: project.id, project_name: project.name, prompt, final_message, events, duration_ms, tokens, error: null, status: 'done' };
   } catch (err) {
-    const isAbort = err?.name === 'AbortError' || err?.message === 'aborted' || signal?.aborted;
+    const isAbort = err?.name === 'AbortError' || err?.message === 'aborted' || signal?.aborted || localCtrl.signal.aborted;
     const duration_ms = Date.now() - startedAt;
     const errMsg = isAbort ? 'cancelled' : (err?.message || 'unknown error');
     emit('finished', { final_message: '', duration_ms, tokens: { input: 0, output: 0 }, error: errMsg });

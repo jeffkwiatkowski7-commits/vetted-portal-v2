@@ -653,6 +653,10 @@ app.get('/api/chats/:id', requireAuth, (req, res) => {
       ? parsedAttachments[i].map(id => attachmentMap[id]).filter(Boolean)
       : null,
     images: m.images ? JSON.parse(m.images) : null,
+    kind: m.kind || null,
+    agent_run: m.kind === 'agent_run'
+      ? (() => { try { return JSON.parse(m.content); } catch { return null; } })()
+      : null,
   }));
 
   res.json({ chat, messages: messagesWithParsedReasoning });

@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
-import { initializeDatabase, dbGet, dbRun } from './database.js';
+import { initializeDatabase, dbGet, dbRun, dbAll } from './database.js';
 
 function getCurrentTimestamp() {
   return new Date().toISOString();
@@ -414,6 +414,38 @@ The \`\`\`canvas-html fence signals the UI to render your output as a live previ
   }
 
   console.log(`✓ Created ${memberCount} project members`);
+
+  // Demo team — wires the first three projects together as a sample
+  try {
+    const adminUser = dbGet(db, "SELECT id FROM users WHERE email = 'jeffk@vettedbot.com'");
+    const sampleProjects = dbAll(db, 'SELECT id, name, description FROM projects ORDER BY created_at ASC LIMIT 3');
+    if (adminUser && sampleProjects.length >= 2) {
+      const teamId = uuidv4();
+      const now_team = getCurrentTimestamp();
+      dbRun(db, `
+        INSERT INTO teams (id, owner_id, name, description, playbook, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
+      `, [
+        teamId, adminUser.id,
+        'Sample Investment Team',
+        'A demo team showing how projects chain into an agentic workflow.',
+        `When the user asks for an investment analysis:
+1. Dispatch the first sub-agent to gather background context.
+2. Dispatch the second sub-agent in parallel to analyze any data the user supplied.
+3. Synthesize their findings into a final report.`,
+        now_team, now_team,
+      ]);
+      sampleProjects.forEach((p, i) => {
+        dbRun(db, `
+          INSERT INTO team_members (id, team_id, project_id, purpose, display_order, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `, [uuidv4(), teamId, p.id, p.description || `Sub-agent role ${i + 1}`, i, now_team]);
+      });
+      console.log('  ✓ Seeded sample team with', sampleProjects.length, 'sub-agents');
+    }
+  } catch (err) {
+    console.error('  ✗ Sample team seed failed:', err.message);
+  }
 
   // Seed Chats and Messages
   const chats = [];

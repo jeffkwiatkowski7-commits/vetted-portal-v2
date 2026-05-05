@@ -660,7 +660,6 @@ export default function MainChatPage() {
           };
           return updated;
         });
-        setLiveRuns({});
       }
 
     } catch (err: any) {
@@ -673,6 +672,7 @@ export default function MainChatPage() {
         return updated;
       });
     } finally {
+      setLiveRuns({});
       setChatting(false);
       sendingRef.current = false;
       abortRef.current = null;

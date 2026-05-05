@@ -105,6 +105,7 @@ export const chats = {
     data: any,
     onStep: (step: { message: string; ts: string }) => void,
     externalSignal?: AbortSignal,
+    onAgentRunEvent?: (event: any) => void,
   ): Promise<any> =>
     new Promise(async (resolve, reject) => {
       const controller = new AbortController();
@@ -158,6 +159,7 @@ export const chats = {
               if (event.type === 'step') onStep({ message: event.message, ts: event.ts });
               else if (event.type === 'done') return settle(resolve, event);
               else if (event.type === 'error') return settle(reject, new Error(event.message));
+              else if (event.type?.startsWith('agent_run.') && onAgentRunEvent) onAgentRunEvent(event);
             } catch {
               // skip malformed SSE lines
             }

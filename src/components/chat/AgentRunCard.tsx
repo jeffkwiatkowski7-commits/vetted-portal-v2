@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, Check, X as XIcon, Loader2 } from 'lucide-re
 import type { AgentRunMessage } from '../../types';
 
 export default function AgentRunCard({ run }: { run: AgentRunMessage }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(run.status === 'running');
   const isError = run.status === 'error' || run.error;
   const isRunning = run.status === 'running' || run.status === 'queued';
   const isCancelled = run.status === 'cancelled';
@@ -43,10 +43,20 @@ export default function AgentRunCard({ run }: { run: AgentRunMessage }) {
               <pre className="font-mono text-[11px] whitespace-pre-wrap mt-1 text-vetted-text-secondary">{run.prompt}</pre>
             </details>
           )}
+          {run.status === 'running' && run.events && run.events.length > 0 && (
+            <div className="font-mono text-[11px] text-vetted-text-muted whitespace-pre-wrap max-h-40 overflow-y-auto border border-dashed border-vetted-border rounded p-2 my-2">
+              {run.events
+                .filter((e: any) => e.delta || e.tool)
+                .slice(-30)
+                .map((e: any, i: number) => (
+                  <div key={i}>{e.tool ? `→ ${e.tool} ${e.args_summary || ''}` : e.delta}</div>
+                ))}
+            </div>
+          )}
           {run.final_message && (
             <div className="whitespace-pre-wrap text-vetted-primary">{run.final_message}</div>
           )}
-          {run.events && run.events.length > 0 && (
+          {run.events && run.events.length > 0 && run.status !== 'running' && (
             <details className="mt-2">
               <summary className="cursor-pointer text-vetted-text-muted">Event log ({run.events.length})</summary>
               <pre className="font-mono text-[10px] whitespace-pre-wrap mt-1 max-h-60 overflow-y-auto bg-vetted-surface p-2 rounded">{run.events.map((e: any) => `[${e.type}] ${e.delta ?? e.tool ?? e.prompt_summary ?? ''}`.trim()).join('\n')}</pre>

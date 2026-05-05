@@ -9,7 +9,7 @@ import { MessageAttachment } from '../components/chat/MessageAttachment';
 import { ModelPickerMenu, ProviderTile, type ModelPickerOption } from '../components/chat/ModelPickerMenu';
 import TeamDropdown from '../components/chat/TeamDropdown';
 import AgentRunCard from '../components/chat/AgentRunCard';
-import { LibraryFile } from '../types';
+import { LibraryFile, AgentRunMessage } from '../types';
 
 type ModelOption = ModelPickerOption;
 
@@ -328,6 +328,7 @@ export default function MainChatPage() {
   const { user, chats, setChats, pendingProjectId, setPendingProjectId, addToast } = useStore();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [liveRuns, setLiveRuns] = useState<Record<string, AgentRunMessage>>({});
   const [input, setInput] = useState('');
   const [chatting, setChatting] = useState(false);
   const [chatId, setChatId] = useState<string | null>(id ?? null);
@@ -572,6 +573,49 @@ export default function MainChatPage() {
           });
         },
         abortRef.current.signal,
+        (ev: any) => {
+          if (ev.type === 'agent_run.started') {
+            setLiveRuns((prev) => ({
+              ...prev,
+              [ev.run_id]: {
+                run_id: ev.run_id,
+                project_id: ev.project_id,
+                project_name: ev.project_name,
+                prompt: '',
+                events: [ev],
+                status: 'running',
+              } as AgentRunMessage,
+            }));
+          } else if (
+            ev.type === 'agent_run.thinking' ||
+            ev.type === 'agent_run.tool_call' ||
+            ev.type === 'agent_run.tool_result' ||
+            ev.type === 'agent_run.text'
+          ) {
+            setLiveRuns((prev) => {
+              const cur = prev[ev.run_id];
+              if (!cur) return prev;
+              return { ...prev, [ev.run_id]: { ...cur, events: [...cur.events, ev] } };
+            });
+          } else if (ev.type === 'agent_run.finished') {
+            setLiveRuns((prev) => {
+              const cur = prev[ev.run_id];
+              if (!cur) return prev;
+              return {
+                ...prev,
+                [ev.run_id]: {
+                  ...cur,
+                  events: [...cur.events, ev],
+                  final_message: ev.final_message,
+                  duration_ms: ev.duration_ms,
+                  tokens: ev.tokens,
+                  error: ev.error,
+                  status: ev.error ? (ev.error === 'cancelled' ? 'cancelled' : 'error') : 'done',
+                },
+              };
+            });
+          }
+        },
       );
 
       // User-stopped: avoid racing the server's async DB write — show the marker
@@ -603,6 +647,7 @@ export default function MainChatPage() {
           };
           return updated;
         });
+        setLiveRuns({});
       }
 
     } catch (err: any) {
@@ -839,6 +884,11 @@ export default function MainChatPage() {
                 }
                 return <ChatBubble key={i} msg={msg} />;
               })}
+              {Object.values(liveRuns)
+                .filter((r) => r.status === 'running' || r.status === 'queued')
+                .map((r) => (
+                  <AgentRunCard key={`live-${r.run_id}`} run={r} />
+                ))}
               <div ref={messagesEndRef} />
             </div>
           </div>

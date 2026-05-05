@@ -7,6 +7,8 @@ import CanvasDeckBlock from '../components/chat/CanvasDeckBlock';
 import ExportModal from '../components/chat/ExportModal';
 import { MessageAttachment } from '../components/chat/MessageAttachment';
 import { ModelPickerMenu, ProviderTile, type ModelPickerOption } from '../components/chat/ModelPickerMenu';
+import TeamDropdown from '../components/chat/TeamDropdown';
+import AgentRunCard from '../components/chat/AgentRunCard';
 import { LibraryFile } from '../types';
 
 type ModelOption = ModelPickerOption;
@@ -65,6 +67,8 @@ interface ChatMessage {
   timestamp?: string;
   reasoning?: string;
   attachments?: import('../types').MessageAttachment[];
+  kind?: 'agent_run' | null;
+  agent_run?: import('../types').AgentRunMessage | null;
 }
 
 // ── ReasoningSummary ─────────────────────────────────────────────────────────
@@ -327,6 +331,7 @@ export default function MainChatPage() {
   const [input, setInput] = useState('');
   const [chatting, setChatting] = useState(false);
   const [chatId, setChatId] = useState<string | null>(id ?? null);
+  const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [pendingFiles, setPendingFiles] = useState<LibraryFile[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
@@ -435,6 +440,7 @@ export default function MainChatPage() {
     if (!id) {
       setMessages([]);
       setChatId(null);
+      setActiveTeamId(null);
       // Default Memory MCP to on for new chats
       const memoryId = mcpServers.find(s => s.id === 'mcp-memory')?.id;
       setChatMcpServerIds(memoryId ? [memoryId] : []);
@@ -451,8 +457,11 @@ export default function MainChatPage() {
             content: m.content,
             steps: [],
             timestamp: m.created_at,
+            kind: m.kind ?? null,
+            agent_run: m.agent_run ?? null,
           }))
         );
+        setActiveTeamId(chat.active_team_id || null);
         try {
           let parsed = JSON.parse(chat.mcp_servers || '[]');
           if (typeof parsed === 'string') parsed = JSON.parse(parsed);
@@ -735,8 +744,13 @@ export default function MainChatPage() {
           )}
         </div>
 
-        {/* Right: model selector + send */}
+        {/* Right: team dropdown + model selector + send */}
         <div className="flex items-center gap-2">
+          <TeamDropdown
+            chatId={chatId}
+            activeTeamId={activeTeamId}
+            onChange={setActiveTeamId}
+          />
           {/* Custom model selector */}
           <div className="relative" ref={modelDropdownRef}>
             <button
@@ -819,7 +833,12 @@ export default function MainChatPage() {
           </div>
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-[75%] mx-auto px-6 py-8 space-y-6">
-              {messages.map((msg, i) => <ChatBubble key={i} msg={msg} />)}
+              {messages.map((msg, i) => {
+                if (msg.role === 'assistant' && msg.kind === 'agent_run' && msg.agent_run) {
+                  return <AgentRunCard key={i} run={msg.agent_run} />;
+                }
+                return <ChatBubble key={i} msg={msg} />;
+              })}
               <div ref={messagesEndRef} />
             </div>
           </div>

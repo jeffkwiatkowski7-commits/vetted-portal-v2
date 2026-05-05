@@ -26,6 +26,10 @@ import { parsePptxTemplate } from './lib/pptx-parser.js';
 import { buildBrandedCanvasBlock, getDesignTokens } from './lib/branded-canvas.js';
 import { buildDocx, buildXlsx } from './lib/exports.js';
 import { logError, getErrors, clearErrors, pruneOldErrors } from './lib/error-log.js';
+import {
+  listTeamsForUser, getTeam, createTeam, updateTeam, archiveTeam,
+  addMember, updateMember, removeMember,
+} from './lib/teams.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -1878,6 +1882,96 @@ app.put('/api/projects/:id/skills', requireAuth, (req, res) => {
     }
   }
   res.json({ success: true });
+});
+
+// -- Teams ---------------------------------------------------------------
+
+app.get('/api/teams', requireAuth, (req, res) => {
+  const teams = listTeamsForUser(db, req.user.id);
+  res.json({ teams });
+});
+
+app.post('/api/teams', requireAuth, (req, res) => {
+  const { name, description, playbook } = req.body || {};
+  if (!name || !String(name).trim()) {
+    return res.status(400).json({ error: 'name is required' });
+  }
+  const team = createTeam(db, req.user.id, {
+    name: String(name).trim(),
+    description: description ?? null,
+    playbook: playbook ?? null,
+  });
+  res.json({ team });
+});
+
+app.get('/api/teams/:id', requireAuth, (req, res) => {
+  const team = getTeam(db, req.params.id);
+  if (!team) return res.status(404).json({ error: 'Team not found' });
+  if (team.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your team' });
+  res.json({ team });
+});
+
+app.put('/api/teams/:id', requireAuth, (req, res) => {
+  const team = getTeam(db, req.params.id);
+  if (!team) return res.status(404).json({ error: 'Team not found' });
+  if (team.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your team' });
+  const updated = updateTeam(db, req.params.id, req.body || {});
+  res.json({ team: updated });
+});
+
+app.delete('/api/teams/:id', requireAuth, (req, res) => {
+  const team = getTeam(db, req.params.id);
+  if (!team) return res.status(404).json({ error: 'Team not found' });
+  if (team.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your team' });
+  archiveTeam(db, req.params.id);
+  res.json({ success: true });
+});
+
+app.post('/api/teams/:id/members', requireAuth, (req, res) => {
+  const team = getTeam(db, req.params.id);
+  if (!team) return res.status(404).json({ error: 'Team not found' });
+  if (team.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your team' });
+  const { project_id, purpose } = req.body || {};
+  if (!project_id) return res.status(400).json({ error: 'project_id is required' });
+  // Verify the project exists
+  const proj = dbGet(db, 'SELECT id FROM projects WHERE id = ?', [project_id]);
+  if (!proj) return res.status(400).json({ error: 'project_id does not exist' });
+  try {
+    const member = addMember(db, req.params.id, { project_id, purpose: purpose ?? null });
+    res.json({ member });
+  } catch (err) {
+    // unique index violation — already a member
+    res.status(409).json({ error: 'Project is already a member of this team' });
+  }
+});
+
+app.put('/api/teams/:id/members/:memberId', requireAuth, (req, res) => {
+  const team = getTeam(db, req.params.id);
+  if (!team) return res.status(404).json({ error: 'Team not found' });
+  if (team.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your team' });
+  const m = updateMember(db, req.params.memberId, req.body || {});
+  if (!m) return res.status(404).json({ error: 'Member not found' });
+  res.json({ member: m });
+});
+
+app.delete('/api/teams/:id/members/:memberId', requireAuth, (req, res) => {
+  const team = getTeam(db, req.params.id);
+  if (!team) return res.status(404).json({ error: 'Team not found' });
+  if (team.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your team' });
+  removeMember(db, req.params.memberId);
+  res.json({ success: true });
+});
+
+app.put('/api/chats/:id/team', requireAuth, (req, res) => {
+  const chat = dbGet(db, 'SELECT * FROM chats WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+  if (!chat) return res.status(404).json({ error: 'Chat not found' });
+  const { team_id } = req.body || {};
+  if (team_id) {
+    const team = getTeam(db, team_id);
+    if (!team || team.owner_id !== req.user.id) return res.status(400).json({ error: 'Invalid team_id' });
+  }
+  dbRun(db, 'UPDATE chats SET active_team_id = ? WHERE id = ?', [team_id || null, req.params.id]);
+  res.json({ success: true, active_team_id: team_id || null });
 });
 
 // ============================================================================

@@ -556,6 +556,11 @@ export default function MainChatPage() {
         if (chatMcpServerIds.length > 0) {
           try { await api.mcpServers.setChatServers(activeChatId, chatMcpServerIds); } catch {}
         }
+        // Propagate active team selection to the newly created chat so the
+        // orchestrator knows which team to dispatch to.
+        if (activeTeamId) {
+          try { await (api.chatTeam as any).set(activeChatId, activeTeamId); } catch {}
+        }
       } catch {
         setMessages(prev => [...prev, { role: 'assistant', content: 'Error: could not create chat.' }]);
         setChatting(false);

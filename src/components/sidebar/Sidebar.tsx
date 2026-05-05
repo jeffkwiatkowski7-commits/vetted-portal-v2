@@ -15,6 +15,7 @@ import {
   MoreHorizontal,
   Trash2,
   Pencil,
+  Users,
 } from 'lucide-react';
 import type { Chat } from '../../types';
 
@@ -125,6 +126,7 @@ export default function Sidebar() {
           { path: '/projects', icon: FolderOpen, label: 'Projects' },
           { path: '/library', icon: BookOpen, label: 'Library' },
           { path: '/skills', icon: Sparkles, label: 'Skills' },
+          { path: '/teams', icon: Users, label: 'Teams' },
           { path: '/apps', icon: Grid3X3, label: 'Apps' },
           { path: '/integrations', icon: Puzzle, label: 'Integrations' },
           ...(user?.role === 'admin' || user?.role === 'super_admin'
@@ -208,7 +210,7 @@ export default function Sidebar() {
 
       {/* User Footer */}
       <div className="p-3 border-t border-vetted-border">
-        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.13.4</p>
+        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.13.5</p>
       </div>
 
       {/* Context Menu */}

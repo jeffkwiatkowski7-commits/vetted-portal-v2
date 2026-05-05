@@ -21,6 +21,8 @@ import SettingsPage from './pages/SettingsPage';
 import NotFoundPage from './pages/NotFoundPage';
 import SkillsPage from './pages/SkillsPage';
 import SkillEditPage from './pages/SkillEditPage';
+import TeamsPage from './pages/TeamsPage';
+import TeamEditPage from './pages/TeamEditPage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import LeaseChatPage from './pages/LeaseChatPage';
 import PptxAppPage from './pages/PptxAppPage';
@@ -124,6 +126,9 @@ function App() {
             <Route path="/skills" element={<SkillsPage />} />
             <Route path="/skills/new" element={<SkillEditPage />} />
             <Route path="/skills/:id/edit" element={<SkillEditPage />} />
+            <Route path="/teams" element={<TeamsPage />} />
+            <Route path="/teams/new" element={<TeamEditPage />} />
+            <Route path="/teams/:id/edit" element={<TeamEditPage />} />
             <Route path="/apps/pptx-parser" element={<PptxAppPage />} />
             <Route path="/apps" element={<AppsPage />} />
             <Route path="/integrations" element={<IntegrationsPage />} />

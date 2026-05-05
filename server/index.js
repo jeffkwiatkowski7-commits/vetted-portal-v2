@@ -210,6 +210,19 @@ async function runMigrations(db) {
   // Disable old Vertex-based Claude models (GCP doesn't support Claude); direct-API models re-enabled below
   dbRun(db, "UPDATE model_configs SET is_enabled = 0 WHERE provider = 'Anthropic'");
 
+  // Backfill default descriptions for known models (only where description is NULL — admin edits win)
+  const modelDescriptions = {
+    'gemini-3-1-pro':   'Most capable Gemini — best for analysis, long documents, and reasoning.',
+    'gemini-3-1-flash': 'Faster, lighter Gemini 3 — quick answers and everyday queries.',
+    'gemini-3-pro':     'Most capable Gemini — best for analysis, long documents, and reasoning.',
+    'gemini-3-flash':   'Faster, lighter Gemini — quick answers and everyday queries.',
+    'gemini-2-5-flash': 'Lean Gemini for fast, low-cost responses.',
+    'claude-opus-4-6':  "Anthropic's flagship — strongest writing, code, and PDF understanding.",
+  };
+  for (const [id, desc] of Object.entries(modelDescriptions)) {
+    dbRun(db, "UPDATE model_configs SET description = ? WHERE id = ? AND (description IS NULL OR description = '')", [desc, id]);
+  }
+
   // Ensure Gemini 3.1 model exists in model_configs (check by id or display_name)
   const g31Model = dbGet(db, "SELECT id FROM model_configs WHERE id = 'gemini-3-1-pro' OR display_name = 'Gemini 3.1'");
   if (!g31Model) {
@@ -2671,19 +2684,19 @@ app.get('/api/admin/models', requireAuth, requireAdmin, (req, res) => {
 });
 
 app.post('/api/admin/models', requireAuth, requireAdmin, (req, res) => {
-  const { model_name, provider, display_name, icon_color, is_default, is_enabled, max_tokens, rate_limit } = req.body;
+  const { model_name, provider, display_name, description, icon_color, is_default, is_enabled, max_tokens, rate_limit } = req.body;
   if (!model_name || !display_name) return res.status(400).json({ error: 'model_name and display_name required' });
   const id = uuidv4();
   const now = new Date().toISOString();
-  dbRun(db, `INSERT INTO model_configs (id, model_name, provider, display_name, icon_color, is_default, is_enabled, max_tokens, rate_limit, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, model_name, provider || 'Google', display_name, icon_color || '#888', is_default ? 1 : 0, is_enabled !== false ? 1 : 0, max_tokens || 4096, rate_limit || 60, now, now]);
+  dbRun(db, `INSERT INTO model_configs (id, model_name, provider, display_name, description, icon_color, is_default, is_enabled, max_tokens, rate_limit, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, model_name, provider || 'Google', display_name, description || null, icon_color || '#888', is_default ? 1 : 0, is_enabled !== false ? 1 : 0, max_tokens || 4096, rate_limit || 60, now, now]);
   const model = dbGet(db, 'SELECT * FROM model_configs WHERE id = ?', [id]);
   res.status(201).json({ model });
 });
 
 app.put('/api/admin/models/:id', requireAuth, requireAdmin, (req, res) => {
-  const { is_enabled, is_default, max_tokens, rate_limit, display_name, model_name, provider, icon_color } = req.body;
+  const { is_enabled, is_default, max_tokens, rate_limit, display_name, model_name, provider, description, icon_color } = req.body;
 
   const model = dbGet(db, 'SELECT * FROM model_configs WHERE id = ?', [req.params.id]);
   if (!model) {
@@ -2699,7 +2712,7 @@ app.put('/api/admin/models/:id', requireAuth, requireAdmin, (req, res) => {
 
   dbRun(db, `
     UPDATE model_configs
-    SET is_enabled = ?, is_default = ?, max_tokens = ?, rate_limit = ?, display_name = ?, model_name = ?, provider = ?, icon_color = ?, updated_at = ?
+    SET is_enabled = ?, is_default = ?, max_tokens = ?, rate_limit = ?, display_name = ?, model_name = ?, provider = ?, description = ?, icon_color = ?, updated_at = ?
     WHERE id = ?
   `, [
     is_enabled !== undefined ? is_enabled : model.is_enabled,
@@ -2709,6 +2722,7 @@ app.put('/api/admin/models/:id', requireAuth, requireAdmin, (req, res) => {
     display_name !== undefined ? display_name : model.display_name,
     model_name !== undefined ? model_name : model.model_name,
     provider !== undefined ? provider : model.provider,
+    description !== undefined ? description : model.description,
     icon_color !== undefined ? icon_color : model.icon_color,
     now,
     req.params.id

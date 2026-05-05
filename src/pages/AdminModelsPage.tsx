@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, X, Check, Star } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, X, Check, Star, Pencil } from 'lucide-react';
 import * as api from '../api';
 
 export interface ModelConfig {
@@ -25,6 +25,8 @@ export default function AdminModelsPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(BLANK);
   const [loading, setLoading] = useState(true);
+  const [editingDescId, setEditingDescId] = useState<string | null>(null);
+  const [descDraft, setDescDraft] = useState('');
 
   const fetchModels = async () => {
     try {
@@ -67,10 +69,23 @@ export default function AdminModelsPage() {
       model_name: form.model_name || form.display_name,
       display_name: form.display_name,
       provider: form.provider,
+      description: form.description.trim() || null,
       is_enabled: true,
     });
     setShowForm(false);
     setForm(BLANK);
+    fetchModels();
+  };
+
+  const startEditDescription = (model: ModelConfig) => {
+    setEditingDescId(model.id);
+    setDescDraft(model.description || '');
+  };
+
+  const saveDescription = async (id: string) => {
+    await api.admin.updateModel(id, { description: descDraft.trim() || null });
+    setEditingDescId(null);
+    setDescDraft('');
     fetchModels();
   };
 
@@ -132,6 +147,16 @@ export default function AdminModelsPage() {
                 className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent"
               />
             </div>
+            <div>
+              <label className="block text-xs font-medium text-vetted-text-secondary mb-1">Description</label>
+              <input
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                placeholder="One-liner shown in the model picker"
+                className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent"
+              />
+              <p className="text-[11px] text-vetted-text-muted mt-1">Appears under the model name in the chat input dropdown.</p>
+            </div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => { setShowForm(false); setForm(BLANK); }} className="btn-secondary text-sm py-1.5 px-3 flex items-center gap-1.5">
                 <X size={13} /> Cancel
@@ -147,7 +172,7 @@ export default function AdminModelsPage() {
 
         {/* Model list */}
         {models.map((model) => (
-          <div key={model.id} className={`border rounded-xl bg-white p-4 flex items-center gap-4 ${model.is_default ? 'border-vetted-accent' : 'border-vetted-border'}`}>
+          <div key={model.id} className={`border rounded-xl bg-white p-4 flex items-start gap-4 ${model.is_default ? 'border-vetted-accent' : 'border-vetted-border'}`}>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-0.5">
                 <p className="text-sm font-medium text-vetted-primary">{model.display_name}</p>
@@ -160,7 +185,39 @@ export default function AdminModelsPage() {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-vetted-text-muted">{model.model_name}</p>
+              <p className="text-xs text-vetted-text-muted font-mono">{model.model_name}</p>
+              {editingDescId === model.id ? (
+                <div className="mt-2 flex items-center gap-1.5">
+                  <input
+                    autoFocus
+                    value={descDraft}
+                    onChange={(e) => setDescDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveDescription(model.id);
+                      if (e.key === 'Escape') { setEditingDescId(null); setDescDraft(''); }
+                    }}
+                    placeholder="One-liner shown in the model picker"
+                    className="flex-1 px-2 py-1 text-xs border border-vetted-accent rounded focus:outline-none focus:ring-2 focus:ring-vetted-accent/40"
+                  />
+                  <button onClick={() => saveDescription(model.id)} className="p-1 rounded hover:bg-vetted-accent/10 text-vetted-accent">
+                    <Check size={13} />
+                  </button>
+                  <button onClick={() => { setEditingDescId(null); setDescDraft(''); }} className="p-1 rounded hover:bg-vetted-surface text-vetted-text-muted">
+                    <X size={13} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => startEditDescription(model)}
+                  className="mt-1.5 group flex items-center gap-1.5 text-left text-xs text-vetted-text-secondary hover:text-vetted-primary transition-colors"
+                  title="Edit description"
+                >
+                  <span className={model.description ? '' : 'italic text-vetted-text-muted'}>
+                    {model.description || 'Add a description…'}
+                  </span>
+                  <Pencil size={11} className="opacity-0 group-hover:opacity-60 transition-opacity" />
+                </button>
+              )}
             </div>
 
             <div className="flex items-center gap-2">

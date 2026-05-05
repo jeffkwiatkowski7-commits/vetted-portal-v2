@@ -176,6 +176,7 @@ export async function initializeDatabase() {
       model_name TEXT UNIQUE NOT NULL,
       provider TEXT NOT NULL,
       display_name TEXT NOT NULL,
+      description TEXT,
       icon_color TEXT,
       is_default INTEGER DEFAULT 0,
       is_enabled INTEGER DEFAULT 1,
@@ -429,6 +430,9 @@ export async function initializeDatabase() {
 
   // Add route to apps for route-based apps (e.g. /apps/pptx-parser)
   try { db.run(`ALTER TABLE apps ADD COLUMN route TEXT`); } catch (e) { /* already exists */ }
+
+  // Add description to model_configs for the model picker tagline
+  try { db.run(`ALTER TABLE model_configs ADD COLUMN description TEXT`); } catch (e) { /* already exists */ }
 
   // Migrate MCP servers: remove broken packages, fix Sequential Thinking package name
   try {

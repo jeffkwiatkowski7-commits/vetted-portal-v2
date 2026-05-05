@@ -6,39 +6,9 @@ import { Send, Square, Paperclip, Share2, ChevronDown, Plus } from 'lucide-react
 import { LibraryFile } from '../../types';
 import LibraryPickerModal from './LibraryPickerModal';
 import FileTypeBadge from './FileTypeBadge';
+import { ModelPickerMenu, ProviderTile, type ModelPickerOption } from './ModelPickerMenu';
 
-
-interface ModelOption {
-  name: string;
-  value: string;
-  modelId: string;
-  provider: string;
-  iconColor: string;
-  isDefault: boolean;
-}
-
-function ModelIcon({ color, isGemini, isClaude }: { color: string; isGemini?: boolean; isClaude?: boolean }) {
-  if (isClaude) {
-    return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-        <path d="M12 2l2.09 6.26L20.18 9.27l-5.09 3.9L16.18 19.27 12 15.77l-4.18 3.5 1.09-6.1L3.82 9.27l6.09-1.01z" fill={color} />
-      </svg>
-    );
-  }
-  if (isGemini) {
-    return (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-        <path d="M7 0.5 C7 4.5 9.5 7 13.5 7 C9.5 7 7 9.5 7 13.5 C7 9.5 4.5 7 0.5 7 C4.5 7 7 4.5 7 0.5Z" fill={color}/>
-      </svg>
-    );
-  }
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <circle cx="7" cy="7" r="5.5" stroke={color} strokeWidth="1.5" fill="none"/>
-      <circle cx="7" cy="7" r="2" fill={color} opacity="0.6"/>
-    </svg>
-  );
-}
+type ModelOption = ModelPickerOption;
 
 export default function ChatInput({ centered = false, projectId, mcpServerIds = [], onMcpServersChange, isProjectChat = false }: {
   centered?: boolean;
@@ -74,6 +44,7 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
         value: m.provider?.toLowerCase().includes('anthropic') ? 'claude' : 'gemini',
         modelId: m.model_name,
         provider: m.provider,
+        description: m.description || null,
         iconColor: m.icon_color || '#888',
         isDefault: !!m.is_default,
       }));
@@ -88,11 +59,33 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
   const [showModelSelect, setShowModelSelect] = useState(false);
   const [pastedImages, setPastedImages] = useState<Array<{ base64: string; mimeType: string }>>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const modelButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleStop = () => {
     chatAbort?.abort('user-stopped');
   };
   const paperclipButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Close model picker on outside click + Esc
+  useEffect(() => {
+    if (!showModelSelect) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const popover = document.getElementById('model-picker-popover');
+      if (modelButtonRef.current && !modelButtonRef.current.contains(target) && popover && !popover.contains(target)) {
+        setShowModelSelect(false);
+      }
+    };
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowModelSelect(false);
+    };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', keyHandler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', keyHandler);
+    };
+  }, [showModelSelect]);
 
   // MCP Tools state
   const [mcpServers, setMcpServers] = useState<{ id: string; name: string; description: string; icon: string }[]>([]);
@@ -491,41 +484,26 @@ export default function ChatInput({ centered = false, projectId, mcpServerIds = 
               <div className="flex items-center gap-2">
                 <div className="relative">
                   <button
+                    ref={modelButtonRef}
                     onClick={() => setShowModelSelect(!showModelSelect)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-colors text-xs font-medium ${
+                    className={`group flex items-center gap-2 pl-1.5 pr-2.5 py-1 rounded-full border transition-all text-xs font-medium ${
                       demoActive && demoHighlight === 'model-picker'
-                        ? 'border-vetted-accent text-vetted-accent ring-2 ring-vetted-accent/20'
-                        : 'border-vetted-border text-vetted-text-secondary hover:bg-vetted-surface'
+                        ? 'border-vetted-accent text-vetted-primary ring-2 ring-vetted-accent/20 bg-white'
+                        : showModelSelect
+                          ? 'border-vetted-primary/20 text-vetted-primary bg-white shadow-sm'
+                          : 'border-vetted-border text-vetted-text-secondary hover:text-vetted-primary hover:border-vetted-primary/20 hover:bg-white'
                     }`}
                   >
-                    {selectedModel && <ModelIcon color={selectedModel.iconColor} isGemini={selectedModel.value === 'gemini'} isClaude={selectedModel.value === 'claude'} />}
-                    {selectedModel?.name || 'Select model'}
-                    <ChevronDown size={12} />
+                    {selectedModel && <ProviderTile provider={selectedModel.provider} value={selectedModel.value} size="sm" />}
+                    <span className="leading-none">{selectedModel?.name || 'Select model'}</span>
+                    <ChevronDown size={12} className={`transition-transform ${showModelSelect ? 'rotate-180' : ''} text-vetted-text-muted`} />
                   </button>
                   {showModelSelect && (
-                    <div className="absolute bottom-full right-0 mb-2 bg-white border border-vetted-border rounded-xl shadow-lg z-10 min-w-[180px] overflow-hidden">
-                      <div className="px-3 py-2 border-b border-vetted-border">
-                        <p className="text-[11px] font-medium text-vetted-text-muted uppercase tracking-wider">Model</p>
-                      </div>
-                      {availableModels.map((model) => (
-                        <button
-                          key={model.name}
-                          onClick={() => {
-                            setSelectedModel(model);
-                            setShowModelSelect(false);
-                          }}
-                          className={`w-full text-left px-3 py-2.5 text-sm hover:bg-vetted-surface flex items-center gap-2.5 transition-colors ${
-                            selectedModel?.modelId === model.modelId ? 'bg-vetted-surface font-medium' : ''
-                          }`}
-                        >
-                          <ModelIcon color={model.iconColor} isGemini={model.value === 'gemini'} isClaude={model.value === 'claude'} />
-                          {model.name}
-                          {selectedModel?.modelId === model.modelId && (
-                            <span className="ml-auto text-vetted-accent text-xs">&#10003;</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
+                    <ModelPickerMenu
+                      models={availableModels}
+                      selectedModelId={selectedModel?.modelId}
+                      onSelect={(m) => { setSelectedModel(m); setShowModelSelect(false); }}
+                    />
                   )}
                 </div>
 

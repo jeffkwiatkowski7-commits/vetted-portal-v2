@@ -6,40 +6,10 @@ import CanvasBlock from '../components/chat/CanvasBlock';
 import CanvasDeckBlock from '../components/chat/CanvasDeckBlock';
 import ExportModal from '../components/chat/ExportModal';
 import { MessageAttachment } from '../components/chat/MessageAttachment';
+import { ModelPickerMenu, ProviderTile, type ModelPickerOption } from '../components/chat/ModelPickerMenu';
 import { LibraryFile } from '../types';
 
-// ── Model icon (matches ChatInput) ───────────────────────────────────────────
-interface ModelOption {
-  name: string;
-  value: string;
-  modelId: string;
-  provider: string;
-  iconColor: string;
-  isDefault: boolean;
-}
-
-function ModelIcon({ color, isGemini, isClaude }: { color: string; isGemini?: boolean; isClaude?: boolean }) {
-  if (isClaude) {
-    return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-        <path d="M12 2l2.09 6.26L20.18 9.27l-5.09 3.9L16.18 19.27 12 15.77l-4.18 3.5 1.09-6.1L3.82 9.27l6.09-1.01z" fill={color} />
-      </svg>
-    );
-  }
-  if (isGemini) {
-    return (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-        <path d="M7 0.5 C7 4.5 9.5 7 13.5 7 C9.5 7 7 9.5 7 13.5 C7 9.5 4.5 7 0.5 7 C4.5 7 7 4.5 7 0.5Z" fill={color}/>
-      </svg>
-    );
-  }
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <circle cx="7" cy="7" r="5.5" stroke={color} strokeWidth="1.5" fill="none"/>
-      <circle cx="7" cy="7" r="2" fill={color} opacity="0.6"/>
-    </svg>
-  );
-}
+type ModelOption = ModelPickerOption;
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -372,6 +342,7 @@ export default function MainChatPage() {
         value: m.provider?.toLowerCase().includes('anthropic') ? 'claude' : 'gemini',
         modelId: m.model_name,
         provider: m.provider,
+        description: m.description || null,
         iconColor: m.icon_color || '#888',
         isDefault: !!m.is_default,
       }));
@@ -770,26 +741,22 @@ export default function MainChatPage() {
           <div className="relative" ref={modelDropdownRef}>
             <button
               onClick={() => setModelOpen(o => !o)}
-              className="flex items-center gap-1.5 text-xs border border-vetted-border rounded-lg px-2 py-1 text-vetted-text-secondary bg-white hover:border-vetted-primary transition-colors"
+              className={`group flex items-center gap-2 pl-1.5 pr-2.5 py-1 rounded-full border transition-all text-xs font-medium ${
+                modelOpen
+                  ? 'border-vetted-primary/20 text-vetted-primary bg-white shadow-sm'
+                  : 'border-vetted-border text-vetted-text-secondary hover:text-vetted-primary hover:border-vetted-primary/20 bg-white'
+              }`}
             >
-              {selectedModel && <ModelIcon color={selectedModel.iconColor} isGemini={selectedModel.value === 'gemini'} isClaude={selectedModel.value === 'claude'} />}
-              {selectedModel?.name || 'Select model'}
-              <ChevronDown size={11} className="opacity-50" />
+              {selectedModel && <ProviderTile provider={selectedModel.provider} value={selectedModel.value} size="sm" />}
+              <span className="leading-none">{selectedModel?.name || 'Select model'}</span>
+              <ChevronDown size={12} className={`transition-transform ${modelOpen ? 'rotate-180' : ''} text-vetted-text-muted`} />
             </button>
             {modelOpen && (
-              <div className="absolute bottom-full mb-1.5 right-0 bg-white border border-vetted-border rounded-xl shadow-lg py-1 min-w-[160px] z-10">
-                {availableModels.map((model) => (
-                  <button
-                    key={model.modelId}
-                    onClick={() => { setSelectedModel(model); setModelOpen(false); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-vetted-text-secondary hover:bg-vetted-surface transition-colors"
-                  >
-                    <ModelIcon color={model.iconColor} isGemini={model.value === 'gemini'} isClaude={model.value === 'claude'} />
-                    <span className="flex-1 text-left">{model.name}</span>
-                    {selectedModel?.modelId === model.modelId && <Check size={11} className="text-vetted-primary" />}
-                  </button>
-                ))}
-              </div>
+              <ModelPickerMenu
+                models={availableModels}
+                selectedModelId={selectedModel?.modelId}
+                onSelect={(m) => { setSelectedModel(m); setModelOpen(false); }}
+              />
             )}
           </div>
           <button

@@ -425,7 +425,7 @@ export async function initializeDatabase() {
       purpose TEXT,
       display_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
-      FOREIGN KEY (team_id) REFERENCES teams(id),
+      FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
       FOREIGN KEY (project_id) REFERENCES projects(id)
     );
 

@@ -405,6 +405,33 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_pptx_templates_user_id     ON pptx_templates(user_id);
     CREATE INDEX IF NOT EXISTS idx_pptx_templates_user_type   ON pptx_templates(user_id, template_type);
     CREATE INDEX IF NOT EXISTS idx_pptx_templates_user_status ON pptx_templates(user_id, status);
+
+    CREATE TABLE IF NOT EXISTS teams (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      playbook TEXT,
+      status TEXT DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (owner_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS team_members (
+      id TEXT PRIMARY KEY,
+      team_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      purpose TEXT,
+      display_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (team_id) REFERENCES teams(id),
+      FOREIGN KEY (project_id) REFERENCES projects(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_team_members_team_id ON team_members(team_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_team_members_team_project ON team_members(team_id, project_id);
+    CREATE INDEX IF NOT EXISTS idx_teams_owner_id ON teams(owner_id);
   `);
 
   // Add index_status column to existing databases (ignore if already exists)
@@ -433,6 +460,11 @@ export async function initializeDatabase() {
 
   // Add description to model_configs for the model picker tagline
   try { db.run(`ALTER TABLE model_configs ADD COLUMN description TEXT`); } catch (e) { /* already exists */ }
+
+  // Add active_team_id to chats and kind to messages for agentic teams feature
+  try { db.run(`ALTER TABLE chats ADD COLUMN active_team_id TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
+  try { db.run(`ALTER TABLE messages ADD COLUMN kind TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_chats_active_team_id ON chats(active_team_id)`); } catch (e) { /* already exists */ }
 
   // Migrate MCP servers: remove broken packages, fix Sequential Thinking package name
   try {

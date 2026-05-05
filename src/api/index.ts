@@ -276,6 +276,28 @@ export const skills = {
     request(`/projects/${projectId}/skills`, { method: 'PUT', body: JSON.stringify({ skills }) }),
 };
 
+// Teams - unwrap
+export const teams = {
+  list: () => request('/teams').then(d => d.teams || d || []),
+  create: (data: { name: string; description?: string; playbook?: string }) =>
+    request('/teams', { method: 'POST', body: JSON.stringify(data) }).then(d => d.team || d),
+  get: (id: string) => request(`/teams/${id}`).then(d => d.team || d),
+  update: (id: string, data: any) =>
+    request(`/teams/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(d => d.team || d),
+  delete: (id: string) => request(`/teams/${id}`, { method: 'DELETE' }),
+  addMember: (id: string, data: { project_id: string; purpose?: string }) =>
+    request(`/teams/${id}/members`, { method: 'POST', body: JSON.stringify(data) }).then(d => d.member || d),
+  updateMember: (id: string, memberId: string, data: any) =>
+    request(`/teams/${id}/members/${memberId}`, { method: 'PUT', body: JSON.stringify(data) }).then(d => d.member || d),
+  removeMember: (id: string, memberId: string) =>
+    request(`/teams/${id}/members/${memberId}`, { method: 'DELETE' }),
+};
+
+export const chatTeam = {
+  set: (chatId: string, teamId: string | null) =>
+    request(`/chats/${chatId}/team`, { method: 'PUT', body: JSON.stringify({ team_id: teamId }) }),
+};
+
 // Scheduled tasks
 export const tasks = {
   list: () => request('/tasks').then(d => d.tasks || d || []),

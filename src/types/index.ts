@@ -27,6 +27,7 @@ export interface Chat {
   messages?: Message[];
   shared_by?: string;
   permission?: string;
+  active_team_id?: string | null;
 }
 
 export interface SourceCitation {
@@ -54,6 +55,7 @@ export interface Message {
   steps?: string[];
   citations?: SourceCitation[];
   created_at: string;
+  kind?: 'agent_run' | null;
 }
 
 export interface Project {
@@ -398,3 +400,53 @@ export interface PptxTemplateDetail extends PptxTemplate {
     slides: Array<{ index: number; title: string }>;
   } | null;
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Agentic Teams Types
+// ════════════════════════════════════════════════════════════════════
+
+export interface Team {
+  id: string;
+  owner_id: string;
+  name: string;
+  description?: string | null;
+  playbook?: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  member_count?: number;
+  members?: TeamMember[];
+}
+
+export interface TeamMember {
+  id: string;
+  team_id: string;
+  project_id: string;
+  purpose?: string | null;
+  display_order: number;
+  project_name?: string;
+  project_description?: string | null;
+  default_model?: string;
+  system_prompt?: string;
+}
+
+export interface AgentRunMessage {
+  run_id: string;
+  project_id: string;
+  project_name: string;
+  prompt: string;
+  final_message?: string;
+  events: AgentRunEvent[];
+  duration_ms?: number;
+  tokens?: { input: number; output: number };
+  error?: string | null;
+  status: 'queued' | 'running' | 'done' | 'error' | 'cancelled';
+}
+
+export type AgentRunEvent =
+  | { type: 'started'; ts: string; prompt_summary: string }
+  | { type: 'thinking'; ts: string; delta: string }
+  | { type: 'tool_call'; ts: string; tool: string; args_summary: string }
+  | { type: 'tool_result'; ts: string; tool: string; result_summary: string }
+  | { type: 'text'; ts: string; delta: string }
+  | { type: 'finished'; ts: string; final_message: string; duration_ms: number; tokens: { input: number; output: number }; error?: string };

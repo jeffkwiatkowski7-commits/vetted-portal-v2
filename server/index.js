@@ -971,6 +971,9 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
 
     // Active team — augment system prompt and prepare dispatch tool
     let activeTeam = null;
+    const AGENT_MAX_PER_TURN = parseInt(process.env.AGENT_MAX_PER_TURN || '10', 10);
+    let agentDispatchCount = 0;
+    // AGENT_MAX_PARALLEL is observational in v1; enforced by orchestrator batching.
     if (chat.active_team_id) {
       activeTeam = getTeam(db, chat.active_team_id);
       if (activeTeam) {
@@ -1147,6 +1150,10 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
             }
             const proj = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [projectId]);
             if (!proj) return `Error: project not found.`;
+            if (agentDispatchCount >= AGENT_MAX_PER_TURN) {
+              return `Error: dispatch limit reached (${AGENT_MAX_PER_TURN} per turn). Synthesize results so far instead.`;
+            }
+            agentDispatchCount += 1;
             step(`Dispatching sub-agent: ${proj.name}`);
             const run = await runDispatch({
               project: proj,

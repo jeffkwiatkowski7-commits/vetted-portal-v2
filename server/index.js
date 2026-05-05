@@ -1150,20 +1150,24 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
             }
             const member = (activeTeam.members || []).find(m => m.project_id === projectId);
             if (!member) {
-              return `Error: project_id "${projectId}" is not a member of team "${activeTeam.name}". Available: ${(activeTeam.members || []).map(m => m.project_id).join(', ')}.`;
+              return `Error: project_id "${projectId}" is not on this team.`;
             }
             const proj = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [projectId]);
             if (!proj) return `Error: project not found.`;
             if (agentDispatchCount >= AGENT_MAX_PER_TURN) {
-              return `Error: dispatch limit reached (${AGENT_MAX_PER_TURN} per turn). Synthesize results so far instead.`;
+              return `Error: dispatch limit reached (${AGENT_MAX_PER_TURN} per turn).`;
             }
             agentDispatchCount += 1;
+
             step(`Dispatching sub-agent: ${proj.name}`);
             const run = await runDispatch({
               project: proj,
               prompt: promptArg,
               userId: req.user?.id || null,
               signal: aiAbort.signal,
+              onEvent: (ev) => {
+                sendEvent({ type: `agent_run.${ev.type}`, ...ev });
+              },
             });
             persistAgentRun(db, chat.id, run);
             if (run.error) return `Sub-agent error: ${run.error}`;

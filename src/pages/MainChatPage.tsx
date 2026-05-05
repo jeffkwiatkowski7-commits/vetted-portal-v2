@@ -436,6 +436,14 @@ export default function MainChatPage() {
     abortRef.current?.abort('user-stopped');
   };
 
+  const handleRetryAgent = (run: import('../types').AgentRunMessage) => {
+    const text = `Please retry the ${run.project_name} sub-agent with this prompt:\n\n${run.prompt}`;
+    // Populate the input box so the user can review before sending.
+    // Auto-send is left as a future improvement — handleSend reads `input` state
+    // which won't be updated synchronously in the same tick.
+    setInput(text);
+  };
+
   // Load existing chat when navigating to /chat/:id
   useEffect(() => {
     if (!id) {
@@ -880,7 +888,7 @@ export default function MainChatPage() {
             <div className="max-w-[75%] mx-auto px-6 py-8 space-y-6">
               {messages.map((msg, i) => {
                 if (msg.role === 'assistant' && msg.kind === 'agent_run' && msg.agent_run) {
-                  return <AgentRunCard key={i} run={msg.agent_run} />;
+                  return <AgentRunCard key={i} run={msg.agent_run} onRetry={handleRetryAgent} />;
                 }
                 return <ChatBubble key={i} msg={msg} />;
               })}

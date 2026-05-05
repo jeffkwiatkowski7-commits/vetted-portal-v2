@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight, Check, X as XIcon, Loader2 } from 'lucide-react';
 import type { AgentRunMessage } from '../../types';
 
-export default function AgentRunCard({ run }: { run: AgentRunMessage }) {
+export default function AgentRunCard({
+  run,
+  onRetry,
+}: {
+  run: AgentRunMessage;
+  onRetry?: (run: AgentRunMessage) => void;
+}) {
   const [open, setOpen] = useState(run.status === 'running');
   const isError = run.status === 'error' || run.error;
   const isRunning = run.status === 'running' || run.status === 'queued';
@@ -37,6 +43,14 @@ export default function AgentRunCard({ run }: { run: AgentRunMessage }) {
       {open && (
         <div className="border-t border-vetted-border px-3 py-2 text-xs">
           {run.error && <div className="text-red-600 mb-2">Error: {run.error}</div>}
+          {run.status === 'error' && onRetry && (
+            <button
+              onClick={() => onRetry(run)}
+              className="mt-2 mb-3 px-3 py-1.5 text-xs bg-vetted-primary text-white rounded-lg hover:bg-black"
+            >
+              Retry this sub-agent
+            </button>
+          )}
           {run.prompt && (
             <details className="mb-2">
               <summary className="cursor-pointer text-vetted-text-muted">Prompt</summary>

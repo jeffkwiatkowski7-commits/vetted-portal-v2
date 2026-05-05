@@ -49,7 +49,7 @@ export async function runDispatch({ project, prompt, onEvent = null, userId = nu
   const events = [];
   const startedAt = Date.now();
   const emit = (type, payload = {}) => {
-    const event = { type, ts: new Date().toISOString(), ...payload };
+    const event = { type, ts: new Date().toISOString(), run_id, ...payload };
     events.push(event);
     if (onEvent) try { onEvent(event); } catch (e) { /* swallow */ }
   };

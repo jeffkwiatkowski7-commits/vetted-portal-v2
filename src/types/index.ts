@@ -56,6 +56,7 @@ export interface Message {
   citations?: SourceCitation[];
   created_at: string;
   kind?: 'agent_run' | null;
+  agent_run?: AgentRunMessage | null;
 }
 
 export interface Project {

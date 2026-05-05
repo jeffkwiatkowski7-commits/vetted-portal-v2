@@ -28,8 +28,9 @@ import { buildDocx, buildXlsx } from './lib/exports.js';
 import { logError, getErrors, clearErrors, pruneOldErrors } from './lib/error-log.js';
 import {
   listTeamsForUser, getTeam, createTeam, updateTeam, archiveTeam,
-  addMember, updateMember, removeMember,
+  addMember, updateMember, removeMember, buildTeamSystemPromptBlock,
 } from './lib/teams.js';
+import { runDispatch, persistAgentRun } from './lib/dispatch-agent.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -968,6 +969,17 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       parts.push(retrievedContext);
     }
 
+    // Active team — augment system prompt and prepare dispatch tool
+    let activeTeam = null;
+    if (chat.active_team_id) {
+      activeTeam = getTeam(db, chat.active_team_id);
+      if (activeTeam) {
+        step(`Team active: ${activeTeam.name}`);
+        const block = buildTeamSystemPromptBlock(activeTeam);
+        if (block) parts.push(block);
+      }
+    }
+
     // Always append context (user + date/time) at the end so model always sees it
     parts.push(`## Session Context\n\n${contextHeader}`);
 
@@ -1083,8 +1095,23 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
     };
     const builtinToolDeclarations = [...BUILTIN_EXPORT_TOOLS];
 
+    // Dispatch tool — only when an active team is present
+    const dispatchToolDeclaration = activeTeam ? {
+      name: 'dispatch_agent',
+      description: 'Dispatch a sub-agent (one of the team members) to handle a sub-task. Returns the sub-agent\'s final message. Use multiple times in one response to run sub-agents in parallel.',
+      parameters: {
+        type: 'object',
+        properties: {
+          project_id: { type: 'string', description: 'Must be a project_id listed in the team roster.' },
+          prompt: { type: 'string', description: 'The full prompt to pass to the sub-agent. Be specific — this is the only context it sees.' },
+        },
+        required: ['project_id', 'prompt'],
+      },
+    } : null;
+
     // Inject Tavily web_search and built-in exports alongside any MCP tool declarations
     const allFunctionDeclarations = [...mcpToolDeclarations, ...builtinToolDeclarations];
+    if (dispatchToolDeclaration) allFunctionDeclarations.push(dispatchToolDeclaration);
     if (hasTavily()) {
       allFunctionDeclarations.push({
         name: "web_search",
@@ -1102,6 +1129,37 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
 
     let aiText = '';
     let result;
+
+    // Extend builtinToolMap with dispatch_agent when a team is active.
+    // Defined here (before the model branch) so both Claude and Gemini paths can use it.
+    const builtinToolMapWithDispatch = activeTeam
+      ? {
+          ...builtinToolMap,
+          dispatch_agent: async (args) => {
+            const projectId = args?.project_id;
+            const promptArg = args?.prompt;
+            if (!projectId || typeof promptArg !== 'string' || !promptArg.trim()) {
+              return 'Error: dispatch_agent requires { project_id, prompt }.';
+            }
+            const member = (activeTeam.members || []).find(m => m.project_id === projectId);
+            if (!member) {
+              return `Error: project_id "${projectId}" is not a member of team "${activeTeam.name}". Available: ${(activeTeam.members || []).map(m => m.project_id).join(', ')}.`;
+            }
+            const proj = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [projectId]);
+            if (!proj) return `Error: project not found.`;
+            step(`Dispatching sub-agent: ${proj.name}`);
+            const run = await runDispatch({
+              project: proj,
+              prompt: promptArg,
+              userId: req.user?.id || null,
+              signal: aiAbort.signal,
+            });
+            persistAgentRun(db, chat.id, run);
+            if (run.error) return `Sub-agent error: ${run.error}`;
+            return run.final_message || '(sub-agent returned no text)';
+          },
+        }
+      : builtinToolMap;
 
     if (isClaudeModel) {
       // Recursively normalize a JSON Schema for Anthropic (draft 2020-12):
@@ -1128,7 +1186,9 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       // Convert MCP + built-in tool declarations to Claude tool format.
       // Anthropic requires input_schema.type === 'object' (literal lowercase string)
       // and the rest of the schema to be valid JSON Schema draft 2020-12.
-      const claudeTools = [...mcpToolDeclarations, ...builtinToolDeclarations].map(decl => {
+      const claudeBaseDecls = [...mcpToolDeclarations, ...builtinToolDeclarations];
+      if (dispatchToolDeclaration) claudeBaseDecls.push(dispatchToolDeclaration);
+      const claudeTools = claudeBaseDecls.map(decl => {
         const tool = { name: decl.name, description: decl.description || '' };
         const params = decl.parameters || {};
         const normalized = normalizeSchema(params);
@@ -1141,7 +1201,7 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       });
 
       step('Calling Claude');
-      result = await claudeDirectChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, { claudeTools, mcpToolMap, mcpManager, builtinToolMap, images, signal: aiAbort.signal });
+      result = await claudeDirectChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, { claudeTools, mcpToolMap, mcpManager, builtinToolMap: builtinToolMapWithDispatch, images, signal: aiAbort.signal });
     } else {
       step('Calling Gemini');
       result = await geminiChatWithDocuments(docs, content, history, systemPromptOverride, req.user?.id || null, step, modelId, geminiTools, images, aiAbort.signal);
@@ -1176,10 +1236,10 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
             }
           }
 
-          // Built-in export tools
-          if (builtinToolMap[prefixedName]) {
+          // Built-in export tools (and dispatch_agent when team is active)
+          if (builtinToolMapWithDispatch[prefixedName]) {
             try {
-              const toolResult = await builtinToolMap[prefixedName](part.functionCall.args || {});
+              const toolResult = await builtinToolMapWithDispatch[prefixedName](part.functionCall.args || {});
               return { functionResponse: { name: prefixedName, response: { result: toolResult } } };
             } catch (err) {
               step(`${prefixedName} error: ${err.message}`);

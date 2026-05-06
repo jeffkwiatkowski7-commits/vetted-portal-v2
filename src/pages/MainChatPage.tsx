@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Send, Square, Paperclip, X, ChevronDown, ChevronUp, Check, Download, Plus } from 'lucide-react';
 import LibraryPickerModal from '../components/chat/LibraryPickerModal';
@@ -855,6 +855,8 @@ export default function MainChatPage() {
     </div>
   );
 
+  const stagedMessages = useMemo(() => groupMessagesIntoStages(messages), [messages]);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <LibraryPickerModal
@@ -899,7 +901,7 @@ export default function MainChatPage() {
           </div>
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-[75%] mx-auto px-6 py-8 space-y-6">
-              {groupMessagesIntoStages(messages).map((item, i) => {
+              {stagedMessages.map((item, i) => {
                 if (item.type === 'stage') {
                   return (
                     <AgentStage

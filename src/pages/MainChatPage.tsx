@@ -609,6 +609,7 @@ export default function MainChatPage() {
         },
         abortRef.current.signal,
         (ev: any) => {
+          const normalizedEv = { ...ev, type: ev.type.replace(/^agent_run\./, '') };
           if (ev.type === 'agent_run.started') {
             setLiveRuns((prev) => ({
               ...prev,
@@ -617,7 +618,7 @@ export default function MainChatPage() {
                 project_id: ev.project_id,
                 project_name: ev.project_name,
                 prompt: '',
-                events: [ev],
+                events: [normalizedEv],
                 status: 'running',
               } as AgentRunMessage,
             }));
@@ -630,7 +631,7 @@ export default function MainChatPage() {
             setLiveRuns((prev) => {
               const cur = prev[ev.run_id];
               if (!cur) return prev;
-              return { ...prev, [ev.run_id]: { ...cur, events: [...cur.events, ev] } };
+              return { ...prev, [ev.run_id]: { ...cur, events: [...cur.events, normalizedEv] } };
             });
           } else if (ev.type === 'agent_run.finished') {
             setLiveRuns((prev) => {
@@ -640,7 +641,7 @@ export default function MainChatPage() {
                 ...prev,
                 [ev.run_id]: {
                   ...cur,
-                  events: [...cur.events, ev],
+                  events: [...cur.events, normalizedEv],
                   final_message: ev.final_message,
                   duration_ms: ev.duration_ms,
                   tokens: ev.tokens,

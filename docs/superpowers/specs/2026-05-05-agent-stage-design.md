@@ -88,12 +88,18 @@ Tile grid uses CSS grid with `repeat(auto-fit, minmax(180px, 1fr))` — wraps cl
 | Status | Dot | Header label | Body |
 |---|---|---|---|
 | `queued` | gray (#3a3f4a) | name + "queued" | empty placeholder |
-| `running` | gold pulsing | name + elapsed + current tool | live scrolling feed (last 3 lines, auto-scroll) |
-| `done` | emerald (#10b981) | name + final elapsed + token count | frozen final state of feed; subtle "✓" |
-| `error` | red | name + "error" | error message; retry button (existing) |
-| `cancelled` | gray | name + "cancelled" | frozen feed (whatever was last) |
+| `running` | gold pulsing | name + elapsed + current tool | last 3 lines of activity feed |
+| `done` | emerald (#10b981) | name + final elapsed + token count | frozen last 3 lines; subtle "✓" |
+| `error` | red | name + "error" | short error message |
+| `cancelled` | gray | name + "cancelled" | frozen last 3 lines (whatever was last) |
 
-Tile click anywhere expands the existing `AgentRunCard` (full event log + prompt + final message) inline below the header, pushing the tile to a card layout. Click again to collapse.
+### Expand-to-detail behavior
+
+Clicking a tile reveals the full `AgentRunCard` (event log + prompt + final message + retry button) **stacked below the tile grid**, not inside the grid. Implementation: the open tile's index is tracked in `AgentStage` state; when at least one tile is open, the corresponding `AgentRunCard`s render in a vertical list directly below the grid, in tile order. Multiple tiles can be open at once. Click the same tile again (or a "close" affordance on the detail card) to collapse.
+
+This avoids the layout-thrash of trying to make one tile span the grid full-width and reflow siblings, and keeps the grid visually stable as users browse details.
+
+**Retry on errored runs:** the retry button lives only in the expanded detail view, not on the tile face. Errored tiles show enough info to know something failed (red dot, short error message); user clicks to expand and sees the existing retry control inside `AgentRunCard`.
 
 ## Data Flow
 
@@ -102,8 +108,8 @@ Tile click anywhere expands the existing `AgentRunCard` (full event log + prompt
 1. User sends a message in a team-active chat → orchestrator starts.
 2. Orchestrator emits a `dispatch_agent` tool call → `agent_run.started` event arrives over SSE → `liveRuns[run_id]` populated → a new in-flight Stage block appears at the bottom of the message stream.
 3. Subsequent `agent_run.thinking` / `tool_call` / `tool_result` / `text` events append to `liveRuns[run_id].events`. The corresponding tile's activity feed re-renders.
-4. `agent_run.finished` flips the tile from `running` to `done` / `error` / `cancelled`. Tile stays visible.
-5. When the orchestrator's `done` event fires, `MainChatPage` refetches the chat. The persisted `agent_run` messages now appear in `messages` state. `liveRuns` clears. The Stage seamlessly switches from "live" rendering (driven by `liveRuns`) to "static" rendering (driven by persisted messages) — same component, same data shape.
+4. `agent_run.finished` flips the tile from `running` to `done` / `error` / `cancelled`. **Tile stays visible in the live Stage even after finishing** (any non-terminal state). This is a deliberate change from the current `AgentRunCard` rendering, which filters live runs to `running`/`queued` only — the new live Stage renders all `liveRuns` entries regardless of status, so a 3-tile Stage doesn't briefly become a 2-tile Stage when one finishes early.
+5. When the orchestrator's `done` event fires, `MainChatPage` refetches the chat. The persisted `agent_run` messages now appear in `messages` state. `liveRuns` clears. The Stage seamlessly switches from "live" rendering (driven by `liveRuns`) to "static" rendering (driven by persisted messages) — same component, same data shape, and tiles keyed by `run_id` so React preserves expanded-detail state across the swap.
 
 ### On chat reload
 
@@ -153,13 +159,17 @@ Live runs (`liveRuns`) form one additional in-progress Stage rendered below the 
 
 ### Tile activity feed
 
-The feed shows the last 3 visible "lines" derived from the run's events. A "line" is one of:
+The feed is a fixed-height container (3 lines) showing the **last 3 derived lines** from the run's events. No internal scrolling — when a new line arrives, the oldest drops off the top. (Older lines remain in the persisted log accessible via the expanded view.)
+
+A "line" is derived from one event:
 
 - `→ {tool_name} {args_summary}` — for `tool_call` events
 - `↓ {tool_name} returned ({result_summary})` — for `tool_result` events
-- The text of `delta` — for `thinking` and `text` events, truncated to ~60 chars
+- `{delta}` — for `thinking` and `text` events, truncated to ~60 chars
 
-The feed scrolls so the newest line is at the bottom. Older lines remain in the persisted log accessible via the expanded view.
+**Summarization rule for `args_summary` and `result_summary`:** stringify the value as JSON, take the first 50 characters, append `…` if truncated. Newlines collapsed to single spaces. Cheap and consistent — no per-tool special-casing.
+
+**Performance:** for tile rendering, slice `run.events` to the last 10 entries before deriving lines. Long-running agents can accumulate hundreds of events; the tile only ever displays a handful, so re-rendering against the full array on every event would thrash. The full event list stays in memory for the expanded detail view.
 
 ### Stage header
 
@@ -167,8 +177,9 @@ The feed scrolls so the newest line is at the bottom. Older lines remain in the 
 ▣ Investment Memo team — 3 sub-agents · 24s elapsed
 ```
 
-- Name comes from `chat.active_team_id → teams.name` looked up at render time (fetch the team once per chat load).
-- Counts and elapsed update live during the run. Elapsed = max of any tile's running/done duration.
+- Name comes from `chat.active_team_id → teams.name`, fetched once per chat load via `GET /api/teams/:id`. (If that endpoint doesn't exist yet, list-and-find from `GET /api/teams` is acceptable for v1.)
+- **Missing-team fallback:** if the team lookup 404s (team was deleted), or `chat.active_team_id` is null, render the header as `▣ Sub-agents — N running` (or `N done`, etc., per state). During the brief window before the team-fetch resolves, suppress the header text and keep the tile grid alone — avoids a flash.
+- Counts and elapsed update live during the run. Elapsed = wall-clock from the first tile's start to the last tile's finish (or "now" if any tile is still running).
 
 ### Empty / single-agent edge cases
 

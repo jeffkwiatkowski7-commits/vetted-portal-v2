@@ -31,7 +31,7 @@ export function deriveFeedLines(events: AgentRunEvent[], take = 3): string[] {
   return lines.slice(-take);
 }
 
-/** Find the most recent in-flight tool name, for the tile header. */
+/** Name of the most recently-called tool that has not yet returned, otherwise null. Used in the tile header to show what an agent is currently doing. */
 export function currentToolName(events: AgentRunEvent[]): string | null {
   for (let i = events.length - 1; i >= 0; i--) {
     const ev = events[i];
@@ -40,10 +40,6 @@ export function currentToolName(events: AgentRunEvent[]): string | null {
   }
   return null;
 }
-
-export type StageRenderItem =
-  | { type: 'message'; msg: any }
-  | { type: 'stage'; runs: AgentRunMessage[] };
 
 /** Group consecutive kind="agent_run" messages into stages. */
 export function groupMessagesIntoStages<M extends { role: string; kind?: string | null; agent_run?: AgentRunMessage | null }>(

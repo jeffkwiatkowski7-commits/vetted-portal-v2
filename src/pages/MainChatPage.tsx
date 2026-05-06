@@ -934,14 +934,12 @@ export default function MainChatPage() {
                 }
                 return <ChatBubble key={i} msg={item.msg} />;
               })}
-              {Object.values(liveRuns).length > 0 && (
-                <AgentStage
-                  key="live-stage"
-                  runs={Object.values(liveRuns)}
-                  teamName={activeTeamName}
-                  onRetry={handleRetryAgent}
-                />
-              )}
+              <AgentStage
+                key="live-stage"
+                runs={Object.values(liveRuns)}
+                teamName={activeTeamName}
+                onRetry={handleRetryAgent}
+              />
               <div ref={messagesEndRef} />
             </div>
           </div>

@@ -926,7 +926,7 @@ export default function MainChatPage() {
                 if (item.type === 'stage') {
                   return (
                     <AgentStage
-                      key={`stage-${i}-${item.runs[0]?.run_id ?? ''}`}
+                      key={`stage-${item.runs[0]?.run_id ?? `idx-${i}`}`}
                       runs={item.runs}
                       teamName={activeTeamName}
                       onRetry={handleRetryAgent}
@@ -936,7 +936,7 @@ export default function MainChatPage() {
                 return <ChatBubble key={i} msg={item.msg} />;
               })}
               <AgentStage
-                key="live-stage"
+                key={`stage-${Object.values(liveRuns)[0]?.run_id ?? 'live'}`}
                 runs={Object.values(liveRuns)}
                 teamName={activeTeamName}
                 onRetry={handleRetryAgent}

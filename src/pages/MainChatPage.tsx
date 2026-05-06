@@ -335,6 +335,7 @@ export default function MainChatPage() {
   const [chatting, setChatting] = useState(false);
   const [chatId, setChatId] = useState<string | null>(id ?? null);
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
+  const [activeTeamName, setActiveTeamName] = useState<string | null>(null);
   const [pendingFiles, setPendingFiles] = useState<LibraryFile[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
@@ -361,6 +362,25 @@ export default function MainChatPage() {
       setSelectedModel(match);
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!activeTeamId) {
+      setActiveTeamName(null);
+      return;
+    }
+    let cancelled = false;
+    api.teams
+      .get(activeTeamId)
+      .then((t: any) => {
+        if (!cancelled) setActiveTeamName(t?.name ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveTeamName(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTeamId]);
 
   const [modelOpen, setModelOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -907,6 +927,7 @@ export default function MainChatPage() {
                     <AgentStage
                       key={`stage-${i}-${item.runs[0]?.run_id ?? ''}`}
                       runs={item.runs}
+                      teamName={activeTeamName}
                       onRetry={handleRetryAgent}
                     />
                   );

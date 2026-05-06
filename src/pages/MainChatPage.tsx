@@ -9,6 +9,8 @@ import { MessageAttachment } from '../components/chat/MessageAttachment';
 import { ModelPickerMenu, ProviderTile, type ModelPickerOption } from '../components/chat/ModelPickerMenu';
 import TeamDropdown from '../components/chat/TeamDropdown';
 import AgentRunCard from '../components/chat/AgentRunCard';
+import AgentStage from '../components/chat/AgentStage';
+import { groupMessagesIntoStages } from '../components/chat/agent-stage-utils';
 import { LibraryFile, AgentRunMessage } from '../types';
 
 type ModelOption = ModelPickerOption;
@@ -897,11 +899,17 @@ export default function MainChatPage() {
           </div>
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-[75%] mx-auto px-6 py-8 space-y-6">
-              {messages.map((msg, i) => {
-                if (msg.role === 'assistant' && msg.kind === 'agent_run' && msg.agent_run) {
-                  return <AgentRunCard key={i} run={msg.agent_run} onRetry={handleRetryAgent} />;
+              {groupMessagesIntoStages(messages).map((item, i) => {
+                if (item.type === 'stage') {
+                  return (
+                    <AgentStage
+                      key={`stage-${i}-${item.runs[0]?.run_id ?? ''}`}
+                      runs={item.runs}
+                      onRetry={handleRetryAgent}
+                    />
+                  );
                 }
-                return <ChatBubble key={i} msg={msg} />;
+                return <ChatBubble key={i} msg={item.msg} />;
               })}
               {Object.values(liveRuns)
                 .filter((r) => r.status === 'running' || r.status === 'queued')

@@ -64,9 +64,9 @@ export default function AgentTile({
         <span className="text-xs font-medium text-vetted-primary truncate">{run.project_name}</span>
         <span className="ml-auto text-[11px] text-vetted-text-muted whitespace-nowrap">{headerLabel}</span>
       </div>
-      {isError && run.error ? (
+      {isError ? (
         <div className="font-mono text-[11px] text-red-600 leading-tight h-[3.6rem] overflow-hidden">
-          {run.error}
+          {run.error || 'Unknown error'}
         </div>
       ) : (
         <div className="font-mono text-[11px] text-vetted-text-secondary leading-tight h-[3.6rem] overflow-hidden flex flex-col justify-end">

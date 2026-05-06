@@ -644,22 +644,28 @@ export default function MainChatPage() {
           return updated;
         });
       } else {
-        // Done event is minimal — fetch full messages from API
+        // Done event is minimal — fetch full messages from API.
+        // We replace the entire local list because the backend may have inserted
+        // multiple new messages between user-send and now: the orchestrator's
+        // final synthesis PLUS one `agent_run` row per dispatched sub-agent.
+        // Picking just `.pop()` would either miss the cards or grab an agent_run
+        // row (whose content is JSON) and dump it as a normal bubble.
         const doneChatId = result.chatId || activeChatId;
         const chat = await api.chats.get(doneChatId);
-        const lastMsg = (chat.messages ?? []).filter((m: any) => m.role === 'assistant').pop();
-        setMessages(prev => {
-          const updated = [...prev];
-          updated[updated.length - 1] = {
-            ...updated[updated.length - 1],
-            content: lastMsg?.content ?? '',
-            citations: lastMsg?.citations ?? undefined,
-            reasoning: lastMsg?.reasoning ?? undefined,
-            attachments: lastMsg?.attachments ?? undefined,
-            timestamp: lastMsg?.created_at ?? new Date().toISOString(),
-          };
-          return updated;
-        });
+        setMessages(
+          (chat.messages ?? []).map((m: any) => ({
+            role: m.role,
+            content: m.content,
+            steps: [],
+            timestamp: m.created_at,
+            citations: m.citations ?? undefined,
+            reasoning: m.reasoning ?? undefined,
+            attachments: m.attachments ?? undefined,
+            images: m.images ?? undefined,
+            kind: m.kind ?? null,
+            agent_run: m.agent_run ?? null,
+          }))
+        );
       }
 
     } catch (err: any) {

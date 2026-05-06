@@ -8,7 +8,6 @@ import ExportModal from '../components/chat/ExportModal';
 import { MessageAttachment } from '../components/chat/MessageAttachment';
 import { ModelPickerMenu, ProviderTile, type ModelPickerOption } from '../components/chat/ModelPickerMenu';
 import TeamDropdown from '../components/chat/TeamDropdown';
-import AgentRunCard from '../components/chat/AgentRunCard';
 import AgentStage from '../components/chat/AgentStage';
 import { groupMessagesIntoStages } from '../components/chat/agent-stage-utils';
 import { LibraryFile, AgentRunMessage } from '../types';
@@ -935,11 +934,14 @@ export default function MainChatPage() {
                 }
                 return <ChatBubble key={i} msg={item.msg} />;
               })}
-              {Object.values(liveRuns)
-                .filter((r) => r.status === 'running' || r.status === 'queued')
-                .map((r) => (
-                  <AgentRunCard key={`live-${r.run_id}`} run={r} />
-                ))}
+              {Object.values(liveRuns).length > 0 && (
+                <AgentStage
+                  key="live-stage"
+                  runs={Object.values(liveRuns)}
+                  teamName={activeTeamName}
+                  onRetry={handleRetryAgent}
+                />
+              )}
               <div ref={messagesEndRef} />
             </div>
           </div>

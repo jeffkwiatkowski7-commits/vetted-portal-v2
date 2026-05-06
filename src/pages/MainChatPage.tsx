@@ -368,6 +368,7 @@ export default function MainChatPage() {
       setActiveTeamName(null);
       return;
     }
+    setActiveTeamName(null);
     let cancelled = false;
     api.teams
       .get(activeTeamId)

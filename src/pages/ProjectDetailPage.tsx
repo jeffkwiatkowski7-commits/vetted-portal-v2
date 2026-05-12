@@ -7,7 +7,7 @@ import { ArrowLeft, Settings, Download } from 'lucide-react';
 import type { Project } from '../types';
 import ChatInput from '../components/chat/ChatInput';
 import ChatView from '../components/chat/ChatView';
-import ProjectForm from '../components/projects/ProjectForm';
+import ProjectSettings from '../components/projects/ProjectSettings';
 import ExportModal from '../components/chat/ExportModal';
 
 
@@ -184,26 +184,13 @@ export default function ProjectDetailPage() {
       </div>
 
       {showSettings && project && (
-        <ProjectForm
-          title={`Edit: ${project.name}`}
-          initialData={{
-            name: project.name,
-            description: project.description,
-            system_prompt: project.system_prompt,
-            tool_sets: project.tool_sets as unknown as string[],
-            mcp_servers: project.mcp_servers as unknown as string[],
-            file_ids: projectFiles.map((f) => f.id),
-            pptx_template_id: (project as any).pptx_template_id ?? null,
-          }}
-          projectId={project.id}
-          onSave={handleUpdateProject}
-          onCancel={() => setShowSettings(false)}
-          onDelete={handleDeleteProject}
-          saving={saving}
+        <ProjectSettings
+          project={project}
+          onUpdated={(p) => setProject(p)}
         />
       )}
 
-      {hasChat ? (
+      {!showSettings && (hasChat ? (
         <>
           <div className="flex-1 overflow-hidden">
             <ChatView chatId={activeChat?.id} />
@@ -216,12 +203,11 @@ export default function ProjectDetailPage() {
           {project.description && (
             <p className="text-sm text-vetted-text-secondary mb-6 max-w-md text-center">{project.description}</p>
           )}
-
           <div className="w-full max-w-3xl">
             <ChatInput centered projectId={id} mcpServerIds={projectMcpIds} onMcpServersChange={setProjectMcpIds} isProjectChat />
           </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }

@@ -11,7 +11,7 @@ export default function ProjectsPage() {
   const { user, addToast } = useStore();
   const [projects, setProjects] = useState<Project[]>([]);
   const [sharedProjects, setSharedProjects] = useState<Project[]>([]);
-  const [tab, setTab] = useState<'mine' | 'shared'>('mine');
+  const [tab, setTab] = useState<'all' | 'mine' | 'shared'>('mine');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -23,16 +23,14 @@ export default function ProjectsPage() {
 
   const loadProjects = async () => {
     try {
-      const data = await api.projects.list();
+      // Fetch all relevant projects in one call (server-side filter via scope=all returns owned + shared)
+      const data = await api.projects.list('all');
       const myProjects = data.filter((p: Project) => p.owner_id === user?.id);
       const shared = data.filter((p: Project) => p.owner_id !== user?.id);
       setProjects(myProjects);
       setSharedProjects(shared);
-    } catch (err) {
-      addToast({
-        type: 'error',
-        title: 'Failed to load projects',
-      });
+    } catch {
+      addToast({ type: 'error', title: 'Failed to load projects' });
     } finally {
       setLoading(false);
     }
@@ -60,8 +58,8 @@ export default function ProjectsPage() {
     }
   };
 
-  const currentProjects = tab === 'mine' ? projects : sharedProjects;
-  const filtered = currentProjects.filter((p) =>
+  const visibleProjects = tab === 'all' ? [...projects, ...sharedProjects] : tab === 'mine' ? projects : sharedProjects;
+  const filtered = visibleProjects.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -83,12 +81,13 @@ export default function ProjectsPage() {
         <div className="flex gap-4 items-center justify-between">
           <div className="flex gap-2">
             {[
+              { id: 'all', label: `All (${projects.length + sharedProjects.length})` },
               { id: 'mine', label: `My Projects (${projects.length})` },
               { id: 'shared', label: `Shared With Me (${sharedProjects.length})` },
             ].map(({ id, label }) => (
               <button
                 key={id}
-                onClick={() => setTab(id as 'mine' | 'shared')}
+                onClick={() => setTab(id as 'all' | 'mine' | 'shared')}
                 className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                   tab === id
                     ? 'bg-vetted-accent text-vetted-primary'
@@ -142,11 +141,18 @@ export default function ProjectsPage() {
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <h3 className="font-medium text-vetted-primary">{project.name}</h3>
-                    {tab === 'shared' && (
+                    <div className="flex items-center flex-wrap gap-1">
+                      <h3 className="font-medium text-vetted-primary">{project.name}</h3>
+                      {project.permission && (
+                        <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider rounded-full bg-vetted-accent/15 text-vetted-accent border border-vetted-accent/30">
+                          {project.permission}
+                        </span>
+                      )}
+                    </div>
+                    {(tab === 'shared' || (tab === 'all' && project.owner_id !== user?.id)) && (
                       <p className="text-xs text-vetted-text-secondary">{project.owner_name}</p>
                     )}
-                    {tab === 'mine' && (
+                    {(tab === 'mine' || (tab === 'all' && project.owner_id === user?.id)) && (
                       <div className="inline-block mt-1 px-2 py-0.5 bg-vetted-accent text-vetted-primary text-xs rounded">
                         Owner
                       </div>

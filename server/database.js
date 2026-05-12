@@ -439,6 +439,10 @@ export async function initializeDatabase() {
   try { db.run(`ALTER TABLE projects ADD COLUMN pptx_template_id TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
   try { db.run(`CREATE INDEX IF NOT EXISTS idx_projects_pptx_template ON projects(pptx_template_id)`); } catch (e) { /* already exists */ }
 
+  // Project member invite tracking
+  try { db.run(`ALTER TABLE project_members ADD COLUMN invited_by TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
+  try { db.run(`ALTER TABLE project_members ADD COLUMN invited_at TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
+
   // Add route to apps for route-based apps (e.g. /apps/pptx-parser)
   try { db.run(`ALTER TABLE apps ADD COLUMN route TEXT`); } catch (e) { /* already exists */ }
 

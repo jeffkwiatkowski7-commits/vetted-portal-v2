@@ -3635,6 +3635,24 @@ app.use('/api', leaseRoutes({ requireAuth, requireAdmin }));
 // SEARCH ROUTES
 // ============================================================================
 
+// User lookup for invite autocomplete. Returns minimal fields for any
+// authenticated caller (NOT admin-gated, unlike /api/admin/users).
+// Matches case-insensitive substring on email and display_name.
+app.get('/api/users/search', requireAuth, (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (q.length < 2) return res.json({ users: [] });
+  const pattern = `%${q.toLowerCase()}%`;
+  const users = dbAll(db, `
+    SELECT id, email, display_name, avatar_path
+    FROM users
+    WHERE status = 'active'
+      AND (LOWER(email) LIKE ? OR LOWER(display_name) LIKE ?)
+    ORDER BY display_name
+    LIMIT 10
+  `, [pattern, pattern]);
+  res.json({ users });
+});
+
 app.get('/api/search', requireAuth, (req, res) => {
   const query = req.query.q || '';
 

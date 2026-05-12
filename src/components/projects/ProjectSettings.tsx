@@ -78,7 +78,11 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
         num="i"
         title="Access & Sharing"
         summary={access
-          ? `${access.members.filter(m => m.permission === 'editor').length} collaborators · ${access.members.filter(m => m.permission === 'viewer').length} viewers`
+          ? (() => {
+              const c = access.members.filter(m => m.permission === 'editor').length;
+              const v = access.members.filter(m => m.permission === 'viewer').length;
+              return `${c} ${c === 1 ? 'collaborator' : 'collaborators'} · ${v} ${v === 1 ? 'viewer' : 'viewers'}`;
+            })()
           : 'Loading…'}
         defaultOpen
       >

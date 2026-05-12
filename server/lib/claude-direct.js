@@ -25,7 +25,7 @@ function getClient() {
  */
 export async function chatWithDocuments(docs, userMessage, chatHistory = [], systemPromptOverride = null, userId = null, onStep = null, modelOverride = null, { claudeTools = [], mcpToolMap = {}, mcpManager = null, builtinToolMap = {}, images = [], signal = null } = {}) {
   let textDocs = docs.filter((d) => d.text !== undefined);
-  let pdfDocs = docs.filter((d) => d.base64 !== undefined);
+  let pdfDocs = docs.filter((d) => d.base64 !== undefined && d.mimeType === "application/pdf");
 
   // Claude API has a 100-page PDF limit.
   // When multiple PDFs exist, only send query-relevant ones as native documents;

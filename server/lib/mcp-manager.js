@@ -4,9 +4,28 @@
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { decryptEnvVars } from './secrets.js';
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 const CALL_TIMEOUT_MS = 30 * 1000;       // 30 seconds per tool call
+
+// MCP children are model-invokable — never inherit the portal's full env
+// (Opus_API_KEY, GCP ADC, DATABASE_PATH, etc). Allowlist only the vars a
+// child runtime needs to function; per-server env_vars are layered on top.
+const MCP_ENV_ALLOWLIST = [
+  'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL',
+  'LANG', 'LC_ALL', 'TERM',
+  'TMPDIR', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME',
+  'NODE_ENV',
+];
+
+function baseChildEnv() {
+  const e = {};
+  for (const k of MCP_ENV_ALLOWLIST) {
+    if (process.env[k] !== undefined) e[k] = process.env[k];
+  }
+  return e;
+}
 
 class McpManager {
   constructor() {
@@ -20,12 +39,12 @@ class McpManager {
     }
 
     const args = JSON.parse(serverConfig.args || '[]');
-    const envVars = JSON.parse(serverConfig.env_vars || '{}');
+    const envVars = decryptEnvVars(serverConfig.env_vars);
 
     const transport = new StdioClientTransport({
       command: serverConfig.command,
       args,
-      env: { ...process.env, ...envVars },
+      env: { ...baseChildEnv(), ...envVars },
     });
 
     const client = new Client({

@@ -40,8 +40,6 @@ import {
 import { addLog, getLogs, clearLogs } from "./lib/logger.js";
 import { logError } from "./lib/error-log.js";
 
-const router = Router();
-
 // Multer for in-memory PDF uploads
 const pdfUpload = multer({
   storage: multer.memoryStorage(),
@@ -54,6 +52,16 @@ const pdfUpload = multer({
     }
   },
 });
+
+// Factory: requireAuth + requireAdmin are injected from server/index.js so all
+// routes here are gated by the same auth model as the rest of the API. Bulk
+// destructive routes additionally require admin.
+export default function leaseRoutes({ requireAuth, requireAdmin }) {
+  if (typeof requireAuth !== "function" || typeof requireAdmin !== "function") {
+    throw new Error("leaseRoutes: requireAuth and requireAdmin are required");
+  }
+  const router = Router();
+  router.use(requireAuth);
 
 // SSE helper
 function sseEvent(event, data) {
@@ -363,7 +371,7 @@ router.get("/leases/:id", async (req, res) => {
   }
 });
 
-router.delete("/leases/all", async (req, res) => {
+router.delete("/leases/all", requireAdmin, async (req, res) => {
   try {
     const result = await deleteAllData();
     res.json({ success: true, deleted: result });
@@ -372,7 +380,7 @@ router.delete("/leases/all", async (req, res) => {
   }
 });
 
-router.delete("/leases/:id", async (req, res) => {
+router.delete("/leases/:id", requireAdmin, async (req, res) => {
   try {
     await deleteLease(req.params.id);
     res.json({ success: true });
@@ -417,7 +425,7 @@ router.get("/lease-projects/:id", async (req, res) => {
   }
 });
 
-router.patch("/lease-projects/:id", async (req, res) => {
+router.patch("/lease-projects/:id", requireAdmin, async (req, res) => {
   try {
     const { name, persona, addSkill, removeSkill } = req.body;
     if (addSkill) {
@@ -437,7 +445,7 @@ router.patch("/lease-projects/:id", async (req, res) => {
   }
 });
 
-router.delete("/lease-projects/:id", async (req, res) => {
+router.delete("/lease-projects/:id", requireAdmin, async (req, res) => {
   try {
     await deleteProject(req.params.id);
     res.json({ success: true });
@@ -470,7 +478,7 @@ router.post("/lease-skills", async (req, res) => {
   }
 });
 
-router.patch("/lease-skills/:id", async (req, res) => {
+router.patch("/lease-skills/:id", requireAdmin, async (req, res) => {
   try {
     const { name, description, instructions } = req.body;
     const updates = {};
@@ -484,7 +492,7 @@ router.patch("/lease-skills/:id", async (req, res) => {
   }
 });
 
-router.delete("/lease-skills/:id", async (req, res) => {
+router.delete("/lease-skills/:id", requireAdmin, async (req, res) => {
   try {
     await deleteSkill(req.params.id);
     res.json({ success: true });
@@ -517,9 +525,10 @@ router.get("/lease-logs", (req, res) => {
   res.json({ logs });
 });
 
-router.delete("/lease-logs", (req, res) => {
+router.delete("/lease-logs", requireAdmin, (req, res) => {
   clearLogs();
   res.json({ success: true });
 });
 
-export default router;
+  return router;
+}

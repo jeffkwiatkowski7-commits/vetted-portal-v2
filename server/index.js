@@ -12,15 +12,17 @@ import { initializeDatabase, getDatabase, dbGet, dbAll, dbRun, logUsage } from '
 import { getMockResponse } from './mock-responses.js';
 import { seedDatabase } from './seed.js';
 import leaseRoutes from './lease-routes.js';
-import schedulerRoutes from './scheduler-routes.js';
 import { chatWithDocuments as geminiChatWithDocuments, generate as geminiGenerate, extractGroundedResponse } from './lib/gemini.js';
 import { chatWithDocuments as claudeDirectChatWithDocuments } from './lib/claude-direct.js';
 import bcrypt from 'bcryptjs';
+import rateLimit from 'express-rate-limit';
 import mammoth from 'mammoth';
+import { extractSpreadsheetText, runSpreadsheetQuery } from './lib/spreadsheet.js';
 import { indexFile, queryProject, deleteFileChunks, deleteProjectChunks, formatRetrievedContext, extractCitations, isSupportedType, extractText } from './lib/rag.js';
 import { deleteFile as gcsDeleteFile, deleteProjectFiles as gcsDeleteProjectFiles, downloadFile as gcsDownload } from './lib/gcs.js';
 import { chunkText, embedTexts } from './lib/embeddings.js';
 import mcpManager from './lib/mcp-manager.js';
+import { encryptEnvVars, decryptEnvVars, previewEnvVarsObject, mergeEnvVars, parseIncomingEnvVars } from './lib/secrets.js';
 import { hasTavily, tavilySearch } from './lib/tavily.js';
 import { parsePptxTemplate } from './lib/pptx-parser.js';
 import { buildBrandedCanvasBlock, getDesignTokens } from './lib/branded-canvas.js';
@@ -31,6 +33,10 @@ import {
   addMember, updateMember, removeMember, buildTeamSystemPromptBlock,
 } from './lib/teams.js';
 import { runDispatch, persistAgentRun } from './lib/dispatch-agent.js';
+import {
+  listSchedulesForTeam, getSchedule, createSchedule, updateSchedule,
+  deleteSchedule, listRuns as listScheduleRuns, runSchedule, startScheduleLoop,
+} from './lib/team-schedules.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -198,18 +204,35 @@ async function runMigrations(db) {
     console.log('Migration: added password_hash column');
   }
 
-  // Ensure jeffk@vettedbot.com exists with a password hash
+  // Add skills.created_by for ownership-based authz on PUT/DELETE/file-attach.
+  // Existing rows backfill to the first admin user so legacy skills remain editable
+  // by an admin without breaking the UI. New skills set this on INSERT.
+  const skillCols = dbAll(db, "PRAGMA table_info('skills')");
+  const hasSkillCreatedBy = skillCols.some(c => c.name === 'created_by');
+  if (!hasSkillCreatedBy) {
+    dbRun(db, 'ALTER TABLE skills ADD COLUMN created_by TEXT');
+    const firstAdmin = dbGet(db, "SELECT id FROM users WHERE role IN ('admin','super_admin') ORDER BY created_at ASC LIMIT 1");
+    if (firstAdmin?.id) {
+      dbRun(db, 'UPDATE skills SET created_by = ? WHERE created_by IS NULL', [firstAdmin.id]);
+    }
+    console.log('Migration: added skills.created_by column');
+  }
+
+  // Ensure jeffk@vettedbot.com exists. Initial password is sourced from
+  // JEFFK_INITIAL_PASSWORD env var; if unset, the row is created without a
+  // password (cannot log in via /api/auth/login until the admin sets one).
   const jeffk = dbGet(db, "SELECT id, password_hash FROM users WHERE email = 'jeffk@vettedbot.com'");
+  const jeffkInitial = process.env.JEFFK_INITIAL_PASSWORD;
   if (!jeffk) {
-    const hash = await bcrypt.hash('Vetted@3:16', 10);
+    const hash = jeffkInitial ? await bcrypt.hash(jeffkInitial, 10) : null;
     const newId = crypto.randomUUID();
     const now = new Date().toISOString();
     dbRun(db, "INSERT INTO users (id, email, display_name, role, status, password_hash, created_at, updated_at) VALUES (?, 'jeffk@vettedbot.com', 'Jeff Kwiatkowski', 'admin', 'active', ?, ?, ?)", [newId, hash, now, now]);
-    console.log('Migration: created jeffk@vettedbot.com user with password');
-  } else if (!jeffk.password_hash) {
-    const hash = await bcrypt.hash('Vetted@3:16', 10);
+    console.log(`Migration: created jeffk@vettedbot.com user${hash ? ' with password' : ' (no password — set JEFFK_INITIAL_PASSWORD)'}`);
+  } else if (!jeffk.password_hash && jeffkInitial) {
+    const hash = await bcrypt.hash(jeffkInitial, 10);
     dbRun(db, "UPDATE users SET password_hash = ? WHERE email = 'jeffk@vettedbot.com'", [hash]);
-    console.log('Migration: set jeffk password');
+    console.log('Migration: set jeffk password from JEFFK_INITIAL_PASSWORD');
   }
 
   // Disable old Vertex-based Claude models (GCP doesn't support Claude); direct-API models re-enabled below
@@ -267,24 +290,26 @@ async function runMigrations(db) {
     dbRun(db, "UPDATE model_configs SET is_enabled = 1 WHERE id = 'claude-opus-4-6'");
   }
 
-  // Ensure jefffox@vettedconsultant.com exists
+  // Ensure jefffox@vettedconsultant.com exists. Initial password from JFOX_INITIAL_PASSWORD; row created without password if unset.
   const jfox = dbGet(db, "SELECT id FROM users WHERE email = 'jefffox@vettedconsultant.com'");
   if (!jfox) {
-    const hash = await bcrypt.hash('SalesRock$24', 10);
+    const jfoxInitial = process.env.JFOX_INITIAL_PASSWORD;
+    const hash = jfoxInitial ? await bcrypt.hash(jfoxInitial, 10) : null;
     const newId = crypto.randomUUID();
     const now = new Date().toISOString();
     dbRun(db, "INSERT INTO users (id, email, display_name, job_title, department, role, status, password_hash, created_at, updated_at) VALUES (?, 'jefffox@vettedconsultant.com', 'Jeff Fox', 'Sales', 'Sales', 'user', 'active', ?, ?, ?)", [newId, hash, now, now]);
-    console.log('Migration: created jefffox@vettedconsultant.com');
+    console.log(`Migration: created jefffox@vettedconsultant.com${hash ? '' : ' (no password — set JFOX_INITIAL_PASSWORD)'}`);
   }
 
-  // Ensure wross@prepfunds.net exists
+  // Ensure wross@prepfunds.net exists. Initial password from WROSS_INITIAL_PASSWORD; row created without password if unset.
   const wross = dbGet(db, "SELECT id FROM users WHERE email = 'wross@prepfunds.net'");
   if (!wross) {
-    const hash = await bcrypt.hash('PrepOwner!77', 10);
+    const wrossInitial = process.env.WROSS_INITIAL_PASSWORD;
+    const hash = wrossInitial ? await bcrypt.hash(wrossInitial, 10) : null;
     const newId = crypto.randomUUID();
     const now = new Date().toISOString();
     dbRun(db, "INSERT INTO users (id, email, display_name, job_title, role, status, password_hash, created_at, updated_at) VALUES (?, 'wross@prepfunds.net', 'Bill Ross', 'Owner', 'user', 'active', ?, ?, ?)", [newId, hash, now, now]);
-    console.log('Migration: created wross@prepfunds.net');
+    console.log(`Migration: created wross@prepfunds.net${hash ? '' : ' (no password — set WROSS_INITIAL_PASSWORD)'}`);
   }
 
   // Ensure the PowerPoint Template Extractor app row exists. Production DBs were
@@ -467,9 +492,15 @@ try {
   process.exit(1);
 }
 
-// Helper function to get current user (demo - from header)
+// Helper function to get current user (demo - from header).
+// Only the X-User-Id header is honored. The legacy ?userId= query-string
+// fallback was an open CSRF surface (any link/img URL with ?userId=<known-uuid>
+// would be authenticated as that user) and has been removed. The one route
+// that legitimately needed it (the thumbnail <img> render) now opts in
+// explicitly via _allowQueryUserId below.
 function getCurrentUserId(req) {
-  return req.headers['x-user-id'] || req.query.userId;
+  if (req._allowQueryUserId && req.query?.userId) return String(req.query.userId);
+  return req.headers['x-user-id'];
 }
 
 function getCurrentUser(req) {
@@ -479,6 +510,32 @@ function getCurrentUser(req) {
   }
   return dbGet(db, 'SELECT * FROM users WHERE id = ?', [userId]);
 }
+
+// Resolve a user's access level for a project. Returns { project, level }
+// where level ∈ 'admin' | 'owner' | 'editor' | 'viewer' | 'none'.
+// 'project' is null when the row does not exist.
+function getProjectAccess(projectId, user) {
+  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [projectId]);
+  if (!project) return { project: null, level: 'none' };
+  if (user && (user.role === 'admin' || user.role === 'super_admin')) {
+    return { project, level: 'admin' };
+  }
+  if (user && project.owner_id === user.id) {
+    return { project, level: 'owner' };
+  }
+  if (!user) return { project, level: 'none' };
+  const member = dbGet(
+    db,
+    'SELECT permission FROM project_members WHERE project_id = ? AND user_id = ?',
+    [projectId, user.id],
+  );
+  if (!member) return { project, level: 'none' };
+  return { project, level: member.permission || 'viewer' };
+}
+
+const _PROJECT_WRITE_LEVELS = new Set(['admin', 'owner', 'editor']);
+function canWriteProject(level) { return _PROJECT_WRITE_LEVELS.has(level); }
+function canReadProject(level) { return level !== 'none'; }
 
 // Middleware to check authentication
 const _lastLoginUpdate = new Map(); // userId → timestamp, throttle to 1/hour
@@ -502,7 +559,19 @@ function requireAuth(req, res, next) {
 // AUTH ROUTES
 // ============================================================================
 
-app.post('/api/auth/login', async (req, res) => {
+// Brute-force guard on login. Counts only failed attempts (successful logins
+// don't burn the budget), keyed by IP. If the app is behind a proxy/LB, set
+// `app.set('trust proxy', N)` so req.ip reflects the client, not the proxy.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { error: 'Too many login attempts. Try again in 15 minutes.' },
+});
+
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -581,6 +650,16 @@ app.get('/api/chats', requireAuth, (req, res) => {
 
 app.post('/api/chats', requireAuth, (req, res) => {
   const { title, model, project_id, system_prompt, temperature } = req.body;
+
+  // Reject chats tied to a project the caller can't read — otherwise the
+  // attacker can use the chat to pull that project's files/skills/system
+  // prompt into the LLM context and read it back through the response.
+  if (project_id) {
+    const { project, level } = getProjectAccess(project_id, req.user);
+    if (!project || !canReadProject(level)) {
+      return res.status(403).json({ error: 'Not authorized to use this project' });
+    }
+  }
 
   const chatId = uuidv4();
   const now = new Date().toISOString();
@@ -800,6 +879,23 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       } catch {
         return { name: file.original_name, text: `[Could not read ${file.original_name}]` };
       }
+    } else if (
+      file.file_type === 'xlsx' || file.file_type === 'xls' || file.file_type === 'csv'
+      || file.mime_type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      || file.mime_type === 'application/vnd.ms-excel'
+      || file.mime_type === 'text/csv'
+    ) {
+      try {
+        const buffer = fs.readFileSync(filePath);
+        const mimeType = file.mime_type
+          || (file.file_type === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : file.file_type === 'xls' ? 'application/vnd.ms-excel'
+            : 'text/csv');
+        const text = await extractSpreadsheetText({ buffer, mimeType, filename: file.original_name });
+        return { name: file.original_name, text };
+      } catch (err) {
+        return { name: file.original_name, text: `[Could not read ${file.original_name}: ${err.message}]` };
+      }
     } else {
       try {
         const text = fs.readFileSync(filePath, 'utf8');
@@ -816,6 +912,20 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
 
   try {
     const docs = [];
+    // Map of original_name → {path, mimeType} for attached spreadsheets, so
+    // the pandas_query tool can resolve a model-supplied filename to a real
+    // path without exposing arbitrary filesystem access.
+    const spreadsheetFiles = new Map();
+    const trackSpreadsheet = (file) => {
+      const isSheet = ['xlsx', 'xls', 'csv'].includes(file.file_type)
+        || ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-excel', 'text/csv'].includes(file.mime_type);
+      if (!isSheet) return;
+      const mimeType = file.mime_type
+        || (file.file_type === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : file.file_type === 'xls' ? 'application/vnd.ms-excel' : 'text/csv');
+      spreadsheetFiles.set(file.original_name, { path: resolveFilePath(file.file_path), mimeType });
+    };
 
     // 1. Load project files
     if (project) {
@@ -823,21 +933,32 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
       const projectFiles = dbAll(db, 'SELECT * FROM library_files WHERE project_id = ?', [project.id]);
       if (projectFiles.length > 0) {
         step(`Reading ${projectFiles.length} project file${projectFiles.length !== 1 ? 's' : ''}`);
-        for (const file of projectFiles) docs.push(await readLibraryFile(file));
+        for (const file of projectFiles) { docs.push(await readLibraryFile(file)); trackSpreadsheet(file); }
       }
     }
 
-    // 2. Load per-message attachments (deduplicate against project files)
+    // 2. Load per-message attachments (deduplicate against project files).
+    // Each attachment must either belong to the current user OR be a file
+    // already attached to a project the caller can read — otherwise an
+    // attacker could enumerate any user's library_files.id and read its
+    // contents back through the model.
     if (attachments && attachments.length > 0) {
       step(`Reading ${attachments.length} attached file${attachments.length !== 1 ? 's' : ''}`);
       const projectFileIds = project
         ? new Set(dbAll(db, 'SELECT id FROM library_files WHERE project_id = ?', [project.id]).map(f => f.id))
         : new Set();
+      const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
       for (const fileId of attachments) {
         if (projectFileIds.has(fileId)) continue;
         const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ?', [fileId]);
         if (!file) continue;
+        if (!isAdmin && file.user_id !== req.user.id) {
+          if (!file.project_id) continue;
+          const { project: attachProject, level } = getProjectAccess(file.project_id, req.user);
+          if (!attachProject || !canReadProject(level)) continue;
+        }
         docs.push(await readLibraryFile(file));
+        trackSpreadsheet(file);
       }
     }
 
@@ -1100,7 +1221,61 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
         return `Generated Excel file "${file.filename}". The file is now attached to your reply and the user can download it.`;
       },
     };
+
+    // pandas_query — only registered when a spreadsheet is attached. Resolves
+    // model-supplied `filename` against the per-request whitelist so the
+    // sidecar can't be aimed at arbitrary disk paths.
+    if (spreadsheetFiles.size > 0) {
+      builtinToolMap.pandas_query = async (args) => {
+        if (!args || typeof args.filename !== 'string' || typeof args.code !== 'string') {
+          return 'Error: pandas_query requires `filename` and `code` strings.';
+        }
+        const sheet = typeof args.sheet === 'string' && args.sheet ? args.sheet : null;
+        const entry = spreadsheetFiles.get(args.filename);
+        if (!entry) {
+          return `Error: ${args.filename} is not an attached spreadsheet. Available: ${[...spreadsheetFiles.keys()].join(', ')}`;
+        }
+        step(`pandas_query(${args.filename}${sheet ? ` / ${sheet}` : ''})`);
+        try {
+          const out = await runSpreadsheetQuery({ filePath: entry.path, mimeType: entry.mimeType, sheet, code: args.code });
+          return out.trim() || '(empty result)';
+        } catch (err) {
+          return `Error: ${err.message}`;
+        }
+      };
+    }
+
     const builtinToolDeclarations = [...BUILTIN_EXPORT_TOOLS];
+    if (spreadsheetFiles.size > 0) {
+      builtinToolDeclarations.push({
+        name: 'pandas_query',
+        description: `Run a pandas expression against an attached spreadsheet to compute aggregations, filters, or statistics that aren't visible in the prompt summary. Use this when the user asks for totals, group-bys, ranked lists, slices of large sheets, or computations across many rows.
+
+Available variables inside the expression:
+- \`df\` — the selected sheet as a DataFrame
+- \`sheets\` — dict of all sheets keyed by sheet name (e.g. \`sheets["Rent Roll"]\`)
+- \`pd\`, \`np\` — pandas and numpy
+
+Restrictions: no imports, no dunder access, no \`open\`/\`getattr\`/\`compile\`/\`globals\`. End with an expression OR assign to \`result\`.
+
+Examples:
+- \`df.groupby('Tenant')['Annual Rent'].sum().sort_values(ascending=False)\`
+- \`df[df['NRA'] > 5000][['Tenant', 'Suite', 'Annual Rent']]\`
+- \`{'mean': df['Rent'].mean(), 'total': int(df['Rent'].sum())}\`
+- \`sheets['Summary'].describe()\`
+
+Attached spreadsheets: ${[...spreadsheetFiles.keys()].join(', ')}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            filename: { type: 'string', description: 'Original name of an attached spreadsheet (e.g. "rent_roll.xlsx"). Must match exactly.' },
+            sheet: { type: 'string', description: 'Optional. Which sheet to bind as `df`. Defaults to the first sheet. Other sheets are always available via the `sheets` dict.' },
+            code: { type: 'string', description: 'Pandas expression or short code block. The final expression value (or `result` variable) is returned as text.' },
+          },
+          required: ['filename', 'code'],
+        },
+      });
+    }
 
     // Dispatch tool — only when an active team is present
     const dispatchToolDeclaration = activeTeam ? {
@@ -1152,8 +1327,11 @@ app.post('/api/chats/:id/messages', requireAuth, async (req, res) => {
             if (!member) {
               return `Error: project_id "${projectId}" is not on this team.`;
             }
-            const proj = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [projectId]);
+            // Re-check caller's access to the project at dispatch time —
+            // team-member rows can outlive a permission revoke.
+            const { project: proj, level } = getProjectAccess(projectId, req.user);
             if (!proj) return `Error: project not found.`;
+            if (!canReadProject(level)) return `Error: not authorized to dispatch to this project.`;
             if (agentDispatchCount >= AGENT_MAX_PER_TURN) {
               return `Error: dispatch limit reached (${AGENT_MAX_PER_TURN} per turn).`;
             }
@@ -1496,9 +1674,9 @@ app.post('/api/projects', requireAuth, (req, res) => {
 });
 
 app.get('/api/projects/:id', requireAuth, (req, res) => {
-  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [req.params.id]);
+  const { project, level } = getProjectAccess(req.params.id, req.user);
 
-  if (!project) {
+  if (!project || !canReadProject(level)) {
     return res.status(404).json({ error: 'Project not found' });
   }
 
@@ -1517,15 +1695,11 @@ app.get('/api/projects/:id', requireAuth, (req, res) => {
 app.put('/api/projects/:id', requireAuth, (req, res) => {
   const { name, description, default_model, system_prompt, temperature, tool_sets, mcp_servers, pptx_template_id } = req.body;
 
-  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [req.params.id]);
+  const { project, level } = getProjectAccess(req.params.id, req.user);
   if (!project) {
     return res.status(404).json({ error: 'Project not found' });
   }
-  // Allow owner, admin, or project member to update
-  const isOwner = project.owner_id === req.user.id;
-  const isAdmin = req.user.role === 'admin';
-  const isMember = dbGet(db, 'SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?', [req.params.id, req.user.id]);
-  if (!isOwner && !isAdmin && !isMember) {
+  if (!canWriteProject(level)) {
     return res.status(403).json({ error: 'Not authorized to update this project' });
   }
 
@@ -1644,6 +1818,16 @@ app.post('/api/library/upload', requireAuth, upload.single('file'), (req, res) =
   }
 
   const { project_id } = req.body;
+  // Reject attempts to plant a file into a project the caller can't write to.
+  // Anyone with read access can still upload to their own library and pivot
+  // it later via PUT, but that route is gated the same way.
+  if (project_id) {
+    const { project, level } = getProjectAccess(project_id, req.user);
+    if (!project || !canWriteProject(level)) {
+      try { fs.unlinkSync(req.file.path); } catch {}
+      return res.status(403).json({ error: 'Not authorized to upload to this project' });
+    }
+  }
   const fileId = uuidv4();
   const now = new Date().toISOString();
   const stats = fs.statSync(req.file.path);
@@ -1761,6 +1945,17 @@ app.put('/api/library/:id', requireAuth, asyncRoute(async (req, res) => {
     return res.status(404).json({ error: 'File not found' });
   }
 
+  // If reassigning to a different project, the caller must have write
+  // access to that target project. Without this check, a user could pivot
+  // any of their own files into a victim's project and inject content
+  // into the victim's chats via RAG retrieval.
+  if (project_id && project_id !== file.project_id) {
+    const { project, level } = getProjectAccess(project_id, req.user);
+    if (!project || !canWriteProject(level)) {
+      return res.status(403).json({ error: 'Not authorized to assign file to this project' });
+    }
+  }
+
   // If project_id is changing and file was indexed, clean up old chunks
   if (project_id !== undefined && file.project_id && file.index_status) {
     try {
@@ -1851,12 +2046,21 @@ app.post('/api/skills', requireAuth, (req, res) => {
   const id = uuidv4();
   const now = new Date().toISOString();
   dbRun(db, `
-    INSERT INTO skills (id, name, description, instructions, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `, [id, name.trim(), description?.trim() || null, instructions.trim(), now, now]);
+    INSERT INTO skills (id, name, description, instructions, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `, [id, name.trim(), description?.trim() || null, instructions.trim(), req.user.id, now, now]);
   const skill = dbGet(db, 'SELECT * FROM skills WHERE id = ?', [id]);
   res.status(201).json({ skill });
 });
+
+// A user may modify a skill if they created it OR they are an admin.
+// Skills get injected into project system prompts, so cross-user edits
+// would be a stored prompt-injection vector.
+function canManageSkill(skill, user) {
+  if (!skill || !user) return false;
+  if (user.role === 'admin' || user.role === 'super_admin') return true;
+  return skill.created_by === user.id;
+}
 
 // Get a single skill with attached files
 app.get('/api/skills/:id', requireAuth, (req, res) => {
@@ -1874,6 +2078,9 @@ app.get('/api/skills/:id', requireAuth, (req, res) => {
 app.put('/api/skills/:id', requireAuth, (req, res) => {
   const skill = dbGet(db, 'SELECT * FROM skills WHERE id = ?', [req.params.id]);
   if (!skill) return res.status(404).json({ error: 'Skill not found' });
+  if (!canManageSkill(skill, req.user)) {
+    return res.status(403).json({ error: 'Not authorized to modify this skill' });
+  }
   const { name, description, instructions } = req.body;
   const now = new Date().toISOString();
   dbRun(db, `
@@ -1894,20 +2101,32 @@ app.put('/api/skills/:id', requireAuth, (req, res) => {
 app.delete('/api/skills/:id', requireAuth, (req, res) => {
   const skill = dbGet(db, 'SELECT * FROM skills WHERE id = ?', [req.params.id]);
   if (!skill) return res.status(404).json({ error: 'Skill not found' });
+  if (!canManageSkill(skill, req.user)) {
+    return res.status(403).json({ error: 'Not authorized to delete this skill' });
+  }
   dbRun(db, 'DELETE FROM skill_files WHERE skill_id = ?', [req.params.id]);
   dbRun(db, 'DELETE FROM project_skills WHERE skill_id = ?', [req.params.id]);
   dbRun(db, 'DELETE FROM skills WHERE id = ?', [req.params.id]);
   res.json({ success: true });
 });
 
-// Attach a library file to a skill
+// Attach a library file to a skill. Caller must own the skill (or be admin)
+// AND own the library file — otherwise an attacker could exfiltrate any user's
+// private file by attaching it to a shared skill and prompting the model.
 app.post('/api/skills/:id/files', requireAuth, (req, res) => {
   const skill = dbGet(db, 'SELECT * FROM skills WHERE id = ?', [req.params.id]);
   if (!skill) return res.status(404).json({ error: 'Skill not found' });
+  if (!canManageSkill(skill, req.user)) {
+    return res.status(403).json({ error: 'Not authorized to modify this skill' });
+  }
   const { library_file_id } = req.body;
   if (!library_file_id) return res.status(400).json({ error: 'library_file_id is required' });
   const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ?', [library_file_id]);
   if (!file) return res.status(404).json({ error: 'Library file not found' });
+  const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
+  if (!isAdmin && file.user_id !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized to attach this file' });
+  }
   const existing = dbGet(db, 'SELECT * FROM skill_files WHERE skill_id = ? AND library_file_id = ?', [req.params.id, library_file_id]);
   if (existing) return res.status(409).json({ error: 'File already attached' });
   const id = uuidv4();
@@ -1920,14 +2139,20 @@ app.post('/api/skills/:id/files', requireAuth, (req, res) => {
 
 // Detach a library file from a skill
 app.delete('/api/skills/:id/files/:fileId', requireAuth, (req, res) => {
+  const skill = dbGet(db, 'SELECT * FROM skills WHERE id = ?', [req.params.id]);
+  if (!skill) return res.status(404).json({ error: 'Skill not found' });
+  if (!canManageSkill(skill, req.user)) {
+    return res.status(403).json({ error: 'Not authorized to modify this skill' });
+  }
   dbRun(db, 'DELETE FROM skill_files WHERE skill_id = ? AND library_file_id = ?', [req.params.id, req.params.fileId]);
   res.json({ success: true });
 });
 
 // List all skills with enabled state for a project
 app.get('/api/projects/:id/skills', requireAuth, (req, res) => {
-  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [req.params.id]);
+  const { project, level } = getProjectAccess(req.params.id, req.user);
   if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!canReadProject(level)) return res.status(403).json({ error: 'Not authorized to view this project' });
   const skills = dbAll(db, `
     SELECT s.id as skill_id, s.name as skill_name, s.description as skill_description,
            COALESCE(ps.enabled, 0) as enabled
@@ -1940,8 +2165,9 @@ app.get('/api/projects/:id/skills', requireAuth, (req, res) => {
 
 // Bulk update project skills
 app.put('/api/projects/:id/skills', requireAuth, (req, res) => {
-  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [req.params.id]);
+  const { project, level } = getProjectAccess(req.params.id, req.user);
   if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!canWriteProject(level)) return res.status(403).json({ error: 'Not authorized to modify this project' });
   const { skills } = req.body;
   if (!Array.isArray(skills)) return res.status(400).json({ error: 'skills array is required' });
   for (const { skill_id, enabled } of skills) {
@@ -2008,9 +2234,12 @@ app.post('/api/teams/:id/members', requireAuth, (req, res) => {
   if (team.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your team' });
   const { project_id, purpose } = req.body || {};
   if (!project_id) return res.status(400).json({ error: 'project_id is required' });
-  // Verify the project exists
-  const proj = dbGet(db, 'SELECT id FROM projects WHERE id = ?', [project_id]);
-  if (!proj) return res.status(400).json({ error: 'project_id does not exist' });
+  // Caller must have at least read access to the project. Existence alone
+  // would let any user with a leaked project UUID add it to their own team
+  // and exfiltrate its library/RAG/system_prompt via dispatch_agent.
+  const { project, level } = getProjectAccess(project_id, req.user);
+  if (!project) return res.status(400).json({ error: 'project_id does not exist' });
+  if (!canReadProject(level)) return res.status(403).json({ error: 'Not authorized to add this project to a team' });
   try {
     const member = addMember(db, req.params.id, { project_id, purpose: purpose ?? null });
     res.json({ member });
@@ -2037,6 +2266,73 @@ app.delete('/api/teams/:id/members/:memberId', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
+// ---------- Team schedules ----------
+
+app.get('/api/teams/:id/schedules', requireAuth, (req, res) => {
+  const team = getTeam(db, req.params.id);
+  if (!team) return res.status(404).json({ error: 'Team not found' });
+  if (team.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your team' });
+  res.json({ schedules: listSchedulesForTeam(db, req.params.id) });
+});
+
+app.post('/api/teams/:id/schedules', requireAuth, (req, res) => {
+  const team = getTeam(db, req.params.id);
+  if (!team) return res.status(404).json({ error: 'Team not found' });
+  if (team.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your team' });
+  try {
+    const schedule = createSchedule(db, req.user.id, req.params.id, req.body || {});
+    res.status(201).json({ schedule });
+  } catch (err) {
+    res.status(400).json({ error: err?.message || 'Invalid schedule' });
+  }
+});
+
+app.put('/api/teams/:id/schedules/:scheduleId', requireAuth, (req, res) => {
+  const team = getTeam(db, req.params.id);
+  if (!team) return res.status(404).json({ error: 'Team not found' });
+  if (team.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your team' });
+  const existing = getSchedule(db, req.params.scheduleId);
+  if (!existing || existing.team_id !== req.params.id) return res.status(404).json({ error: 'Schedule not found' });
+  try {
+    const schedule = updateSchedule(db, req.params.scheduleId, req.body || {});
+    res.json({ schedule });
+  } catch (err) {
+    res.status(400).json({ error: err?.message || 'Invalid schedule' });
+  }
+});
+
+app.delete('/api/teams/:id/schedules/:scheduleId', requireAuth, (req, res) => {
+  const team = getTeam(db, req.params.id);
+  if (!team) return res.status(404).json({ error: 'Team not found' });
+  if (team.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your team' });
+  const existing = getSchedule(db, req.params.scheduleId);
+  if (!existing || existing.team_id !== req.params.id) return res.status(404).json({ error: 'Schedule not found' });
+  deleteSchedule(db, req.params.scheduleId);
+  res.json({ success: true });
+});
+
+app.get('/api/teams/:id/schedules/:scheduleId/runs', requireAuth, (req, res) => {
+  const team = getTeam(db, req.params.id);
+  if (!team) return res.status(404).json({ error: 'Team not found' });
+  if (team.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your team' });
+  const existing = getSchedule(db, req.params.scheduleId);
+  if (!existing || existing.team_id !== req.params.id) return res.status(404).json({ error: 'Schedule not found' });
+  res.json({ runs: listScheduleRuns(db, req.params.scheduleId) });
+});
+
+app.post('/api/teams/:id/schedules/:scheduleId/run', requireAuth, async (req, res) => {
+  const team = getTeam(db, req.params.id);
+  if (!team) return res.status(404).json({ error: 'Team not found' });
+  if (team.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your team' });
+  const existing = getSchedule(db, req.params.scheduleId);
+  if (!existing || existing.team_id !== req.params.id) return res.status(404).json({ error: 'Schedule not found' });
+  // Fire-and-forget — orchestrator turns can be slow, don't block the HTTP request.
+  runSchedule(db, req.params.scheduleId, { port: PORT }).catch((err) =>
+    console.error('[team-schedules] manual run failed:', err?.message || err),
+  );
+  res.status(202).json({ accepted: true });
+});
+
 app.put('/api/chats/:id/team', requireAuth, (req, res) => {
   const chat = dbGet(db, 'SELECT * FROM chats WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
   if (!chat) return res.status(404).json({ error: 'Chat not found' });
@@ -2054,8 +2350,9 @@ app.put('/api/chats/:id/team', requireAuth, (req, res) => {
 // ============================================================================
 
 app.post('/api/projects/:id/files/upload', requireAuth, memoryUpload.single('file'), async (req, res) => {
-  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ?', [req.params.id]);
+  const { project, level } = getProjectAccess(req.params.id, req.user);
   if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!canWriteProject(level)) return res.status(403).json({ error: 'Not authorized to upload to this project' });
 
   const file = req.file;
   if (!file) return res.status(400).json({ error: 'No file provided' });
@@ -2115,6 +2412,10 @@ app.post('/api/projects/:id/files/upload', requireAuth, memoryUpload.single('fil
 });
 
 app.post('/api/projects/:id/files/:fileId/reindex', requireAuth, async (req, res) => {
+  const { project, level } = getProjectAccess(req.params.id, req.user);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!canWriteProject(level)) return res.status(403).json({ error: 'Not authorized to reindex files in this project' });
+
   const file = dbGet(db, 'SELECT * FROM library_files WHERE id = ? AND project_id = ?', [req.params.fileId, req.params.id]);
   if (!file) return res.status(404).json({ error: 'File not found' });
 
@@ -2631,7 +2932,10 @@ app.delete('/api/pptx-templates/:id', requireAuth, (req, res) => {
 });
 
 // Streams the per-template slide-1 thumbnail. 404 if not owned or no thumbnail on disk.
-app.get('/api/pptx-templates/:id/thumbnail', requireAuth, (req, res) => {
+// <img> tags can't send custom headers, so this is the one route that opts into
+// the ?userId= query-string fallback. The route is read-only and scoped to
+// thumbnails the caller owns, so the blast radius is bounded.
+app.get('/api/pptx-templates/:id/thumbnail', (req, _res, next) => { req._allowQueryUserId = true; next(); }, requireAuth, (req, res) => {
   const row = dbGet(
     db,
     'SELECT thumbnail_path FROM pptx_templates WHERE id = ? AND user_id = ?',
@@ -3081,9 +3385,18 @@ app.get('/api/admin/usage', requireAuth, (req, res) => {
 });
 
 // -- Admin MCP Servers ---------------------------------------------------
+// Shape an mcp_servers row for admin response: env_vars goes out as a
+// preview object ({KEY: "sk-a…XYZ9"}), never as ciphertext or plaintext.
+function shapeMcpServerForAdmin(row) {
+  if (!row) return row;
+  let plain = {};
+  try { plain = decryptEnvVars(row.env_vars); } catch { plain = {}; }
+  return { ...row, env_vars: previewEnvVarsObject(plain) };
+}
+
 app.get('/api/admin/mcp-servers', requireAuth, requireAdmin, (req, res) => {
-  const servers = dbAll(db, 'SELECT * FROM mcp_servers ORDER BY name', []);
-  res.json({ servers });
+  const rows = dbAll(db, 'SELECT * FROM mcp_servers ORDER BY name', []);
+  res.json({ servers: rows.map(shapeMcpServerForAdmin) });
 });
 
 app.post('/api/admin/mcp-servers', requireAuth, requireAdmin, (req, res) => {
@@ -3091,13 +3404,17 @@ app.post('/api/admin/mcp-servers', requireAuth, requireAdmin, (req, res) => {
   if (!name || !command) return res.status(400).json({ error: 'Name and command are required' });
   const id = uuidv4();
   const now = new Date().toISOString();
+  const incoming = parseIncomingEnvVars(env_vars);
+  // On create, "keep existing" semantics don't apply — just drop empty values.
+  const plain = mergeEnvVars({}, incoming || {});
+  const encrypted = encryptEnvVars(plain);
   dbRun(db, `INSERT INTO mcp_servers (id, name, description, icon, command, args, env_vars, enabled, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, name, description || null, icon || null, command,
-     args || '[]', env_vars || '{}',
+     args || '[]', encrypted,
      enabled !== undefined ? (enabled ? 1 : 0) : 1, now, now]);
-  const server = dbGet(db, 'SELECT * FROM mcp_servers WHERE id = ?', [id]);
-  res.status(201).json({ server });
+  const row = dbGet(db, 'SELECT * FROM mcp_servers WHERE id = ?', [id]);
+  res.status(201).json({ server: shapeMcpServerForAdmin(row) });
 });
 
 app.put('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
@@ -3105,6 +3422,15 @@ app.put('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, asyncRoute(asyn
   if (!existing) return res.status(404).json({ error: 'MCP server not found' });
   const { name, description, icon, command, args, env_vars, enabled } = req.body;
   const now = new Date().toISOString();
+
+  let envBlob = existing.env_vars;
+  const incoming = parseIncomingEnvVars(env_vars);
+  if (incoming !== null) {
+    const existingPlain = decryptEnvVars(existing.env_vars);
+    const merged = mergeEnvVars(existingPlain, incoming);
+    envBlob = encryptEnvVars(merged);
+  }
+
   dbRun(db, `UPDATE mcp_servers SET
     name = ?, description = ?, icon = ?, command = ?, args = ?, env_vars = ?, enabled = ?, updated_at = ?
     WHERE id = ?`,
@@ -3114,13 +3440,13 @@ app.put('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, asyncRoute(asyn
       icon !== undefined ? icon : existing.icon,
       command !== undefined ? command : existing.command,
       args !== undefined ? args : existing.args,
-      env_vars !== undefined ? env_vars : existing.env_vars,
+      envBlob,
       enabled !== undefined ? (enabled ? 1 : 0) : existing.enabled,
       now, req.params.id,
     ]);
   await mcpManager.stopServer(req.params.id);
-  const server = dbGet(db, 'SELECT * FROM mcp_servers WHERE id = ?', [req.params.id]);
-  res.json({ server });
+  const row = dbGet(db, 'SELECT * FROM mcp_servers WHERE id = ?', [req.params.id]);
+  res.json({ server: shapeMcpServerForAdmin(row) });
 }));
 
 app.delete('/api/admin/mcp-servers/:id', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
@@ -3291,13 +3617,7 @@ app.get('/api/settings/sessions', requireAuth, (req, res) => {
 // LEASE ROUTES (Firestore + Gemini integration from cbre_leases)
 // ============================================================================
 
-app.use('/api', leaseRoutes);
-
-// ============================================================================
-// SCHEDULED TASKS (Claude-desktop-style recurring prompts via Cloud Scheduler)
-// ============================================================================
-
-app.use('/api', schedulerRoutes({ db, requireAuth }));
+app.use('/api', leaseRoutes({ requireAuth, requireAdmin }));
 
 // ============================================================================
 // SEARCH ROUTES
@@ -3437,6 +3757,7 @@ if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT} (${NODE_ENV} mode)`);
     console.log(`API available at http://localhost:${PORT}/api`);
+    startScheduleLoop(db, { port: PORT });
   });
 }
 

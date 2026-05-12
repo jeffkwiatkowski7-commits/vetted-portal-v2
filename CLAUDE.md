@@ -85,6 +85,7 @@ Three AI integrations coexist — which one is used depends on configuration:
 - **Two upload dirs.** Local dev uses `./data/uploads/`; the deployed VM uses `/data/uploads/` (absolute). Don't conflate them when debugging file paths.
 - **VM `/data/.env` is separate from repo `.env`.** Editing the local `.env` does not affect production. The VM env file is updated manually via SSH.
 - **`pandoc` is a runtime dep for `export_to_word`.** `server/lib/exports.js` shells out to the `pandoc` binary to convert markdown → docx. Install with `brew install pandoc` (macOS) or `apt install pandoc` (Debian/Ubuntu — required on the GCP VM). Override the binary path with `PANDOC_BIN` if needed. The `export_to_word` tool now takes a single `markdown` string (not the old `sections` JSON schema).
+- **`uv` is a runtime dep for spreadsheet ingest.** `server/lib/spreadsheet.js` shells out to `uv run --script server/lib/spreadsheet_extract.py` to parse uploaded `.xlsx` / `.xls` / `.csv` into a pandas-derived text summary (schema, dtypes, `describe()`, rows). Install with `brew install uv` (macOS) or `curl -LsSf https://astral.sh/uv/install.sh | sh` (VM). Deps (pandas, openpyxl, xlrd) are declared inline via PEP 723 and resolved into uv's cache on first call. Forces `--python-preference only-system` to avoid touching uv's managed-python dir. Override binary with `UV_BIN`, timeout with `SPREADSHEET_EXTRACT_TIMEOUT_MS` (default 30s).
 
 ## Design System
 
@@ -123,3 +124,69 @@ TAVILY_API_KEY=<tavily-key>
 GCS_BUCKET=<gcs-bucket-name>
 MAX_FILE_SIZE_MB=50
 ```
+
+---
+
+## Rent Roll Analyst (Python skill, in worktree)
+
+A Python pandas-based tool that ingests messy MOB rent rolls and produces analytical Excel + JSON for PPT. Eventually integrates into this portal as a "skill" (via `/skills/new`, `/skills/:id/edit`, and the existing skills routes). Currently in active development on branch `feature/rent-roll-analyst-python-core`, in the worktree at `.worktrees/rent-roll-analyst/`. The Python project lives at `.worktrees/rent-roll-analyst/python_skills/rent_roll_analyst/`.
+
+### Source-of-truth documents (read first, in this order)
+
+At the start of every session that touches rent-roll work, read these from the worktree root:
+
+1. `prd-ai-portal-rent-roll-analyst.md` — v1.0 design + starter code
+2. `prd-ai-portal-rent-roll-analyst-review.md` — critical review of v1.0 (P0/P1/P2 punch list)
+3. `prd-ai-portal-rent-roll-analyst-v1.1.md` — cycle-2 PRD with workstream plan
+
+### Workflow
+
+Work the v1.1 PRD in workstream order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Within a workstream, complete all acceptance tests before moving to the next. Don't skip ahead.
+
+### Batch silently
+Inside a workstream, do these without checking in:
+
+- Editing files under `python_skills/rent_roll_analyst/src/`, `tests/`, `fixtures/`
+- Running `pytest`, `python`, `ruff`, `mypy`, `black`
+- Local git ops (`add`, `commit`, `status`, `diff`, `branch`, `switch`, `restore`, `worktree`)
+- Creating fixtures
+
+### Stop gates (must pause and ping the user)
+
+- **Workstream 1 reconciliation gate** — after the parse-report reconciliation block lights up green on test fixtures, stop. Bill must eyeball it on his real rent rolls before continuing.
+- **Open questions in Workstream 5** — the four defaults (MTM treatment, occupancy denominator, renewal-options scope, quarterly granularity) are Bill's calls. Surface and wait, don't pick.
+- **PPT contract round-trip in Workstream 7** — run the JSON payload through the actual PPT template tool before more chart work.
+- **`pyproject.toml` edits** — settings.json already prompts on this; treat the prompt as a stop-gate moment and explain the change.
+- **Anything not in the PRDs** — wanting to add a feature, restructure a module, or write a fixture for a case the PRDs don't cover → stop and ask first.
+- **Test failures unresolved after two iterations** — post the failure and your diagnosis-so-far, don't keep grinding.
+
+### Check-in cadence (post STATUS, no question needed)
+
+Post a `## STATUS` block to the terminal at every workstream boundary, after each successful `pytest -q` run, and after each commit. Keep under 8 lines.
+
+Format:
+```
+## STATUS — Workstream 2.3 complete
+Fixed tenant_id docstring/code mismatch (suite-keyed now).
+Files: models.py, parser/normalize.py, tests/test_models.py
+Tests: 47 passed (was 44).
+Commit: abc1234 — "fix(models): tenant_id stable per (building_id, suite)"
+Next: 2.4 sf_by_building lambda fix.
+```
+
+### Rent-roll coding standards
+
+- One canonical model. Don't add helpers/abstractions outside parser, analytics, and output surfaces.
+- Pandas does the math; nothing computes totals outside `analytics.py`.
+- Every Tenant carries `raw_row_index` and `parse_notes`. Traceability is non-negotiable.
+- For P0 fixes: write the failing test first, commit it, then land the fix.
+- Type hints on all public functions; `from __future__ import annotations` already in files.
+- No `print()` in library code — use `parse_notes` or the parse report's `warnings` list.
+- Functions stay under ~40 lines.
+
+### Git workflow for rent-roll work
+
+- One commit per acceptance criterion in v1.1, not per file.
+- Commit format: `<type>(<scope>): <imperative summary>` — types: `fix`, `feat`, `test`, `refactor`, `docs`, `chore`.
+- Never `git push` without explicit user instruction (already in the `ask` flow).
+- Never `git reset --hard` — use `git revert` or `git restore` instead.

@@ -18,7 +18,7 @@ function getIcon(icon: string) {
   return match ? match.Icon : Cpu;
 }
 
-interface EnvVar { key: string; value: string; }
+interface EnvVar { key: string; value: string; preview?: string; }
 
 const BLANK_FORM = {
   name: '', description: '', icon: 'search', command: '', args: '[]',
@@ -47,14 +47,17 @@ export default function AdminMcpPage() {
 
   const openEdit = (server: McpServer) => {
     setEditingId(server.id);
-    const envObj = JSON.parse(server.env_vars || '{}');
+    // env_vars from the admin endpoint is a preview map ({KEY: "sk-a…XYZ9"}),
+    // never the real values. Show previews as placeholders; the admin types
+    // a new value only when they want to change a credential.
+    const previews = server.env_vars || {};
     setForm({
       name: server.name,
       description: server.description || '',
       icon: server.icon || 'search',
       command: server.command,
       args: server.args || '[]',
-      envVars: Object.entries(envObj).map(([key, value]) => ({ key, value: value as string })),
+      envVars: Object.entries(previews).map(([key, preview]) => ({ key, value: '', preview: preview as string })),
       enabled: !!server.enabled,
     });
     setShowForm(true);
@@ -62,6 +65,9 @@ export default function AdminMcpPage() {
 
   const handleSave = async () => {
     if (!form.name.trim() || !form.command.trim()) return;
+    // Blank value on an existing key = "keep current". Server merges with the
+    // decrypted existing env_vars: empty string keeps, non-empty replaces,
+    // omitted keys are removed.
     const envObj: Record<string, string> = {};
     for (const { key, value } of form.envVars) {
       if (key.trim()) envObj[key.trim()] = value;
@@ -69,7 +75,7 @@ export default function AdminMcpPage() {
     const data = {
       name: form.name, description: form.description, icon: form.icon,
       command: form.command, args: form.args,
-      env_vars: JSON.stringify(envObj), enabled: form.enabled,
+      env_vars: envObj, enabled: form.enabled,
     };
     if (editingId) {
       await mcpApi.adminUpdate(editingId, data);
@@ -158,12 +164,23 @@ export default function AdminMcpPage() {
                 <button type="button" onClick={addEnvVar} className="text-xs text-vetted-accent hover:text-vetted-primary transition-colors">+ Add Variable</button>
               </div>
               {form.envVars.length === 0 && <p className="text-xs text-vetted-text-muted">No environment variables configured.</p>}
+              {form.envVars.length > 0 && (
+                <p className="text-[11px] text-vetted-text-muted mt-0.5">
+                  Existing values are encrypted. Leave the value blank to keep it; type a new value to replace.
+                </p>
+              )}
               {form.envVars.map((ev, i) => (
                 <div key={i} className="flex gap-2 mt-1.5">
                   <input value={ev.key} onChange={e => updateEnvVar(i, 'key', e.target.value)} placeholder="KEY"
                     className="flex-1 px-2 py-1.5 text-xs border border-vetted-border rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-vetted-accent" />
-                  <input value={ev.value} onChange={e => updateEnvVar(i, 'value', e.target.value)} placeholder="value"
-                    className="flex-1 px-2 py-1.5 text-xs border border-vetted-border rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-vetted-accent" />
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={ev.value}
+                    onChange={e => updateEnvVar(i, 'value', e.target.value)}
+                    placeholder={ev.preview ? `current: ${ev.preview} — leave blank to keep` : 'value'}
+                    className="flex-1 px-2 py-1.5 text-xs border border-vetted-border rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-vetted-accent"
+                  />
                   <button onClick={() => removeEnvVar(i)} className="p-1 hover:bg-red-50 rounded-lg"><Trash2 size={12} className="text-red-400" /></button>
                 </div>
               ))}

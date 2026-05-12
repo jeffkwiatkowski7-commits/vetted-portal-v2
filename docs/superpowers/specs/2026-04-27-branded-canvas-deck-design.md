@@ -44,7 +44,7 @@ Six changes, all within the existing repo, no new runtimes:
 1. **Schema:** add nullable `pptx_template_id` to `projects` + index, in [server/database.js](../../../server/database.js).
 2. **Manifest v2:** extend [server/lib/pptx-manifest.js](../../../server/lib/pptx-manifest.js) `extractManifest` to also extract design tokens (colors, fonts) by sharing the logic that already exists in [server/lib/pptx-parser.js](../../../server/lib/pptx-parser.js#L92-L117).
 3. **System-prompt assembly:** insert a "branded canvas" block into the existing `parts.push()` pipeline at [server/index.js:716-738](../../../server/index.js#L716-L738), gated on `project.pptx_template_id`. Helper lives in `server/lib/branded-canvas.js`.
-4. **Project endpoints:** `PATCH /api/projects/:id` and `POST /api/projects` accept `pptx_template_id`. `DELETE /api/pptx-templates/:id` (already at [server/index.js:2279](../../../server/index.js#L2279)) gains one line that nulls out the column on dependent projects.
+4. **Project endpoints:** `PUT /api/projects/:id` and `POST /api/projects` accept `pptx_template_id`. `DELETE /api/pptx-templates/:id` (already at [server/index.js:2279](../../../server/index.js#L2279)) gains one line that nulls out the column on dependent projects.
 5. **Frontend pickers:** branding-template field in `<ProjectForm />` (new picker modal) and "Apply to project…" action on each row in [PptxAppPage.tsx](../../../src/pages/PptxAppPage.tsx) (project-picker modal).
 6. **Frontend renderer:** new `<CanvasDeckBlock />` component parallel to existing [CanvasBlock.tsx](../../../src/components/CanvasBlock.tsx); slices `<section data-layout>` children, renders in a sandboxed iframe with prev/next + dot navigation + keyboard arrows. Wired into both [MainChatPage.tsx](../../../src/pages/MainChatPage.tsx) and [ChatView.tsx](../../../src/components/ChatView.tsx) via a `language-canvas-deck` check parallel to today's `language-canvas-html`.
 
@@ -128,9 +128,9 @@ Reasoning: `archived` is a "hide from default UI" signal, not "this template is 
 
 ### 5.1 Shared extraction module
 
-The token-extraction logic at [server/lib/pptx-parser.js:92-117](../../../server/lib/pptx-parser.js#L92-L117) (the `extractColors` and `extractFonts` functions) is moved into [server/lib/pptx-manifest.js](../../../server/lib/pptx-manifest.js) so a single `extractManifest(filePath)` call returns both manifest and tokens.
+The token-extraction logic at [server/lib/pptx-parser.js:94-121](../../../server/lib/pptx-parser.js#L94-L121) (the `extractColors` and `extractFonts` functions, plus the `extractColor` and `applyLumModifiers` helpers they depend on) is **left in place** in `pptx-parser.js` and exported. [server/lib/pptx-manifest.js](../../../server/lib/pptx-manifest.js) imports them and uses them inside its `extractManifest`. This keeps existing parser callers (`/api/apps/pptx-parse`) untouched and avoids a churn-heavy file move.
 
-After this change, `pptx-parser.js` imports `extractColors` and `extractFonts` from `pptx-manifest.js` so the existing `/api/apps/pptx-parse` endpoint continues to work without a breaking change.
+Both files are ESM (`import`/`export`); `branded-canvas.js` (§6.2) follows the same convention.
 
 ### 5.2 Updated `extractManifest` shape
 
@@ -145,20 +145,24 @@ Where `manifest` is now a v2 shape (§4.2). The function unconditionally returns
 
 The Bill Ross migration at [server/index.js:265-284](../../../server/index.js#L265-L284) (`ensureWrossIcMemoTemplate`) currently creates the row on first boot. It runs every boot and is idempotent.
 
-We extend the idempotent path: after the existence check confirms the row already exists, branch on `manifest.version`:
+We extend the idempotent path: after the existence check confirms the row already exists, branch on `manifest.version`. **All extraction is wrapped in try/catch** — if `source_pptx_path` is missing on disk (manual cleanup, dev DB carried across environments) or the file is malformed, the row stays at v1 and boot continues. The renderer's `getDesignTokens` fallback handles v1 manifests gracefully, so a failed upgrade is non-fatal.
 
 ```js
 const manifest = JSON.parse(row.manifest_json);
 if (!manifest.version || manifest.version < 2) {
-  const { manifest: v2 } = await extractManifest(row.source_pptx_path);
-  dbRun(db, 'UPDATE pptx_templates SET manifest_json = ?, updated_at = ? WHERE id = ?',
-        [JSON.stringify(v2), new Date().toISOString(), row.id]);
+  try {
+    const { manifest: v2 } = await extractManifest(row.source_pptx_path);
+    dbRun(db, 'UPDATE pptx_templates SET manifest_json = ?, updated_at = ? WHERE id = ?',
+          [JSON.stringify(v2), new Date().toISOString(), row.id]);
+  } catch (err) {
+    logger.warn({ err, templateId: row.id }, 'manifest v2 upgrade skipped');
+  }
 }
 ```
 
 This upgrades any v1 row to v2 on next boot. It runs once per row (next boot the version check short-circuits), so the cost is bounded.
 
-User-uploaded v1 rows from the previous cycle (none expected in production yet but possible in dev) get the same treatment via a parallel pass added next to the wross migration: `SELECT id, source_pptx_path, manifest_json FROM pptx_templates` → for each, run the same version branch. Capped at the same per-boot timing as the existing migration.
+User-uploaded v1 rows from the previous cycle (none expected in production yet but possible in dev) get the same treatment via a **parallel pass over all v1 rows** added next to the wross migration: `SELECT id, source_pptx_path, manifest_json FROM pptx_templates WHERE json_extract(manifest_json, '$.version') IS NULL OR json_extract(manifest_json, '$.version') < 2` → for each, run the same try/catch-wrapped version branch. This is the **general** upgrade path; the wross-specific helper just happens to share the logic. Capped at the same per-boot timing as the existing migration.
 
 ## 6. Backend wiring
 
@@ -181,7 +185,7 @@ if (project?.pptx_template_id) {
 }
 ```
 
-The `WHERE … AND user_id = ?` filter is the foundations-spec access control pattern repeated. Even though only the project owner can attach a template (validated at PATCH time, §6.3), we re-verify at chat time. Defense in depth, and a static check on this query is added to test 6.
+The `WHERE … AND user_id = ?` filter is the foundations-spec access control pattern repeated. Even though only the project owner can attach a template (validated at PUT/POST time, §6.3), we re-verify at chat time. Defense in depth, and a static check on this query is added to test 6.
 
 ### 6.2 `buildBrandedCanvasBlock` helper
 
@@ -200,6 +204,8 @@ Returns a markdown block included in the system prompt. Body covers:
 5. **Tokens** — JSON literal of `{primary, accent, background, headingFont, bodyFont}` from the template, plus instruction *"copy these values verbatim into the TOKENS comment in your fence; do not write your own colors or fonts."*
 6. **Hard constraints** — no `<script>`, no `<style>`, no external `<link>`, no `<iframe>`. (DOMPurify enforces; telling the AI keeps output clean.)
 
+**Size budget:** the assembled brand block must be ≤ 2KB (target ~1.5KB). It ships on every assistant turn in a project chat, so token cost is paid forever. The implementation includes a unit assertion (`buildBrandedCanvasBlock(...).length <= 2048`).
+
 Default-token helper:
 
 ```js
@@ -217,13 +223,13 @@ export function getDesignTokens(manifest) {
 
 ### 6.3 Project endpoints
 
-`PATCH /api/projects/:id` at [server/index.js:1288-1314](../../../server/index.js#L1288-L1314):
+`PUT /api/projects/:id` at [server/index.js:1288-1314](../../../server/index.js#L1288-L1314):
 - Destructure adds `pptx_template_id`.
 - If `pptx_template_id` is non-null in the body, validate ownership: `SELECT id FROM pptx_templates WHERE id = ? AND user_id = ? AND status != 'archived'`. If not found → respond `400 { error: "template not found or not owned" }`. Note: this validation rejects **archived** templates from being newly attached, while existing attachments to archived templates remain (§4.4).
 - UPDATE statement gains the column.
 
 `POST /api/projects` at [server/index.js:1242-1265](../../../server/index.js#L1242-L1265):
-- Same destructure + validation.
+- Same destructure + validation, scoped to `req.user.id` (POST creates the row, so the requesting user is the owner).
 - INSERT statement gains the column.
 
 `GET /api/projects` and `GET /api/projects/:id` already return `*`, so the new column is included automatically. No frontend type change beyond adding the field.
@@ -244,14 +250,14 @@ Builds on the foundations cycle's `server/test/` setup. Same fixture pattern: te
 
 | # | Name | Asserts |
 |---|---|---|
-| 1 | `buildBrandedCanvasBlock` content | Output is non-empty string; contains all 8 layout names; contains all four CSS-variable names (`--brand-primary`, `--brand-accent`, `--font-heading`, `--font-body`); contains the `canvas-deck` fence keyword |
+| 1 | `buildBrandedCanvasBlock` content & size | Output is non-empty string; ≤ 2048 chars; contains all 8 layout names; contains all four CSS-variable names (`--brand-primary`, `--brand-accent`, `--font-heading`, `--font-body`); contains the `canvas-deck` fence keyword |
 | 2 | `getDesignTokens` defaults | Given a v1 manifest (no `design_tokens`), returns brand defaults (`#1A1A1A`, `#C4A962`, `#FFFFFF`, `'Playfair Display'`, `'Inter'`) |
 | 3 | System-prompt branding gate | When `project.pptx_template_id` is set, the assembled system prompt contains the brand block (search by canvas-deck keyword); when null, it doesn't |
 | 4 | System-prompt cross-user safety | If `project.owner_id !== template.user_id` is somehow stored, the chat-time SELECT returns null, the brand block is skipped, no error is thrown |
 | 5 | PATCH ownership gate | User A's project + user B's `pptx_template_id` → 400 "template not found or not owned"; project's column unchanged |
 | 6 | DELETE cascading detach | Pre-condition: project X has `pptx_template_id = T`. Action: `DELETE /api/pptx-templates/T` as T's owner. Post-condition: project X's column is NULL; T's row is gone |
 | S1 | Manifest v2 extraction smoke | Given the placeholder `.pptx`, `extractManifest` returns `manifest.version === 2` and a `design_tokens` object with three colors and two fonts (any non-empty values; defaults acceptable) |
-| S2 | Per-boot migration v2 upgrade | Insert a v1 row directly into a fresh test DB; run `ensureWrossIcMemoTemplate` (or the parallel pass described in §5.3); assert the row's `manifest_json.version === 2` afterward |
+| S2 | Per-boot migration v2 upgrade | Target the **general parallel pass** (§5.3): insert two v1 rows into a fresh test DB (one with a valid `source_pptx_path`, one with a missing path); run the migration; assert the valid row is upgraded to `version: 2` and the missing-path row stays at v1 without throwing |
 | S3 | Static SQL inspection | The chat-time template SELECT (§6.1) contains `WHERE id = ? AND user_id = ?`; same pattern test 6 in foundations cycle established |
 
 ## 8. Frontend — `<ProjectForm />`
@@ -277,7 +283,7 @@ Branding template
 
 Click `[Choose template]` → opens `<TemplatePickerModal />` (§10.1). The chip's `[×]` clears the selection (sets local form state to `null`).
 
-`<ProjectForm />`'s `onSave` payload (currently `{ name, description, system_prompt, tool_sets, mcp_servers, file_ids }`) gains `pptx_template_id: string | null`. [ProjectDetailPage.handleUpdateProject](../../../src/pages/ProjectDetailPage.tsx#L70-L95) plumbs it through to the existing `PATCH /api/projects/:id` call.
+`<ProjectForm />`'s `onSave` payload (currently `{ name, description, system_prompt, tool_sets, mcp_servers, file_ids }`) gains `pptx_template_id: string | null`. [ProjectDetailPage.handleUpdateProject](../../../src/pages/ProjectDetailPage.tsx#L70-L95) plumbs it through to the existing `PUT /api/projects/:id` call.
 
 API client method update in [src/api/index.ts](../../../src/api/index.ts) (the `projects.update` shape) — add `pptx_template_id?: string | null`.
 
@@ -302,7 +308,7 @@ Inside, in order:
    - 8 layout rules (from `src/components/canvas-deck-styles.ts` — pure string export)
    - One `<article class="slide" data-layout="…">…</article>` per parsed section
    - Slide nav controls + a small slide-counter
-5. **Render iframe** with `sandbox="allow-same-origin"` (parallel to today's `CanvasBlock`).
+5. **Render iframe** with `sandbox="allow-scripts"` (no `allow-same-origin`). This **differs from** today's `CanvasBlock` ([src/components/chat/CanvasBlock.tsx:107](../../../src/components/chat/CanvasBlock.tsx#L107)), which uses `allow-same-origin` only because it renders static HTML with no scripts. The deck needs JavaScript for navigation (§9.2 `NAV_SCRIPT`), so it grants `allow-scripts`. Crucially, we **do not** combine `allow-scripts` with `allow-same-origin` — together they let the iframe call `parent.document` and escape the sandbox. With `allow-scripts` alone, the iframe runs in an opaque origin: scripts execute, but the iframe cannot reach the parent document, cookies, or localStorage.
 6. **Toolbar** — Preview/Code toggle, Copy, Download HTML, Open in New Tab. **No "Download as .pptx"** in v1.
 
 Unknown layout names render as `content` (with a console.warn). Empty fence → renders as plain code block (fallback path).
@@ -345,9 +351,15 @@ Static string assembled at render time. Sketch:
 
 Google Fonts loads via the public CSS endpoint with the font names URL-escaped. If the fonts CSS fails to load (network blocked, font name unrecognized), the fallback chain (Georgia / system-ui) keeps things readable. No hard failure.
 
-### 9.3 Layout CSS — `src/components/canvas-deck-styles.ts`
+### 9.3 Layout CSS — `src/components/chat/canvas-deck-styles.css`
 
-A single string export `LAYOUT_CSS`. ~250 lines total. Eight `.slide[data-layout="…"]` rules + a slide-frame base + nav chrome. Tested as a string in §11 (assertion: contains all 8 selectors).
+Authored as a real CSS file (~250 lines: 8 `.slide[data-layout="…"]` rules + slide-frame base + nav chrome) and imported as a raw string in `<CanvasDeckBlock />` via Vite's `?raw` suffix:
+
+```ts
+import LAYOUT_CSS from './canvas-deck-styles.css?raw';
+```
+
+Authoring CSS as CSS preserves IDE syntax highlighting, Prettier formatting, and any future stylelint runs. The string is concatenated into the iframe srcdoc (§9.2). No frontend test required — the manual smoke pass exercises all 8 layouts.
 
 ### 9.4 Wiring into existing chat surfaces
 
@@ -375,18 +387,18 @@ On row click, show a confirm modal:
 - If project has no current template: *"Apply 'PREP IC Memo' as the branding template for project 'Hilliard'?"*
 - If project already has one: *"Apply 'PREP IC Memo' as the branding template for project 'Hilliard'? This replaces 'OldTemplateName'."*
 
-On confirm → `PATCH /api/projects/:id` with `{ pptx_template_id }`. Toast on success. Apps-page row's secondary text is unchanged in v1 — adding *"Used by N project(s)"* requires either a new aggregate endpoint or scanning all projects client-side; both feel out of scope here. Tracked as follow-up.
+On confirm → `PUT /api/projects/:id` with `{ pptx_template_id }`. Toast on success. Apps-page row's secondary text is unchanged in v1 — adding *"Used by N project(s)"* requires either a new aggregate endpoint or scanning all projects client-side; both feel out of scope here. Tracked as follow-up.
 
 ## 11. Internal sequencing for the implementation plan
 
 Each backend step pairs the change with the test that proves it.
 
-1. Schema: `ALTER TABLE projects ADD COLUMN pptx_template_id` + index in [server/database.js](../../../server/database.js).
+1. Schema: `ALTER TABLE projects ADD COLUMN pptx_template_id` + index in [server/database.js](../../../server/database.js). **Restart the dev server** after this change — `database.js` initialization runs at boot and the `ALTER TABLE` only fires on startup.
 2. Move `extractColors`/`extractFonts` into [server/lib/pptx-manifest.js](../../../server/lib/pptx-manifest.js); extend `extractManifest` to return v2 + tokens. Test S1 (smoke).
 3. Per-boot v1→v2 migration in [server/index.js:265-284](../../../server/index.js#L265-L284): wross-row branch + the parallel pass for any other v1 rows. Test S2 (idempotency upgrade).
 4. `getDesignTokens` + `buildBrandedCanvasBlock` helpers in `server/lib/branded-canvas.js`. Tests 1, 2.
 5. Wire brand block into system-prompt assembly at [server/index.js:716-738](../../../server/index.js#L716-L738). Tests 3, 4. Test S3 (SQL inspection).
-6. `PATCH /api/projects/:id` and `POST /api/projects` accept `pptx_template_id` with ownership validation. Test 5.
+6. `PUT /api/projects/:id` and `POST /api/projects` accept `pptx_template_id` with ownership validation. Test 5.
 7. `DELETE /api/pptx-templates/:id` cascading detach. Test 6.
 8. Frontend: `<TemplatePickerModal />` shared component.
 9. Frontend: Branding-template field in `<ProjectForm />`; update `handleUpdateProject` and `projects.update` API client.

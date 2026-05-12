@@ -44,9 +44,16 @@ export default function Sidebar() {
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
 
-  // Detect project context: either viewing a project chat or on a /projects/:id page
+  // Detect project context: either on a /projects/:id page, or viewing a project chat at /chat/:id.
+  // Do NOT fall back to activeChat.project_id on other routes (e.g. /projects list, /library) —
+  // stale activeChat would otherwise lock the user into a project they've already navigated away from.
   const projectRouteMatch = location.pathname.match(/^\/projects\/([^/]+)/);
-  const currentProjectId = activeChat?.project_id || (projectRouteMatch ? projectRouteMatch[1] : null);
+  const onChatRoute = location.pathname.startsWith('/chat/');
+  const currentProjectId = projectRouteMatch
+    ? projectRouteMatch[1]
+    : onChatRoute
+    ? activeChat?.project_id ?? null
+    : null;
   const isInProjectChat = !!currentProjectId;
 
   const handleNewChat = () => {
@@ -210,7 +217,7 @@ export default function Sidebar() {
 
       {/* User Footer */}
       <div className="p-3 border-t border-vetted-border">
-        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.14.0</p>
+        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.19.0</p>
       </div>
 
       {/* Context Menu */}

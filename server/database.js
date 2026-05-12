@@ -2,6 +2,7 @@ import initSqlJs from 'sql.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { encryptEnvVars, isEncryptedBlob } from './lib/secrets.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, '../data/vetted_portal.db');
@@ -283,6 +284,7 @@ export async function initializeDatabase() {
       name TEXT NOT NULL,
       description TEXT,
       instructions TEXT NOT NULL,
+      created_by TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -339,56 +341,6 @@ export async function initializeDatabase() {
       updated_at TEXT NOT NULL
     );
 
-    -- Scheduled tasks: Claude-desktop-style recurring or on-demand prompts.
-    -- The runner endpoint is invoked by Cloud Scheduler / Cloud Tasks (or manually).
-    CREATE TABLE IF NOT EXISTS scheduled_tasks (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      description TEXT,
-      prompt TEXT NOT NULL,
-      model TEXT,
-      system_prompt TEXT,
-      project_id TEXT,
-      mcp_servers TEXT,                -- JSON array of mcp_server ids
-      schedule_type TEXT NOT NULL,     -- 'cron' | 'interval' | 'once' | 'manual'
-      cron_expression TEXT,            -- e.g. '0 9 * * MON'
-      timezone TEXT DEFAULT 'UTC',
-      enabled INTEGER NOT NULL DEFAULT 1,
-      delivery TEXT,                   -- JSON: { type: 'notification' | 'chat' | 'email', target?: '...' }
-      cloud_scheduler_job TEXT,        -- name of the GCP Cloud Scheduler job, if synced
-      last_run_at TEXT,
-      next_run_at TEXT,
-      last_status TEXT,                -- 'success' | 'error' | null
-      last_error TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id),
-      FOREIGN KEY (project_id) REFERENCES projects(id)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_user_id ON scheduled_tasks(user_id);
-    CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at) WHERE enabled = 1;
-
-    -- One row per execution. Lets the user see history + debug failures.
-    CREATE TABLE IF NOT EXISTS scheduled_task_runs (
-      id TEXT PRIMARY KEY,
-      task_id TEXT NOT NULL,
-      started_at TEXT NOT NULL,
-      finished_at TEXT,
-      status TEXT NOT NULL,             -- 'running' | 'success' | 'error'
-      result_text TEXT,
-      error_message TEXT,
-      input_tokens INTEGER DEFAULT 0,
-      output_tokens INTEGER DEFAULT 0,
-      duration_ms INTEGER,
-      trigger TEXT,                     -- 'scheduler' | 'manual' | 'tool'
-      FOREIGN KEY (task_id) REFERENCES scheduled_tasks(id)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_task_runs_task_id ON scheduled_task_runs(task_id);
-    CREATE INDEX IF NOT EXISTS idx_task_runs_started_at ON scheduled_task_runs(started_at);
-
     CREATE TABLE IF NOT EXISTS pptx_templates (
       id               TEXT PRIMARY KEY,
       user_id          TEXT NOT NULL,
@@ -432,6 +384,38 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_team_members_team_id ON team_members(team_id);
     CREATE UNIQUE INDEX IF NOT EXISTS uq_team_members_team_project ON team_members(team_id, project_id);
     CREATE INDEX IF NOT EXISTS idx_teams_owner_id ON teams(owner_id);
+
+    CREATE TABLE IF NOT EXISTS team_schedules (
+      id TEXT PRIMARY KEY,
+      team_id TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      name TEXT,
+      cron_expression TEXT NOT NULL,
+      timezone TEXT DEFAULT 'UTC',
+      prompt TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      last_run_at TEXT,
+      next_run_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+      FOREIGN KEY (owner_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS team_schedule_runs (
+      id TEXT PRIMARY KEY,
+      schedule_id TEXT NOT NULL,
+      chat_id TEXT,
+      status TEXT NOT NULL,
+      error TEXT,
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      FOREIGN KEY (schedule_id) REFERENCES team_schedules(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_team_schedules_team_id   ON team_schedules(team_id);
+    CREATE INDEX IF NOT EXISTS idx_team_schedules_due       ON team_schedules(enabled, next_run_at);
+    CREATE INDEX IF NOT EXISTS idx_team_schedule_runs_sched ON team_schedule_runs(schedule_id, started_at DESC);
   `);
 
   // Add index_status column to existing databases (ignore if already exists)
@@ -503,6 +487,31 @@ export async function initializeDatabase() {
       dbRun(db, `INSERT INTO mcp_servers (id, name, description, icon, command, args, env_vars, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [s.id, s.name, s.description, s.icon, s.command, s.args, s.env_vars, s.enabled, now, now]);
     }
+  }
+
+  // One-shot migration: encrypt any mcp_servers.env_vars rows still in
+  // plaintext. Skips rows already in the {v,iv,ct,tag} shape. Fails loudly
+  // if MCP_SECRET_KEY is missing — that's the intent (see secrets.js).
+  try {
+    const rows = dbAll(db, 'SELECT id, env_vars FROM mcp_servers', []);
+    let migrated = 0;
+    for (const row of rows) {
+      if (isEncryptedBlob(row.env_vars)) continue;
+      let plain = {};
+      if (row.env_vars) {
+        try { plain = JSON.parse(row.env_vars); } catch { plain = {}; }
+      }
+      const blob = encryptEnvVars(plain);
+      dbRun(db, 'UPDATE mcp_servers SET env_vars = ? WHERE id = ?', [blob, row.id]);
+      migrated++;
+    }
+    if (migrated > 0) {
+      console.log(`[db] encrypted ${migrated} mcp_servers env_vars row(s) at rest`);
+      saveDatabase(db);
+    }
+  } catch (e) {
+    // Re-throw — server should not start with unencrypted MCP credentials.
+    throw e;
   }
 
   dbInstance = db;

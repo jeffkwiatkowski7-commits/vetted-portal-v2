@@ -20,7 +20,13 @@ export async function seedDatabase() {
 
   const now = getCurrentTimestamp();
 
-  const jeffkPasswordHash = await bcrypt.hash('Vetted@3:16', 10);
+  const jeffkInitialPassword = process.env.JEFFK_INITIAL_PASSWORD;
+  const jeffkPasswordHash = jeffkInitialPassword
+    ? await bcrypt.hash(jeffkInitialPassword, 10)
+    : null;
+  if (!jeffkInitialPassword) {
+    console.warn('Seed: JEFFK_INITIAL_PASSWORD not set — jeffk@vettedbot.com seeded without a password.');
+  }
 
   // Seed Users
   const users = [

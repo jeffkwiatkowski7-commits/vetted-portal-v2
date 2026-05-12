@@ -249,48 +249,6 @@ export interface ProjectSkill {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Scheduled Tasks (Claude-desktop-style recurring prompts)
-// ════════════════════════════════════════════════════════════════════
-
-export type ScheduleType = 'cron' | 'interval' | 'once' | 'manual';
-
-export interface ScheduledTask {
-  id: string;
-  user_id: string;
-  name: string;
-  description?: string | null;
-  prompt: string;
-  model?: string | null;
-  system_prompt?: string | null;
-  project_id?: string | null;
-  mcp_servers: string[];
-  schedule_type: ScheduleType;
-  cron_expression?: string | null;
-  timezone: string;
-  enabled: boolean;
-  delivery: { type: 'notification' | 'chat' | 'email'; target?: string };
-  cloud_scheduler_job?: string | null;
-  last_run_at?: string | null;
-  next_run_at?: string | null;
-  last_status?: 'success' | 'error' | null;
-  last_error?: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ScheduledTaskRun {
-  id: string;
-  task_id: string;
-  started_at: string;
-  finished_at?: string | null;
-  status: 'running' | 'success' | 'error';
-  result_text?: string | null;
-  error_message?: string | null;
-  duration_ms?: number | null;
-  trigger?: 'scheduler' | 'manual' | 'tool' | null;
-}
-
-// ════════════════════════════════════════════════════════════════════
 // Lease Bot Types (from cbre_leases integration)
 // ════════════════════════════════════════════════════════════════════
 
@@ -361,7 +319,9 @@ export interface McpServer {
   icon: string;
   command: string;
   args: string;      // JSON array
-  env_vars: string;  // JSON object
+  // Admin endpoint returns a preview map: { KEY: "sk-a…XYZ9" }. Real values
+  // live encrypted server-side; the admin form sees previews only.
+  env_vars: Record<string, string>;
   enabled: number;
   created_at: string;
   updated_at: string;
@@ -429,6 +389,31 @@ export interface TeamMember {
   project_description?: string | null;
   default_model?: string;
   system_prompt?: string;
+}
+
+export interface TeamSchedule {
+  id: string;
+  team_id: string;
+  owner_id: string;
+  name?: string | null;
+  cron_expression: string;
+  timezone: string;
+  prompt: string;
+  enabled: number; // 0 or 1
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamScheduleRun {
+  id: string;
+  schedule_id: string;
+  chat_id?: string | null;
+  status: 'running' | 'success' | 'error';
+  error?: string | null;
+  started_at: string;
+  finished_at?: string | null;
 }
 
 export interface AgentRunMessage {

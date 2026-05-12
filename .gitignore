@@ -6,4 +6,5 @@ data/
 .playwright-mcp/
 .superpowers/
 .worktrees/
+.claude/worktrees/
 *.log

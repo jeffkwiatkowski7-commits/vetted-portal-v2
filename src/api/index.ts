@@ -300,16 +300,27 @@ export const chatTeam = {
     request(`/chats/${chatId}/team`, { method: 'PUT', body: JSON.stringify({ team_id: teamId }) }),
 };
 
-// Scheduled tasks
-export const tasks = {
-  list: () => request('/tasks').then(d => d.tasks || d || []),
-  get: (id: string) => request(`/tasks/${id}`),
-  create: (data: any) => request('/tasks', { method: 'POST', body: JSON.stringify(data) }).then(d => d.task || d),
-  update: (id: string, data: any) => request(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(d => d.task || d),
-  delete: (id: string) => request(`/tasks/${id}`, { method: 'DELETE' }),
-  run: (id: string) => request(`/tasks/${id}/run`, { method: 'POST' }),
-  runs: (id: string) => request(`/tasks/${id}/runs`).then(d => d.runs || d || []),
+export const teamSchedules = {
+  list: (teamId: string) =>
+    request(`/teams/${teamId}/schedules`).then(d => d.schedules || []),
+  create: (teamId: string, data: {
+    name?: string | null;
+    cron_expression: string;
+    timezone?: string;
+    prompt: string;
+    enabled?: number;
+  }) =>
+    request(`/teams/${teamId}/schedules`, { method: 'POST', body: JSON.stringify(data) }).then(d => d.schedule || d),
+  update: (teamId: string, scheduleId: string, data: any) =>
+    request(`/teams/${teamId}/schedules/${scheduleId}`, { method: 'PUT', body: JSON.stringify(data) }).then(d => d.schedule || d),
+  delete: (teamId: string, scheduleId: string) =>
+    request(`/teams/${teamId}/schedules/${scheduleId}`, { method: 'DELETE' }),
+  run: (teamId: string, scheduleId: string) =>
+    request(`/teams/${teamId}/schedules/${scheduleId}/run`, { method: 'POST' }),
+  runs: (teamId: string, scheduleId: string) =>
+    request(`/teams/${teamId}/schedules/${scheduleId}/runs`).then(d => d.runs || []),
 };
+
 
 // Apps - unwrap
 export const apps = {

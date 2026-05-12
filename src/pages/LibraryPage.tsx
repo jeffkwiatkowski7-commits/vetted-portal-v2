@@ -6,13 +6,21 @@ import {
   Download,
   Trash2,
   MoreHorizontal,
-  FileText,
-  Image,
-  Table,
-  Code,
   Search,
   ArrowUpDown,
 } from 'lucide-react';
+import {
+  FaFilePdf,
+  FaFileWord,
+  FaFileExcel,
+  FaFilePowerpoint,
+  FaFileImage,
+  FaFileArchive,
+  FaFileCode,
+  FaFileAlt,
+  FaFigma,
+} from 'react-icons/fa';
+import type { IconType } from 'react-icons';
 import type { LibraryFile } from '../types';
 
 export default function LibraryPage() {
@@ -93,21 +101,42 @@ export default function LibraryPage() {
   };
 
   const getFileIcon = (type: string) => {
-    const icons: { [key: string]: typeof FileText } = {
-      pdf: FileText,
-      doc: FileText,
-      txt: FileText,
-      jpg: Image,
-      png: Image,
-      gif: Image,
-      csv: Table,
-      xls: Table,
-      json: Code,
-      js: Code,
-      py: Code,
+    const ext = type.toLowerCase().replace(/^\./, '');
+    const map: { [key: string]: { Icon: IconType; color: string } } = {
+      pdf: { Icon: FaFilePdf, color: 'text-red-600' },
+      doc: { Icon: FaFileWord, color: 'text-blue-600' },
+      docx: { Icon: FaFileWord, color: 'text-blue-600' },
+      rtf: { Icon: FaFileWord, color: 'text-blue-600' },
+      xls: { Icon: FaFileExcel, color: 'text-green-600' },
+      xlsx: { Icon: FaFileExcel, color: 'text-green-600' },
+      csv: { Icon: FaFileExcel, color: 'text-green-600' },
+      ppt: { Icon: FaFilePowerpoint, color: 'text-orange-600' },
+      pptx: { Icon: FaFilePowerpoint, color: 'text-orange-600' },
+      key: { Icon: FaFilePowerpoint, color: 'text-orange-600' },
+      jpg: { Icon: FaFileImage, color: 'text-purple-600' },
+      jpeg: { Icon: FaFileImage, color: 'text-purple-600' },
+      png: { Icon: FaFileImage, color: 'text-purple-600' },
+      gif: { Icon: FaFileImage, color: 'text-purple-600' },
+      svg: { Icon: FaFileImage, color: 'text-purple-600' },
+      webp: { Icon: FaFileImage, color: 'text-purple-600' },
+      fig: { Icon: FaFigma, color: 'text-pink-600' },
+      sketch: { Icon: FaFigma, color: 'text-pink-600' },
+      zip: { Icon: FaFileArchive, color: 'text-yellow-600' },
+      tar: { Icon: FaFileArchive, color: 'text-yellow-600' },
+      gz: { Icon: FaFileArchive, color: 'text-yellow-600' },
+      json: { Icon: FaFileCode, color: 'text-amber-600' },
+      js: { Icon: FaFileCode, color: 'text-amber-600' },
+      ts: { Icon: FaFileCode, color: 'text-amber-600' },
+      tsx: { Icon: FaFileCode, color: 'text-amber-600' },
+      jsx: { Icon: FaFileCode, color: 'text-amber-600' },
+      py: { Icon: FaFileCode, color: 'text-amber-600' },
+      html: { Icon: FaFileCode, color: 'text-amber-600' },
+      css: { Icon: FaFileCode, color: 'text-amber-600' },
+      txt: { Icon: FaFileAlt, color: 'text-vetted-text-secondary' },
+      md: { Icon: FaFileAlt, color: 'text-vetted-text-secondary' },
     };
-    const Icon = icons[type.toLowerCase()] || FileText;
-    return <Icon size={16} />;
+    const { Icon, color } = map[ext] || { Icon: FaFileAlt, color: 'text-vetted-text-secondary' };
+    return <Icon size={18} className={color} />;
   };
 
   const filtered = files.filter((f) =>

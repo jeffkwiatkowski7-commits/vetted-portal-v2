@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useStore } from '../store';
 import * as api from '../api';
 import { projectFiles as projectFilesApi } from '../api';
@@ -14,11 +14,12 @@ import ExportModal from '../components/chat/ExportModal';
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { addToast, activeChat, setActiveChat, projectFiles, setProjectFiles, setRightPanelOpen } = useStore();
   const hasChat = (activeChat?.messages?.length ?? 0) > 0 || (activeChat?.project_id === id && activeChat?.id != null);
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState(searchParams.get('settings') === '1');
   const [saving, setSaving] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [uploadSteps, setUploadSteps] = useState<{message: string; ts: string}[]>([]);

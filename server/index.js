@@ -3879,7 +3879,18 @@ app.use('/api', leaseRoutes({ requireAuth, requireAdmin }));
 // Matches case-insensitive substring on email and display_name.
 app.get('/api/users/search', requireAuth, (req, res) => {
   const q = (req.query.q || '').trim();
-  if (q.length < 2) return res.json({ users: [] });
+  // Empty query returns the first 20 active users so the autocomplete
+  // dropdown has content as soon as it's focused (typeahead-style).
+  if (q.length === 0) {
+    const users = dbAll(db, `
+      SELECT id, email, display_name, avatar_path
+      FROM users
+      WHERE status = 'active'
+      ORDER BY display_name
+      LIMIT 20
+    `);
+    return res.json({ users });
+  }
   const pattern = `%${q.toLowerCase()}%`;
   const users = dbAll(db, `
     SELECT id, email, display_name, avatar_path

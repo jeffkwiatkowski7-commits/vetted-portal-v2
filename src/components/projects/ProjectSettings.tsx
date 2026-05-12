@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { Settings as SettingsIcon } from 'lucide-react';
 import * as api from '../../api';
 import { useStore } from '../../store';
 import type { Project, ProjectAccess } from '../../types';
 import AccordionSection from './AccordionSection';
 import AccessSection from './AccessSection';
+import ProjectForm from './ProjectForm';
 
 interface Props {
   project: Project;
@@ -11,7 +13,7 @@ interface Props {
 }
 
 export default function ProjectSettings({ project, onUpdated }: Props) {
-  const { addToast } = useStore();
+  const { addToast, projectFiles, setProjectFiles, setRightPanelOpen } = useStore();
   const [access, setAccess] = useState<ProjectAccess | null>(null);
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description || '');
@@ -19,9 +21,40 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
   const model = project.default_model || 'claude-opus-4-7';
   const temperature = project.temperature ?? 0.7;
   const [saving, setSaving] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const isOwner = access?.your_level === 'owner' || access?.your_level === 'admin';
   const isWriter = isOwner || access?.your_level === 'editor';
+
+  async function handleAdvancedSave(data: { name: string; description: string; system_prompt: string; tool_sets: string[]; mcp_servers: string[]; file_ids: string[]; pptx_template_id: string | null }) {
+    setSaving(true);
+    try {
+      const updated = await api.projects.update(project.id, {
+        name: data.name,
+        description: data.description,
+        system_prompt: data.system_prompt,
+        mcp_servers: data.mcp_servers || [],
+        pptx_template_id: data.pptx_template_id,
+      });
+      // Sync file assignments
+      const oldIds = new Set(projectFiles.map((f) => f.id));
+      const newIds = new Set(data.file_ids);
+      const toAdd = data.file_ids.filter((fid) => !oldIds.has(fid));
+      const toRemove = projectFiles.filter((f) => !newIds.has(f.id)).map((f) => f.id);
+      await Promise.all([
+        ...toAdd.map((fid) => api.library.assignProject(fid, project.id)),
+        ...toRemove.map((fid) => api.library.assignProject(fid, null)),
+      ]);
+      const updatedFiles = await api.library.list(project.id);
+      setProjectFiles(updatedFiles);
+      if (updatedFiles.length > 0) setRightPanelOpen(true);
+      onUpdated(updated);
+      setShowAdvanced(false);
+      addToast({ type: 'success', title: 'Project updated' });
+    } catch (err: any) {
+      addToast({ type: 'error', title: err?.message || 'Save failed' });
+    } finally { setSaving(false); }
+  }
 
   async function saveGeneral() {
     setSaving(true);
@@ -37,7 +70,8 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-3 max-w-5xl mx-auto py-6 px-6">
+    <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex flex-col gap-3 mx-auto py-6 px-8 max-w-[1400px]">
       <h1 className="font-serif font-bold text-3xl text-vetted-primary mb-2">{project.name}</h1>
 
       <AccordionSection
@@ -122,13 +156,24 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
       <AccordionSection
         num="iv"
         title="Tools, Skills, Templates, Files"
-        summary="Use the ⚙ Settings button (top-right) to manage these for now"
+        summary={`${projectFiles.length} ${projectFiles.length === 1 ? 'file' : 'files'} attached`}
       >
-        <p className="text-sm text-vetted-text-muted">
-          Detailed editors for tool sets, MCP servers, skills, branded templates, and project files
-          are available in the existing project Settings dialog. They will be migrated into this
-          accordion in a follow-up.
-        </p>
+        <div className="space-y-3">
+          <p className="text-sm text-vetted-text-muted">
+            Manage tool sets, MCP servers, skills, branded PPTX templates, and project files
+            (including adding files from the Library) in the full editor.
+          </p>
+          {isWriter && (
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(true)}
+              className="inline-flex items-center gap-2 bg-vetted-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-vetted-accent hover:text-vetted-primary transition-colors"
+            >
+              <SettingsIcon size={14} />
+              Open full editor
+            </button>
+          )}
+        </div>
       </AccordionSection>
 
       {isOwner && (
@@ -147,6 +192,26 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
             </button>
           </div>
         </AccordionSection>
+      )}
+      </div>
+
+      {showAdvanced && (
+        <ProjectForm
+          title={`Edit: ${project.name}`}
+          initialData={{
+            name: project.name,
+            description: project.description,
+            system_prompt: project.system_prompt,
+            tool_sets: project.tool_sets as unknown as string[],
+            mcp_servers: project.mcp_servers as unknown as string[],
+            file_ids: projectFiles.map((f) => f.id),
+            pptx_template_id: (project as any).pptx_template_id ?? null,
+          }}
+          projectId={project.id}
+          onSave={handleAdvancedSave}
+          onCancel={() => setShowAdvanced(false)}
+          saving={saving}
+        />
       )}
     </div>
   );

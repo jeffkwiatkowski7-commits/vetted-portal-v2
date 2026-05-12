@@ -19,23 +19,21 @@ export default function EmailAutocomplete({ placeholder, excludeUserIds = [], on
   const debounceRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (q.trim().length < 2) {
+  async function fetchUsers(query: string) {
+    try {
+      const users = await api.users.search(query);
+      setResults(users.filter((u: UserSearchResult) => !excludeUserIds.includes(u.id)));
+      setHighlight(0);
+    } catch {
       setResults([]);
-      return;
     }
+  }
+
+  useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(async () => {
-      try {
-        const users = await api.users.search(q.trim());
-        setResults(users.filter((u: UserSearchResult) => !excludeUserIds.includes(u.id)));
-        setOpen(true);
-        setHighlight(0);
-      } catch {
-        setResults([]);
-      }
-    }, 180);
+    debounceRef.current = window.setTimeout(() => fetchUsers(q.trim()), 180);
     return () => { if (debounceRef.current) window.clearTimeout(debounceRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, excludeUserIds.join(',')]);
 
   useEffect(() => {
@@ -65,7 +63,7 @@ export default function EmailAutocomplete({ placeholder, excludeUserIds = [], on
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={handleKey}
-          onFocus={() => results.length > 0 && setOpen(true)}
+          onFocus={() => { setOpen(true); if (results.length === 0) fetchUsers(q.trim()); }}
           placeholder={placeholder || 'name or email'}
           disabled={disabled}
           className="w-full pl-9 pr-3 py-2 text-sm border border-vetted-border rounded-lg bg-white focus:outline-none focus:border-vetted-accent disabled:opacity-50"

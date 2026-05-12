@@ -537,6 +537,18 @@ const _PROJECT_WRITE_LEVELS = new Set(['admin', 'owner', 'editor']);
 function canWriteProject(level) { return _PROJECT_WRITE_LEVELS.has(level); }
 function canReadProject(level) { return level !== 'none'; }
 
+// Middleware: caller must be project owner OR global admin.
+// Sets req.project for downstream handlers.
+function requireProjectOwner(req, res, next) {
+  const { project, level } = getProjectAccess(req.params.id, req.user);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (level !== 'owner' && level !== 'admin') {
+    return res.status(403).json({ error: 'Owner access required' });
+  }
+  req.project = project;
+  next();
+}
+
 // Middleware to check authentication
 const _lastLoginUpdate = new Map(); // userId → timestamp, throttle to 1/hour
 function requireAuth(req, res, next) {

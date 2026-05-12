@@ -1912,6 +1912,59 @@ app.patch('/api/projects/:id/members/:userId', requireAuth, requireProjectOwner,
   res.json({ success: true, permission: perm });
 });
 
+// Owner-only: transfer ownership to an existing member. Demotes old owner
+// to editor. Atomic via single transaction-equivalent run.
+app.post('/api/projects/:id/transfer-ownership', requireAuth, requireProjectOwner, (req, res) => {
+  const { new_owner_user_id } = req.body || {};
+  if (!new_owner_user_id) return res.status(400).json({ error: 'new_owner_user_id is required' });
+  if (new_owner_user_id === req.user.id) return res.status(400).json({ error: 'You are already the owner' });
+
+  const member = dbGet(db, 'SELECT id FROM project_members WHERE project_id = ? AND user_id = ?', [req.params.id, new_owner_user_id]);
+  if (!member) return res.status(400).json({ error: 'New owner must already be a member of the project' });
+
+  const newOwner = dbGet(db, 'SELECT id, display_name, email FROM users WHERE id = ?', [new_owner_user_id]);
+  if (!newOwner) return res.status(404).json({ error: 'User not found' });
+
+  const oldOwnerId = req.project.owner_id;
+  const now = new Date().toISOString();
+
+  // Promote new owner: remove their member row
+  dbRun(db, 'DELETE FROM project_members WHERE project_id = ? AND user_id = ?', [req.params.id, new_owner_user_id]);
+  // Demote old owner: insert as editor
+  dbRun(db, `
+    INSERT INTO project_members (id, project_id, user_id, permission, invited_by, invited_at, created_at)
+    VALUES (?, ?, ?, 'editor', ?, ?, ?)
+  `, [uuidv4(), req.params.id, oldOwnerId, oldOwnerId, now, now]);
+  // Flip owner_id
+  dbRun(db, 'UPDATE projects SET owner_id = ?, updated_at = ? WHERE id = ?', [new_owner_user_id, now, req.params.id]);
+
+  // Notify both
+  for (const uid of [oldOwnerId, new_owner_user_id]) {
+    dbRun(db, `
+      INSERT INTO notifications (id, user_id, type, title, description, link, is_read, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+    `, [
+      uuidv4(),
+      uid,
+      'project_share',
+      `Ownership of "${req.project.name}" was transferred to ${newOwner.display_name}`,
+      uid === new_owner_user_id ? 'You are now the owner.' : 'You are now an editor on this project.',
+      `/projects/${req.params.id}`,
+      now
+    ]);
+  }
+
+  auditLog({
+    userId: req.user.id,
+    action: 'project_ownership_transferred',
+    resourceType: 'project',
+    resourceId: req.params.id,
+    details: JSON.stringify({ from: oldOwnerId, to: new_owner_user_id })
+  });
+
+  res.json({ success: true, owner_id: new_owner_user_id });
+});
+
 app.delete('/api/projects/:id/members/:userId', requireAuth, (req, res) => {
   const project = dbGet(db, 'SELECT * FROM projects WHERE id = ? AND owner_id = ?', [req.params.id, req.user.id]);
 

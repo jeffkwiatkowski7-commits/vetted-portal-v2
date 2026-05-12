@@ -181,13 +181,28 @@ export const chats = {
 
 // Projects - unwrap
 export const projects = {
-  list: () => request('/projects').then(d => d.projects || d || []),
+  list: (scope?: 'owned' | 'shared' | 'all') =>
+    request(`/projects${scope ? `?scope=${scope}` : ''}`).then(d => d.projects || d || []),
   create: (data: any) => request('/projects', { method: 'POST', body: JSON.stringify(data) }).then(d => d.project || d),
   get: (id: string) => request(`/projects/${id}`).then(d => d.project || d),
   update: (id: string, data: any) => request(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(d => d.project || d),
   delete: (id: string) => request(`/projects/${id}`, { method: 'DELETE' }),
+  // Legacy — kept for callers that still use it
   addMember: (id: string, data: any) => request(`/projects/${id}/members`, { method: 'POST', body: JSON.stringify(data) }),
   removeMember: (id: string, userId: string) => request(`/projects/${id}/members/${userId}`, { method: 'DELETE' }),
+  // New
+  access: (id: string) => request(`/projects/${id}/access`),
+  invite: (id: string, email: string, permission: 'editor' | 'viewer') =>
+    request(`/projects/${id}/invite`, { method: 'POST', body: JSON.stringify({ email, permission }) }),
+  updateMember: (id: string, userId: string, permission: 'editor' | 'viewer') =>
+    request(`/projects/${id}/members/${userId}`, { method: 'PATCH', body: JSON.stringify({ permission }) }),
+  transferOwnership: (id: string, newOwnerUserId: string) =>
+    request(`/projects/${id}/transfer-ownership`, { method: 'POST', body: JSON.stringify({ new_owner_user_id: newOwnerUserId }) }),
+  leave: (id: string) => request(`/projects/${id}/leave`, { method: 'POST' }),
+};
+
+export const users = {
+  search: (q: string) => request(`/users/search?q=${encodeURIComponent(q)}`).then(d => d.users || []),
 };
 
 // MCP Servers

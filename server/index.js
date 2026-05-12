@@ -1760,6 +1760,31 @@ app.delete('/api/projects/:id', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
+// Returns enriched access info: owner user + all members with user details.
+// Any member (or admin) can read.
+app.get('/api/projects/:id/access', requireAuth, (req, res) => {
+  const { project, level } = getProjectAccess(req.params.id, req.user);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!canReadProject(level)) return res.status(403).json({ error: 'Forbidden' });
+
+  const owner = dbGet(db, 'SELECT id, email, display_name, avatar_path FROM users WHERE id = ?', [project.owner_id]);
+  const members = dbAll(db, `
+    SELECT pm.id, pm.user_id, pm.permission, pm.invited_by, pm.invited_at, pm.created_at,
+           u.email, u.display_name, u.avatar_path
+    FROM project_members pm
+    JOIN users u ON u.id = pm.user_id
+    WHERE pm.project_id = ?
+    ORDER BY pm.created_at ASC
+  `, [req.params.id]);
+
+  res.json({
+    project_id: project.id,
+    owner,
+    members,
+    your_level: level
+  });
+});
+
 app.post('/api/projects/:id/members', requireAuth, (req, res) => {
   const { user_id, permission } = req.body;
 

@@ -1630,15 +1630,40 @@ app.get('/api/chats/shared/with-me', requireAuth, (req, res) => {
 
 app.get('/api/projects', requireAuth, (req, res) => {
   const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
-  const projects = isAdmin
-    ? dbAll(db, `SELECT p.*, u.display_name as owner_name FROM projects p LEFT JOIN users u ON p.owner_id = u.id ORDER BY p.updated_at DESC`)
-    : dbAll(db, `
-      SELECT DISTINCT p.* FROM projects p
+  const scope = req.query.scope === 'owned' || req.query.scope === 'shared' ? req.query.scope : 'all';
+
+  let projects;
+  if (isAdmin && scope === 'all') {
+    projects = dbAll(db, `SELECT p.*, u.display_name as owner_name FROM projects p LEFT JOIN users u ON p.owner_id = u.id ORDER BY p.updated_at DESC`);
+  } else if (scope === 'owned') {
+    projects = dbAll(db, `
+      SELECT p.*, u.display_name as owner_name
+      FROM projects p LEFT JOIN users u ON p.owner_id = u.id
+      WHERE p.owner_id = ?
+      ORDER BY p.updated_at DESC
+    `, [req.user.id]);
+  } else if (scope === 'shared') {
+    projects = dbAll(db, `
+      SELECT p.*, u.display_name as owner_name, pm.permission as permission
+      FROM projects p
+      LEFT JOIN users u ON p.owner_id = u.id
+      INNER JOIN project_members pm ON pm.project_id = p.id
+      WHERE pm.user_id = ?
+      ORDER BY p.updated_at DESC
+    `, [req.user.id]);
+  } else {
+    // scope === 'all' (non-admin): owned ∪ member-of, with permission column populated for member rows
+    projects = dbAll(db, `
+      SELECT DISTINCT p.*, u.display_name as owner_name,
+             (SELECT permission FROM project_members WHERE project_id = p.id AND user_id = ?) as permission
+      FROM projects p
+      LEFT JOIN users u ON p.owner_id = u.id
       WHERE p.owner_id = ? OR p.id IN (
         SELECT project_id FROM project_members WHERE user_id = ?
       )
       ORDER BY p.updated_at DESC
-    `, [req.user.id, req.user.id]);
+    `, [req.user.id, req.user.id, req.user.id]);
+  }
 
   const result = projects.map(p => ({
     ...p,

@@ -84,10 +84,35 @@ export interface ProjectMember {
   id: string;
   project_id: string;
   user_id: string;
-  permission: string;
+  permission: 'viewer' | 'editor';
+  invited_by?: string | null;
+  invited_at?: string | null;
   created_at: string;
-  display_name?: string;
+  // Joined user fields (returned by /access endpoint)
   email?: string;
+  display_name?: string;
+  avatar_path?: string | null;
+}
+
+export interface ProjectOwner {
+  id: string;
+  email: string;
+  display_name: string;
+  avatar_path?: string | null;
+}
+
+export interface ProjectAccess {
+  project_id: string;
+  owner: ProjectOwner;
+  members: ProjectMember[];
+  your_level: 'owner' | 'editor' | 'viewer' | 'admin' | 'none';
+}
+
+export interface UserSearchResult {
+  id: string;
+  email: string;
+  display_name: string;
+  avatar_path?: string | null;
 }
 
 export interface LibraryFile {

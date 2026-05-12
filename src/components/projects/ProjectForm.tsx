@@ -23,6 +23,10 @@ interface Props {
   title: string;
   saving?: boolean;
   projectId?: string;
+  // When true, hide Name/Description/Default Model/System Instructions sections.
+  // Used when the form is opened from the Tools/Skills/Templates/Files accordion
+  // panel where those basics are managed elsewhere.
+  compact?: boolean;
 }
 
 // Library picker modal
@@ -80,7 +84,7 @@ function LibraryPicker({
   );
 }
 
-export default function ProjectForm({ initialData, onSave, onCancel, onDelete, title, saving, projectId }: Props) {
+export default function ProjectForm({ initialData, onSave, onCancel, onDelete, title, saving, projectId, compact }: Props) {
   const [models, setModels] = useState<{ id: string; name: string; isDefault: boolean }[]>([]);
 
   useEffect(() => {
@@ -196,72 +200,76 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
             <div className="px-6 py-5 space-y-5">
 
-              {/* Name */}
-              <div>
-                <label className="block text-sm font-medium text-vetted-primary mb-1.5">
-                  Project Name <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Q2 Product Roadmap"
-                  required
-                  className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent"
-                />
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-sm font-medium text-vetted-primary mb-1.5">Description</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What is this project about?"
-                  rows={2}
-                  className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent resize-none"
-                />
-              </div>
-
-              {/* Default Model */}
-              <div>
-                <label className="block text-sm font-medium text-vetted-primary mb-1.5">Default Model</label>
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent"
-                >
-                  {models.map((m) => (
-                    <option key={m.id} value={m.name}>
-                      {m.name}{m.isDefault ? ' (system default)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* System Instructions — expandable */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
+              {!compact && (
+                <>
+                  {/* Name */}
                   <div>
-                    <label className="text-sm font-medium text-vetted-primary">System Instructions</label>
-                    <p className="text-xs text-vetted-text-muted mt-0.5">Define a persona or set behavior for the AI.</p>
+                    <label className="block text-sm font-medium text-vetted-primary mb-1.5">
+                      Project Name <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Q2 Product Roadmap"
+                      required
+                      className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent"
+                    />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setSysExpanded((v) => !v)}
-                    className="flex items-center gap-1 text-xs text-vetted-text-secondary hover:text-vetted-primary transition-colors"
-                  >
-                    {sysExpanded ? <><ChevronUp size={13} /> Collapse</> : <><ChevronDown size={13} /> Expand</>}
-                  </button>
-                </div>
-                <textarea
-                  value={systemPrompt}
-                  onChange={(e) => setSystemPrompt(e.target.value)}
-                  placeholder="You are a product strategist helping a team plan and prioritize features..."
-                  rows={sysExpanded ? 12 : 3}
-                  className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent resize-none font-mono transition-all"
-                />
-              </div>
+
+                  {/* Description */}
+                  <div>
+                    <label className="block text-sm font-medium text-vetted-primary mb-1.5">Description</label>
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="What is this project about?"
+                      rows={2}
+                      className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent resize-none"
+                    />
+                  </div>
+
+                  {/* Default Model */}
+                  <div>
+                    <label className="block text-sm font-medium text-vetted-primary mb-1.5">Default Model</label>
+                    <select
+                      value={selectedModel}
+                      onChange={(e) => setSelectedModel(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent"
+                    >
+                      {models.map((m) => (
+                        <option key={m.id} value={m.name}>
+                          {m.name}{m.isDefault ? ' (system default)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* System Instructions — expandable */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <div>
+                        <label className="text-sm font-medium text-vetted-primary">System Instructions</label>
+                        <p className="text-xs text-vetted-text-muted mt-0.5">Define a persona or set behavior for the AI.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSysExpanded((v) => !v)}
+                        className="flex items-center gap-1 text-xs text-vetted-text-secondary hover:text-vetted-primary transition-colors"
+                      >
+                        {sysExpanded ? <><ChevronUp size={13} /> Collapse</> : <><ChevronDown size={13} /> Expand</>}
+                      </button>
+                    </div>
+                    <textarea
+                      value={systemPrompt}
+                      onChange={(e) => setSystemPrompt(e.target.value)}
+                      placeholder="You are a product strategist helping a team plan and prioritize features..."
+                      rows={sysExpanded ? 12 : 3}
+                      className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent resize-none font-mono transition-all"
+                    />
+                  </div>
+                </>
+              )}
 
               {/* Files from Library */}
               <div>
@@ -394,7 +402,7 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
 
             {/* Footer */}
             <div className="px-6 py-4 border-t border-vetted-border flex items-center justify-between gap-3">
-              {onDelete ? (
+              {onDelete && !compact ? (
                 <button type="button" onClick={onDelete} className="text-sm text-red-500 hover:text-red-600 transition-colors">
                   Delete project
                 </button>
@@ -402,7 +410,7 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
               <div className="flex gap-2">
                 <button type="button" onClick={onCancel} className="btn-secondary text-sm py-1.5 px-4">Cancel</button>
                 <button type="submit" disabled={saving || !name.trim()} className="btn-primary text-sm py-1.5 px-4">
-                  {saving ? 'Saving…' : 'Save Project'}
+                  {saving ? 'Saving…' : (compact ? 'Save' : 'Save Project')}
                 </button>
               </div>
             </div>

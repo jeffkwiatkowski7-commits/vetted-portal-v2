@@ -201,7 +201,7 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
 
       {showAdvanced && (
         <ProjectForm
-          title={`Edit: ${project.name}`}
+          title="Tools, Skills, Templates & Files"
           initialData={{
             name: project.name,
             description: project.description,
@@ -215,6 +215,7 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
           onSave={handleAdvancedSave}
           onCancel={() => setShowAdvanced(false)}
           saving={saving}
+          compact
         />
       )}
     </div>

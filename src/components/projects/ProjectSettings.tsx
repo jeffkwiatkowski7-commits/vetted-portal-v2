@@ -16,8 +16,8 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description || '');
   const [systemPrompt, setSystemPrompt] = useState(project.system_prompt || '');
-  const [model, setModel] = useState(project.default_model || 'claude-opus-4-7');
-  const [temperature, setTemperature] = useState(project.temperature ?? 0.7);
+  const model = project.default_model || 'claude-opus-4-7';
+  const temperature = project.temperature ?? 0.7;
   const [saving, setSaving] = useState(false);
 
   const isOwner = access?.your_level === 'owner' || access?.your_level === 'admin';

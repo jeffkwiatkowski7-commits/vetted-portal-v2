@@ -52,7 +52,10 @@ export default function NotificationBell() {
       case 'shared_chat':
         return '💬';
       case 'project':
+      case 'project_share':
         return '📁';
+      case 'project_unshare':
+        return '🔒';
       case 'system':
         return '⚙️';
       default:

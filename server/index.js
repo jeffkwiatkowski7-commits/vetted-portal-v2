@@ -1894,6 +1894,24 @@ app.post('/api/projects/:id/members', requireAuth, (req, res) => {
   }
 });
 
+// Owner-only: change a member's permission (viewer <-> editor).
+app.patch('/api/projects/:id/members/:userId', requireAuth, requireProjectOwner, (req, res) => {
+  const { permission } = req.body || {};
+  const perm = permission === 'editor' ? 'editor' : 'viewer';
+  const member = dbGet(db, 'SELECT id, permission FROM project_members WHERE project_id = ? AND user_id = ?', [req.params.id, req.params.userId]);
+  if (!member) return res.status(404).json({ error: 'Member not found' });
+
+  dbRun(db, 'UPDATE project_members SET permission = ? WHERE id = ?', [perm, member.id]);
+  auditLog({
+    userId: req.user.id,
+    action: 'project_member_permission_changed',
+    resourceType: 'project',
+    resourceId: req.params.id,
+    details: JSON.stringify({ target_user_id: req.params.userId, old_permission: member.permission, new_permission: perm })
+  });
+  res.json({ success: true, permission: perm });
+});
+
 app.delete('/api/projects/:id/members/:userId', requireAuth, (req, res) => {
   const project = dbGet(db, 'SELECT * FROM projects WHERE id = ? AND owner_id = ?', [req.params.id, req.user.id]);
 

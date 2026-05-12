@@ -1785,6 +1785,84 @@ app.get('/api/projects/:id/access', requireAuth, (req, res) => {
   });
 });
 
+// Owner-only: invite by email. Resolves email -> user; errors if email
+// is not a known portal user. Inserts or updates project_members; on
+// re-invite, refreshes invited_at and re-fires the notification.
+// Writes to audit_log.
+app.post('/api/projects/:id/invite', requireAuth, requireProjectOwner, (req, res) => {
+  const { email, permission } = req.body || {};
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({ error: 'email is required' });
+  }
+  const perm = permission === 'editor' ? 'editor' : 'viewer';
+
+  const target = dbGet(db, 'SELECT id, email, display_name FROM users WHERE LOWER(email) = LOWER(?) AND status = ?', [email.trim(), 'active']);
+  if (!target) {
+    return res.status(404).json({ error: 'No portal user with that email', email_searched: email });
+  }
+  if (target.id === req.project.owner_id) {
+    return res.status(400).json({ error: 'User is already the owner' });
+  }
+  if (target.id === req.user.id) {
+    return res.status(400).json({ error: "You can't share a project with yourself" });
+  }
+
+  const now = new Date().toISOString();
+  const existing = dbGet(db, 'SELECT id FROM project_members WHERE project_id = ? AND user_id = ?', [req.params.id, target.id]);
+  let memberId;
+  if (existing) {
+    memberId = existing.id;
+    dbRun(db, `
+      UPDATE project_members SET permission = ?, invited_by = ?, invited_at = ? WHERE id = ?
+    `, [perm, req.user.id, now, memberId]);
+  } else {
+    memberId = uuidv4();
+    dbRun(db, `
+      INSERT INTO project_members (id, project_id, user_id, permission, invited_by, invited_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [memberId, req.params.id, target.id, perm, req.user.id, now, now]);
+  }
+
+  // In-app notification (respect user_preferences.notify_project_updates)
+  const prefs = dbGet(db, 'SELECT notify_project_updates FROM user_preferences WHERE user_id = ?', [target.id]);
+  const wantsNotif = !prefs || prefs.notify_project_updates !== 0;
+  if (wantsNotif) {
+    dbRun(db, `
+      INSERT INTO notifications (id, user_id, type, title, description, link, is_read, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+    `, [
+      uuidv4(),
+      target.id,
+      'project_share',
+      `${req.user.display_name} shared "${req.project.name}" with you`,
+      perm === 'editor' ? 'You can edit this project.' : 'You can view this project.',
+      `/projects/${req.params.id}`,
+      now
+    ]);
+  }
+
+  auditLog({
+    userId: req.user.id,
+    action: existing ? 'project_member_reinvited' : 'project_member_invited',
+    resourceType: 'project',
+    resourceId: req.params.id,
+    details: JSON.stringify({ target_user_id: target.id, permission: perm })
+  });
+
+  res.status(existing ? 200 : 201).json({
+    member: {
+      id: memberId,
+      project_id: req.params.id,
+      user_id: target.id,
+      email: target.email,
+      display_name: target.display_name,
+      permission: perm,
+      invited_at: now
+    },
+    re_invited: !!existing
+  });
+});
+
 app.post('/api/projects/:id/members', requireAuth, (req, res) => {
   const { user_id, permission } = req.body;
 

@@ -1,0 +1,1855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Project Setup — Layout Study</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500;1,700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #FAF8F4;
+    --panel: #FFFFFF;
+    --panel-soft: #FBF9F4;
+    --ink: #1A1A1A;
+    --ink-2: #3D3D3D;
+    --muted: #7A7570;
+    --muted-2: #B5AFA6;
+    --gold: #C4A962;
+    --gold-bright: #D4BB72;
+    --gold-soft: #F1EAD3;
+    --gold-tint: #FAF5E6;
+    --divider: #E8E1D0;
+    --divider-2: #EFE9DA;
+    --danger: #9A3B3B;
+    --success: #4A6B4A;
+    --serif: "Playfair Display", Georgia, serif;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+    --shadow-sm: 0 1px 2px rgba(26, 26, 26, 0.04);
+    --shadow-md: 0 4px 16px rgba(26, 26, 26, 0.06);
+    --shadow-lg: 0 18px 48px rgba(26, 26, 26, 0.08);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background-image:
+      radial-gradient(circle at 20% 0%, rgba(196, 169, 98, 0.04) 0%, transparent 40%),
+      radial-gradient(circle at 80% 100%, rgba(196, 169, 98, 0.03) 0%, transparent 50%);
+    min-height: 100vh;
+  }
+
+  /* ============= TOP BAR ============= */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: var(--panel);
+    border-bottom: 1px solid var(--divider);
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    backdrop-filter: blur(8px);
+  }
+
+  .brand {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+  }
+
+  .brand::after {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: var(--gold);
+    border-radius: 50%;
+    margin-left: 6px;
+    vertical-align: 4px;
+  }
+
+  .breadcrumb {
+    color: var(--muted);
+    font-size: 13px;
+    flex: 1;
+  }
+
+  .breadcrumb strong {
+    color: var(--ink);
+    font-weight: 500;
+    margin-left: 4px;
+  }
+
+  .layout-toggle {
+    display: inline-flex;
+    background: var(--gold-tint);
+    border: 1px solid var(--divider);
+    border-radius: 999px;
+    padding: 3px;
+  }
+
+  .layout-toggle button {
+    border: 0;
+    background: transparent;
+    padding: 7px 16px;
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 999px;
+    transition: all 160ms ease;
+  }
+
+  .layout-toggle button:hover { color: var(--ink); }
+
+  .layout-toggle button.active {
+    background: var(--ink);
+    color: #FFFFFF;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ============= PAGE HEADER ============= */
+  .page-header {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 40px 32px 28px;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--gold);
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+
+  .page-title {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 42px;
+    line-height: 1.1;
+    color: var(--ink);
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+
+  .page-title em {
+    font-style: italic;
+    color: var(--gold);
+  }
+
+  .page-meta {
+    color: var(--muted);
+    font-size: 13px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .page-meta .dot {
+    width: 3px;
+    height: 3px;
+    background: var(--muted-2);
+    border-radius: 50%;
+  }
+
+  /* ============= LAYOUT CONTAINER ============= */
+  .canvas {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 0 32px 80px;
+  }
+
+  .layout-view { display: none; }
+  .layout-view.active { display: block; }
+
+  /* ============= COMMON: SECTION ============= */
+  .section {
+    background: var(--panel);
+    border: 1px solid var(--divider);
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+
+  .section-header {
+    padding: 22px 28px 18px;
+    border-bottom: 1px solid var(--divider-2);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .section-title-group {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+
+  .section-num {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--gold);
+    font-weight: 700;
+  }
+
+  .section-title {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 22px;
+    color: var(--ink);
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  .section-desc {
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.5;
+    margin: 4px 0 0;
+    max-width: 520px;
+  }
+
+  .section-body {
+    padding: 24px 28px 28px;
+  }
+
+  /* ============= FORM CONTROLS ============= */
+  .field {
+    display: block;
+    margin-bottom: 18px;
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+
+  .label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-2);
+    margin-bottom: 6px;
+    letter-spacing: 0.01em;
+  }
+
+  .label-hint {
+    font-weight: 400;
+    color: var(--muted);
+    margin-left: 6px;
+  }
+
+  .input, .textarea, .select {
+    width: 100%;
+    border: 1px solid var(--divider);
+    background: var(--panel-soft);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-family: var(--sans);
+    font-size: 13.5px;
+    color: var(--ink);
+    transition: border-color 140ms ease, background 140ms ease;
+  }
+
+  .input:focus, .textarea:focus, .select:focus {
+    outline: none;
+    border-color: var(--gold);
+    background: var(--panel);
+  }
+
+  .textarea { min-height: 120px; resize: vertical; }
+  .textarea.mono { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; }
+
+  .help {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* ============= BUTTONS ============= */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--divider);
+    background: var(--panel);
+    color: var(--ink);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-family: var(--sans);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 140ms ease;
+  }
+
+  .btn:hover { border-color: var(--gold); color: var(--gold); }
+
+  .btn-primary {
+    background: var(--ink);
+    color: #FFFFFF;
+    border-color: var(--ink);
+  }
+
+  .btn-primary:hover {
+    background: var(--gold);
+    color: var(--ink);
+    border-color: var(--gold);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+  }
+
+  .btn-ghost:hover { color: var(--ink); border-color: var(--divider); }
+
+  .btn-danger {
+    background: transparent;
+    color: var(--danger);
+    border-color: rgba(154, 59, 59, 0.3);
+  }
+
+  .btn-danger:hover { background: var(--danger); color: #FFFFFF; }
+
+  .btn-sm { padding: 5px 10px; font-size: 11.5px; }
+
+  /* ============= AVATARS ============= */
+  .avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #FFFFFF;
+    border: 2px solid var(--panel);
+    flex-shrink: 0;
+  }
+
+  .avatar.sm { width: 26px; height: 26px; font-size: 10px; }
+  .avatar.lg { width: 44px; height: 44px; font-size: 14px; }
+
+  .av-1 { background: linear-gradient(135deg, #2D3E50, #4A6B7C); }
+  .av-2 { background: linear-gradient(135deg, #5C4033, #8B6F47); }
+  .av-3 { background: linear-gradient(135deg, #7C5C3F, #A88056); }
+  .av-4 { background: linear-gradient(135deg, #404040, #6B6B6B); }
+  .av-5 { background: linear-gradient(135deg, #C4A962, #D4BB72); color: var(--ink); }
+  .av-6 { background: linear-gradient(135deg, #4A6B4A, #6B8B6B); }
+
+  .avatar-stack {
+    display: inline-flex;
+    margin-left: 6px;
+  }
+
+  .avatar-stack .avatar {
+    margin-left: -8px;
+  }
+
+  /* ============= ACCESS PANEL (the new feature) ============= */
+  .access-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .access-block {
+    background: var(--panel-soft);
+    border: 1px solid var(--divider-2);
+    border-radius: 10px;
+    padding: 18px;
+  }
+
+  .access-block-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .access-block-title h4 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-2);
+    margin: 0;
+  }
+
+  .access-block-title .count {
+    font-size: 11px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .member-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--divider-2);
+  }
+
+  .member-row:last-child { border-bottom: 0; }
+
+  .member-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .member-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .member-email {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin: 2px 0 0;
+  }
+
+  .role-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 99px;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .role-owner {
+    background: var(--ink);
+    color: var(--gold-bright);
+  }
+
+  .role-editor {
+    background: var(--gold-tint);
+    color: #8A7641;
+    border: 1px solid var(--gold-soft);
+  }
+
+  .role-viewer {
+    background: var(--panel);
+    color: var(--muted);
+    border: 1px solid var(--divider);
+  }
+
+  .invite-input-wrap {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .invite-input-wrap .input { flex: 1; }
+
+  .empty-state {
+    text-align: center;
+    padding: 24px 12px;
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+
+  .empty-state .empty-glyph {
+    width: 36px;
+    height: 36px;
+    margin: 0 auto 10px;
+    border: 1.5px dashed var(--muted-2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted-2);
+    font-size: 18px;
+  }
+
+  /* ============= LAYOUT 1: LONG PAGE ============= */
+  .long-grid {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+
+  .toc {
+    position: sticky;
+    top: 88px;
+    padding-top: 8px;
+  }
+
+  .toc-label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted);
+    font-weight: 600;
+    margin-bottom: 14px;
+    padding-left: 14px;
+  }
+
+  .toc-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-left: 1px solid var(--divider);
+  }
+
+  .toc-list li a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    margin-left: -1px;
+    border-left: 2px solid transparent;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 12.5px;
+    transition: all 140ms ease;
+  }
+
+  .toc-list li a:hover {
+    color: var(--ink);
+    border-left-color: var(--gold-soft);
+  }
+
+  .toc-list li.active a {
+    color: var(--ink);
+    border-left-color: var(--gold);
+    font-weight: 500;
+  }
+
+  .toc-num {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 11px;
+    color: var(--gold);
+    width: 16px;
+  }
+
+  .long-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  /* ============= LAYOUT 2: TABS (LEFT RAIL) ============= */
+  .tabs-grid {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 0;
+    background: var(--panel);
+    border: 1px solid var(--divider);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    min-height: 620px;
+  }
+
+  .tabs-rail {
+    background: var(--panel-soft);
+    border-right: 1px solid var(--divider);
+    padding: 22px 12px;
+  }
+
+  .tabs-rail-label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted);
+    font-weight: 600;
+    padding: 0 14px 14px;
+  }
+
+  .tab-btn {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--ink-2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 140ms ease;
+    margin-bottom: 2px;
+  }
+
+  .tab-btn:hover { background: rgba(196, 169, 98, 0.08); }
+
+  .tab-btn.active {
+    background: var(--ink);
+    color: #FFFFFF;
+  }
+
+  .tab-btn.active .tab-num { color: var(--gold-bright); }
+
+  .tab-num {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 11.5px;
+    color: var(--gold);
+    width: 18px;
+    flex-shrink: 0;
+  }
+
+  .tab-meta {
+    margin-left: auto;
+    font-size: 10.5px;
+    color: var(--muted);
+    background: var(--panel);
+    padding: 1px 7px;
+    border-radius: 99px;
+    border: 1px solid var(--divider);
+  }
+
+  .tab-btn.active .tab-meta {
+    background: rgba(255,255,255,0.12);
+    color: var(--gold-bright);
+    border-color: transparent;
+  }
+
+  .tabs-content {
+    padding: 32px 36px 40px;
+    overflow-y: auto;
+  }
+
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; animation: fadeIn 200ms ease; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .tab-pane-header {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--divider-2);
+  }
+
+  .tab-pane-title {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 26px;
+    color: var(--ink);
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+
+  .tab-pane-desc {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0;
+  }
+
+  /* ============= LAYOUT 3: ACCORDION ============= */
+  .accordion {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .acc-item {
+    background: var(--panel);
+    border: 1px solid var(--divider);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: box-shadow 200ms ease;
+  }
+
+  .acc-item.open { box-shadow: var(--shadow-md); }
+
+  .acc-head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 22px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .acc-head:hover { background: var(--gold-tint); }
+
+  .acc-num {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--gold);
+    font-weight: 700;
+    width: 20px;
+  }
+
+  .acc-title-group {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .acc-title {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--ink);
+    margin: 0;
+    letter-spacing: -0.005em;
+  }
+
+  .acc-summary {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 3px 0 0;
+  }
+
+  .acc-aside {
+    font-size: 11.5px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .acc-chev {
+    color: var(--muted);
+    transition: transform 200ms ease;
+    font-size: 14px;
+  }
+
+  .acc-item.open .acc-chev { transform: rotate(90deg); color: var(--gold); }
+
+  .acc-body {
+    padding: 0 22px 22px;
+    border-top: 1px solid var(--divider-2);
+    padding-top: 20px;
+    display: none;
+  }
+
+  .acc-item.open .acc-body { display: block; animation: fadeIn 200ms ease; }
+
+  /* ============= TOOL/MCP CARDS ============= */
+  .tool-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .tool-card {
+    border: 1px solid var(--divider);
+    border-radius: 10px;
+    padding: 14px;
+    background: var(--panel);
+    cursor: pointer;
+    transition: all 140ms ease;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .tool-card:hover { border-color: var(--gold); }
+
+  .tool-card.checked {
+    background: var(--gold-tint);
+    border-color: var(--gold);
+  }
+
+  .tool-check {
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid var(--muted-2);
+    border-radius: 4px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: transparent;
+  }
+
+  .tool-card.checked .tool-check {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--gold-bright);
+  }
+
+  .tool-info { flex: 1; min-width: 0; }
+
+  .tool-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 0 0 2px;
+  }
+
+  .tool-desc {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  /* ============= FILE TABLE ============= */
+  .files {
+    border: 1px solid var(--divider);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .file-row {
+    display: grid;
+    grid-template-columns: 24px 1fr 80px 120px 80px;
+    gap: 12px;
+    align-items: center;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--divider-2);
+    font-size: 12.5px;
+  }
+
+  .file-row:last-child { border-bottom: 0; }
+  .file-row.head {
+    background: var(--panel-soft);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .file-icon {
+    width: 24px;
+    height: 24px;
+    background: var(--gold-tint);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--gold);
+  }
+
+  .file-meta {
+    font-size: 11px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ============= TEMPERATURE SLIDER ============= */
+  .slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    background: transparent;
+    height: 24px;
+  }
+
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 3px;
+    background: linear-gradient(to right, var(--gold) 0%, var(--gold) 35%, var(--divider) 35%);
+    border-radius: 99px;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--ink);
+    border: 2px solid var(--gold);
+    border-radius: 50%;
+    margin-top: -7px;
+    cursor: pointer;
+  }
+
+  .slider-val {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink);
+    background: var(--gold-tint);
+    padding: 4px 10px;
+    border-radius: 6px;
+    min-width: 50px;
+    text-align: center;
+  }
+
+  /* ============= SAVE BAR ============= */
+  .save-bar {
+    position: sticky;
+    bottom: 16px;
+    margin-top: 28px;
+    background: var(--ink);
+    color: #FFFFFF;
+    padding: 14px 22px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .save-bar-msg {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+  }
+
+  .save-bar .dot {
+    width: 7px;
+    height: 7px;
+    background: var(--gold-bright);
+    border-radius: 50%;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Annotation banners */
+  .annotation {
+    background: var(--gold-tint);
+    border: 1px dashed var(--gold);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin: 0 0 18px;
+    font-size: 12px;
+    color: #6F5C2C;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .annotation strong {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink);
+    margin-right: 4px;
+  }
+
+  /* PPTX template strip */
+  .template-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .template-card {
+    border: 1px solid var(--divider);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--panel);
+    cursor: pointer;
+    transition: all 140ms ease;
+  }
+
+  .template-card:hover { transform: translateY(-2px); border-color: var(--gold); }
+  .template-card.selected { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-tint); }
+
+  .template-thumb {
+    aspect-ratio: 16/10;
+    background: linear-gradient(135deg, #2A2A2A, #1A1A1A);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gold);
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 18px;
+    position: relative;
+  }
+
+  .template-thumb.t2 { background: linear-gradient(135deg, #5C4033, #8B6F47); color: #FAF8F4; }
+  .template-thumb.t3 { background: linear-gradient(135deg, #2D3E50, #4A6B7C); color: #FFFFFF; }
+
+  .template-thumb::after {
+    content: "";
+    position: absolute;
+    inset: 12px;
+    border: 1px solid currentColor;
+    opacity: 0.3;
+  }
+
+  .template-name {
+    padding: 10px 12px;
+    font-size: 11.5px;
+    color: var(--ink);
+    font-weight: 500;
+    border-top: 1px solid var(--divider-2);
+  }
+
+  .template-name span {
+    color: var(--muted);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+
+  /* SVG icon helper */
+  .ico {
+    width: 14px;
+    height: 14px;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .ico-lg { width: 16px; height: 16px; }
+</style>
+</head>
+<body>
+
+<!-- ============== TOP BAR ============== -->
+<header class="topbar">
+  <div class="brand">VETTED</div>
+  <div class="breadcrumb">Projects / <strong>Q3 Acquisition Memos</strong> / Setup</div>
+  <div class="layout-toggle" role="tablist">
+    <button class="active" data-layout="long">Long page</button>
+    <button data-layout="tabs">Tabs</button>
+    <button data-layout="accordion">Accordion</button>
+  </div>
+</header>
+
+<!-- ============== PAGE HEADER ============== -->
+<div class="page-header">
+  <div class="eyebrow">Project Setup</div>
+  <h1 class="page-title">Q3 Acquisition <em>Memos</em></h1>
+  <div class="page-meta">
+    <span>Owned by you</span>
+    <span class="dot"></span>
+    <span>3 collaborators · 2 viewers</span>
+    <span class="dot"></span>
+    <span>Updated 12 minutes ago</span>
+    <span class="dot"></span>
+    <span>14 files · 7 chats</span>
+  </div>
+</div>
+
+<!-- ============== CANVAS ============== -->
+<div class="canvas">
+
+<!-- ====================================================== -->
+<!--  LAYOUT 1: LONG PAGE                                   -->
+<!-- ====================================================== -->
+<div class="layout-view active" data-view="long">
+
+  <div class="annotation">
+    <strong>Long page —</strong> sticky table-of-contents on the left, every section visible on scroll. Best when users come in to scan or edit multiple sections in one pass. Worst when most visits only touch one section.
+  </div>
+
+  <div class="long-grid">
+
+    <!-- Sticky TOC -->
+    <nav class="toc">
+      <div class="toc-label">Sections</div>
+      <ul class="toc-list">
+        <li class="active"><a href="#sec-access"><span class="toc-num">i</span>Access &amp; Sharing</a></li>
+        <li><a href="#sec-general"><span class="toc-num">ii</span>General</a></li>
+        <li><a href="#sec-ai"><span class="toc-num">iii</span>AI Defaults</a></li>
+        <li><a href="#sec-tools"><span class="toc-num">iv</span>Tools &amp; MCP</a></li>
+        <li><a href="#sec-skills"><span class="toc-num">v</span>Skills</a></li>
+        <li><a href="#sec-templates"><span class="toc-num">vi</span>Branded Templates</a></li>
+        <li><a href="#sec-files"><span class="toc-num">vii</span>Files</a></li>
+        <li><a href="#sec-danger"><span class="toc-num">—</span>Danger Zone</a></li>
+      </ul>
+    </nav>
+
+    <!-- Stack of all sections -->
+    <div class="long-stack">
+
+      <!-- 1. ACCESS (THE NEW FEATURE) -->
+      <section class="section" id="sec-access">
+        <div class="section-header">
+          <div class="section-title-group">
+            <span class="section-num">i</span>
+            <div>
+              <h2 class="section-title">Access &amp; Sharing</h2>
+              <p class="section-desc">Owners can manage everything. Collaborators can modify the project and add files. Shared-with users can view.</p>
+            </div>
+          </div>
+          <button class="btn btn-primary">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            Share
+          </button>
+        </div>
+        <div class="section-body">
+          <!-- Owner card -->
+          <div class="member-row" style="background:var(--panel-soft);border:1px solid var(--divider-2);border-radius:10px;padding:14px 16px;margin-bottom:18px;">
+            <div class="avatar lg av-1">JK</div>
+            <div class="member-info">
+              <p class="member-name">Jeff Kwiatkowski <span style="color:var(--muted);font-weight:400;font-size:12px;margin-left:6px;">(you)</span></p>
+              <p class="member-email">jeffk@vettedbot.com</p>
+            </div>
+            <span class="role-chip role-owner">
+              <svg class="ico" viewBox="0 0 24 24" style="width:10px;height:10px"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8 5.8 21.3 8.2 13.9 2 9.4h7.6z"/></svg>
+              Owner
+            </span>
+            <button class="btn btn-sm btn-ghost">Transfer…</button>
+          </div>
+
+          <div class="access-grid">
+            <!-- Collaborators -->
+            <div class="access-block">
+              <div class="access-block-title">
+                <h4>Collaborators</h4>
+                <span class="count">3 of unlimited</span>
+              </div>
+              <div class="member-row">
+                <div class="avatar av-2">WR</div>
+                <div class="member-info">
+                  <p class="member-name">Wesley Ross</p>
+                  <p class="member-email">wross@prepfunds.net</p>
+                </div>
+                <span class="role-chip role-editor">Editor</span>
+                <button class="btn btn-sm btn-ghost">×</button>
+              </div>
+              <div class="member-row">
+                <div class="avatar av-3">JF</div>
+                <div class="member-info">
+                  <p class="member-name">Jeff Fox</p>
+                  <p class="member-email">jefffox@vettedconsultant.com</p>
+                </div>
+                <span class="role-chip role-editor">Editor</span>
+                <button class="btn btn-sm btn-ghost">×</button>
+              </div>
+              <div class="member-row">
+                <div class="avatar av-6">BK</div>
+                <div class="member-info">
+                  <p class="member-name">Bill Kovach</p>
+                  <p class="member-email">bill@vettedbot.com</p>
+                </div>
+                <span class="role-chip role-editor">Editor</span>
+                <button class="btn btn-sm btn-ghost">×</button>
+              </div>
+              <div class="invite-input-wrap">
+                <input class="input" placeholder="email@vettedbot.com" />
+                <button class="btn">Invite as editor</button>
+              </div>
+            </div>
+
+            <!-- Shared with -->
+            <div class="access-block">
+              <div class="access-block-title">
+                <h4>Shared with (view only)</h4>
+                <span class="count">2 of unlimited</span>
+              </div>
+              <div class="member-row">
+                <div class="avatar av-4">MT</div>
+                <div class="member-info">
+                  <p class="member-name">Maya Thomas</p>
+                  <p class="member-email">maya.thomas@vettedconsultant.com</p>
+                </div>
+                <span class="role-chip role-viewer">Viewer</span>
+                <button class="btn btn-sm btn-ghost">×</button>
+              </div>
+              <div class="member-row">
+                <div class="avatar av-5">DC</div>
+                <div class="member-info">
+                  <p class="member-name">David Chen</p>
+                  <p class="member-email">dchen@prepfunds.net</p>
+                </div>
+                <span class="role-chip role-viewer">Viewer</span>
+                <button class="btn btn-sm btn-ghost">×</button>
+              </div>
+              <div class="invite-input-wrap">
+                <input class="input" placeholder="email@vettedbot.com" />
+                <button class="btn">Invite as viewer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. GENERAL -->
+      <section class="section" id="sec-general">
+        <div class="section-header">
+          <div class="section-title-group">
+            <span class="section-num">ii</span>
+            <div>
+              <h2 class="section-title">General</h2>
+              <p class="section-desc">Name, description, status. Visible to everyone with access.</p>
+            </div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="field">
+            <label class="label">Project name</label>
+            <input class="input" value="Q3 Acquisition Memos" />
+          </div>
+          <div class="field">
+            <label class="label">Description <span class="label-hint">— shown on the project card</span></label>
+            <textarea class="textarea" style="min-height:72px;">Investment committee memos for medical office building acquisitions targeted in Q3. Includes rent roll analysis, sponsor diligence, and PPT-ready deliverables.</textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. AI DEFAULTS -->
+      <section class="section" id="sec-ai">
+        <div class="section-header">
+          <div class="section-title-group">
+            <span class="section-num">iii</span>
+            <div>
+              <h2 class="section-title">AI Defaults</h2>
+              <p class="section-desc">Model, temperature, and system prompt that new chats inherit.</p>
+            </div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="field-row">
+            <div class="field">
+              <label class="label">Default model</label>
+              <select class="select">
+                <option>Claude Opus 4.7 (1M context)</option>
+                <option>Claude Sonnet 4.6</option>
+                <option>Gemini 3 Flash Preview</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="label">Temperature</label>
+              <div class="slider-wrap">
+                <input type="range" min="0" max="1" step="0.05" value="0.35" />
+                <div class="slider-val">0.35</div>
+              </div>
+              <div class="help">Lower = more deterministic. Investment memos benefit from precision.</div>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label">System prompt</label>
+            <textarea class="textarea mono">You are an analyst preparing investment committee memos for medical office building (MOB) acquisitions. Always cite the rent roll source row when stating tenancy facts. Default to a conservative tone. When uncertain, say so.</textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. TOOLS & MCP -->
+      <section class="section" id="sec-tools">
+        <div class="section-header">
+          <div class="section-title-group">
+            <span class="section-num">iv</span>
+            <div>
+              <h2 class="section-title">Tools &amp; MCP Servers</h2>
+              <p class="section-desc">External capabilities available to chats in this project.</p>
+            </div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="tool-grid">
+            <div class="tool-card checked">
+              <div class="tool-check"><svg class="ico" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M5 12l5 5L20 7"/></svg></div>
+              <div class="tool-info">
+                <p class="tool-name">mcp-memory</p>
+                <p class="tool-desc">Persistent memory across chats in this project</p>
+              </div>
+            </div>
+            <div class="tool-card checked">
+              <div class="tool-check"><svg class="ico" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M5 12l5 5L20 7"/></svg></div>
+              <div class="tool-info">
+                <p class="tool-name">mcp-sequential-thinking</p>
+                <p class="tool-desc">Structured multi-step reasoning</p>
+              </div>
+            </div>
+            <div class="tool-card">
+              <div class="tool-check"></div>
+              <div class="tool-info">
+                <p class="tool-name">canva</p>
+                <p class="tool-desc">Generate and edit branded designs</p>
+              </div>
+            </div>
+            <div class="tool-card checked">
+              <div class="tool-check"><svg class="ico" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M5 12l5 5L20 7"/></svg></div>
+              <div class="tool-info">
+                <p class="tool-name">tavily-search</p>
+                <p class="tool-desc">Real-time web search for sponsor diligence</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. SKILLS -->
+      <section class="section" id="sec-skills">
+        <div class="section-header">
+          <div class="section-title-group">
+            <span class="section-num">v</span>
+            <div>
+              <h2 class="section-title">Skills</h2>
+              <p class="section-desc">Custom skills attached to this project's chats.</p>
+            </div>
+          </div>
+          <button class="btn btn-sm">Manage skills</button>
+        </div>
+        <div class="section-body">
+          <div class="tool-grid">
+            <div class="tool-card checked">
+              <div class="tool-check"><svg class="ico" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M5 12l5 5L20 7"/></svg></div>
+              <div class="tool-info">
+                <p class="tool-name">rent-roll-analyst</p>
+                <p class="tool-desc">Parses messy MOB rent rolls, returns structured analytics</p>
+              </div>
+            </div>
+            <div class="tool-card checked">
+              <div class="tool-check"><svg class="ico" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M5 12l5 5L20 7"/></svg></div>
+              <div class="tool-info">
+                <p class="tool-name">ic-memo-generator</p>
+                <p class="tool-desc">Builds investment committee memo from a project's files</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. TEMPLATES -->
+      <section class="section" id="sec-templates">
+        <div class="section-header">
+          <div class="section-title-group">
+            <span class="section-num">vi</span>
+            <div>
+              <h2 class="section-title">Branded Templates</h2>
+              <p class="section-desc">PPTX template applied to deliverables generated from this project.</p>
+            </div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="template-strip">
+            <div class="template-card selected">
+              <div class="template-thumb">PREP</div>
+              <div class="template-name">PREP IC Memo <span>· default</span></div>
+            </div>
+            <div class="template-card">
+              <div class="template-thumb t2">Vetted</div>
+              <div class="template-name">Vetted Diligence Brief</div>
+            </div>
+            <div class="template-card">
+              <div class="template-thumb t3">QR</div>
+              <div class="template-name">Quarterly Review</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. FILES -->
+      <section class="section" id="sec-files">
+        <div class="section-header">
+          <div class="section-title-group">
+            <span class="section-num">vii</span>
+            <div>
+              <h2 class="section-title">Files</h2>
+              <p class="section-desc">14 files · 38.2 MB indexed for retrieval.</p>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            Upload
+          </button>
+        </div>
+        <div class="section-body">
+          <div class="files">
+            <div class="file-row head">
+              <span></span><span>Name</span><span>Type</span><span>Uploaded</span><span></span>
+            </div>
+            <div class="file-row">
+              <div class="file-icon">PDF</div>
+              <div>
+                <div style="font-weight:500;">Highland_Park_MOB_RR_2026_Q1.pdf</div>
+                <div class="file-meta">2.4 MB · indexed</div>
+              </div>
+              <span class="file-meta">Rent Roll</span>
+              <span class="file-meta">Apr 28 · WR</span>
+              <span><button class="btn btn-sm btn-ghost">⋯</button></span>
+            </div>
+            <div class="file-row">
+              <div class="file-icon">XLS</div>
+              <div>
+                <div style="font-weight:500;">Sponsor_Diligence_Comps.xlsx</div>
+                <div class="file-meta">820 KB · indexed</div>
+              </div>
+              <span class="file-meta">Spreadsheet</span>
+              <span class="file-meta">Apr 26 · JK</span>
+              <span><button class="btn btn-sm btn-ghost">⋯</button></span>
+            </div>
+            <div class="file-row">
+              <div class="file-icon">PDF</div>
+              <div>
+                <div style="font-weight:500;">Westfield_Phase2_OM.pdf</div>
+                <div class="file-meta">8.1 MB · indexed</div>
+              </div>
+              <span class="file-meta">Offering Memo</span>
+              <span class="file-meta">Apr 22 · BK</span>
+              <span><button class="btn btn-sm btn-ghost">⋯</button></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8. DANGER -->
+      <section class="section" id="sec-danger" style="border-color:rgba(154,59,59,0.18);">
+        <div class="section-header" style="border-bottom-color:rgba(154,59,59,0.12);">
+          <div class="section-title-group">
+            <span class="section-num" style="color:var(--danger);">—</span>
+            <div>
+              <h2 class="section-title" style="color:var(--danger);">Danger Zone</h2>
+              <p class="section-desc">Permanent actions. Owner only.</p>
+            </div>
+          </div>
+        </div>
+        <div class="section-body">
+          <div style="display:flex;gap:12px;">
+            <button class="btn">Archive project</button>
+            <button class="btn btn-danger">Delete project…</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Save bar -->
+      <div class="save-bar">
+        <div class="save-bar-msg">
+          <span class="dot"></span>
+          <span>Unsaved changes in <strong style="color:var(--gold-bright);">AI Defaults</strong></span>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost" style="color:rgba(255,255,255,0.6);">Discard</button>
+          <button class="btn" style="background:var(--gold);border-color:var(--gold);color:var(--ink);">Save changes</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================== -->
+<!--  LAYOUT 2: TABS                                         -->
+<!-- ====================================================== -->
+<div class="layout-view" data-view="tabs">
+
+  <div class="annotation">
+    <strong>Tabs —</strong> left rail of named sections, content area swaps. Best when most visits only touch one section. Hides cross-section context — you can't see file count while editing the system prompt.
+  </div>
+
+  <div class="tabs-grid">
+    <nav class="tabs-rail">
+      <div class="tabs-rail-label">Setup</div>
+      <button class="tab-btn active" data-tab="access">
+        <span class="tab-num">i</span>
+        Access &amp; Sharing
+        <span class="tab-meta">5</span>
+      </button>
+      <button class="tab-btn" data-tab="general">
+        <span class="tab-num">ii</span>
+        General
+      </button>
+      <button class="tab-btn" data-tab="ai">
+        <span class="tab-num">iii</span>
+        AI Defaults
+      </button>
+      <button class="tab-btn" data-tab="tools">
+        <span class="tab-num">iv</span>
+        Tools &amp; MCP
+        <span class="tab-meta">3</span>
+      </button>
+      <button class="tab-btn" data-tab="skills">
+        <span class="tab-num">v</span>
+        Skills
+        <span class="tab-meta">2</span>
+      </button>
+      <button class="tab-btn" data-tab="templates">
+        <span class="tab-num">vi</span>
+        Templates
+      </button>
+      <button class="tab-btn" data-tab="files">
+        <span class="tab-num">vii</span>
+        Files
+        <span class="tab-meta">14</span>
+      </button>
+      <button class="tab-btn" data-tab="danger" style="margin-top:18px;color:var(--danger);">
+        <span class="tab-num" style="color:var(--danger);">—</span>
+        Danger Zone
+      </button>
+    </nav>
+
+    <div class="tabs-content">
+
+      <!-- ACCESS pane -->
+      <div class="tab-pane active" data-pane="access">
+        <div class="tab-pane-header" style="display:flex;align-items:flex-start;justify-content:space-between;">
+          <div>
+            <h2 class="tab-pane-title">Access &amp; Sharing</h2>
+            <p class="tab-pane-desc">Owners manage everything. Collaborators modify the project. Viewers can read.</p>
+          </div>
+          <button class="btn btn-primary">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            Share
+          </button>
+        </div>
+
+        <div class="member-row" style="background:var(--panel-soft);border:1px solid var(--divider-2);border-radius:10px;padding:14px 16px;margin-bottom:20px;">
+          <div class="avatar lg av-1">JK</div>
+          <div class="member-info">
+            <p class="member-name">Jeff Kwiatkowski <span style="color:var(--muted);font-weight:400;font-size:12px;margin-left:6px;">(you)</span></p>
+            <p class="member-email">jeffk@vettedbot.com</p>
+          </div>
+          <span class="role-chip role-owner">Owner</span>
+          <button class="btn btn-sm btn-ghost">Transfer…</button>
+        </div>
+
+        <div class="access-grid">
+          <div class="access-block">
+            <div class="access-block-title"><h4>Collaborators</h4><span class="count">3</span></div>
+            <div class="member-row"><div class="avatar av-2">WR</div><div class="member-info"><p class="member-name">Wesley Ross</p><p class="member-email">wross@prepfunds.net</p></div><span class="role-chip role-editor">Editor</span></div>
+            <div class="member-row"><div class="avatar av-3">JF</div><div class="member-info"><p class="member-name">Jeff Fox</p><p class="member-email">jefffox@vettedconsultant.com</p></div><span class="role-chip role-editor">Editor</span></div>
+            <div class="member-row"><div class="avatar av-6">BK</div><div class="member-info"><p class="member-name">Bill Kovach</p><p class="member-email">bill@vettedbot.com</p></div><span class="role-chip role-editor">Editor</span></div>
+            <div class="invite-input-wrap"><input class="input" placeholder="email@vettedbot.com" /><button class="btn">Invite</button></div>
+          </div>
+          <div class="access-block">
+            <div class="access-block-title"><h4>Shared with</h4><span class="count">2</span></div>
+            <div class="member-row"><div class="avatar av-4">MT</div><div class="member-info"><p class="member-name">Maya Thomas</p><p class="member-email">maya.thomas@vettedconsultant.com</p></div><span class="role-chip role-viewer">Viewer</span></div>
+            <div class="member-row"><div class="avatar av-5">DC</div><div class="member-info"><p class="member-name">David Chen</p><p class="member-email">dchen@prepfunds.net</p></div><span class="role-chip role-viewer">Viewer</span></div>
+            <div class="invite-input-wrap"><input class="input" placeholder="email@vettedbot.com" /><button class="btn">Invite</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- GENERAL pane -->
+      <div class="tab-pane" data-pane="general">
+        <div class="tab-pane-header">
+          <h2 class="tab-pane-title">General</h2>
+          <p class="tab-pane-desc">Name, description, status.</p>
+        </div>
+        <div class="field"><label class="label">Project name</label><input class="input" value="Q3 Acquisition Memos" /></div>
+        <div class="field"><label class="label">Description</label><textarea class="textarea" style="min-height:72px;">Investment committee memos for medical office building acquisitions targeted in Q3.</textarea></div>
+      </div>
+
+      <!-- AI pane -->
+      <div class="tab-pane" data-pane="ai">
+        <div class="tab-pane-header">
+          <h2 class="tab-pane-title">AI Defaults</h2>
+          <p class="tab-pane-desc">Model, temperature, and system prompt that new chats inherit.</p>
+        </div>
+        <div class="field-row">
+          <div class="field"><label class="label">Default model</label><select class="select"><option>Claude Opus 4.7 (1M context)</option></select></div>
+          <div class="field"><label class="label">Temperature</label><div class="slider-wrap"><input type="range" min="0" max="1" step="0.05" value="0.35" /><div class="slider-val">0.35</div></div></div>
+        </div>
+        <div class="field"><label class="label">System prompt</label><textarea class="textarea mono">You are an analyst preparing investment committee memos for MOB acquisitions. Cite rent roll source rows.</textarea></div>
+      </div>
+
+      <!-- TOOLS pane -->
+      <div class="tab-pane" data-pane="tools">
+        <div class="tab-pane-header">
+          <h2 class="tab-pane-title">Tools &amp; MCP Servers</h2>
+          <p class="tab-pane-desc">External capabilities available to chats in this project.</p>
+        </div>
+        <div class="tool-grid">
+          <div class="tool-card checked"><div class="tool-check"><svg class="ico" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M5 12l5 5L20 7"/></svg></div><div class="tool-info"><p class="tool-name">mcp-memory</p><p class="tool-desc">Persistent memory across chats</p></div></div>
+          <div class="tool-card checked"><div class="tool-check"><svg class="ico" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M5 12l5 5L20 7"/></svg></div><div class="tool-info"><p class="tool-name">mcp-sequential-thinking</p><p class="tool-desc">Structured multi-step reasoning</p></div></div>
+          <div class="tool-card"><div class="tool-check"></div><div class="tool-info"><p class="tool-name">canva</p><p class="tool-desc">Generate and edit branded designs</p></div></div>
+          <div class="tool-card checked"><div class="tool-check"><svg class="ico" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M5 12l5 5L20 7"/></svg></div><div class="tool-info"><p class="tool-name">tavily-search</p><p class="tool-desc">Real-time web search</p></div></div>
+        </div>
+      </div>
+
+      <!-- SKILLS pane -->
+      <div class="tab-pane" data-pane="skills">
+        <div class="tab-pane-header">
+          <h2 class="tab-pane-title">Skills</h2>
+          <p class="tab-pane-desc">Custom skills attached to this project.</p>
+        </div>
+        <div class="tool-grid">
+          <div class="tool-card checked"><div class="tool-check"><svg class="ico" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M5 12l5 5L20 7"/></svg></div><div class="tool-info"><p class="tool-name">rent-roll-analyst</p><p class="tool-desc">Parses messy MOB rent rolls</p></div></div>
+          <div class="tool-card checked"><div class="tool-check"><svg class="ico" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M5 12l5 5L20 7"/></svg></div><div class="tool-info"><p class="tool-name">ic-memo-generator</p><p class="tool-desc">Builds IC memo from project files</p></div></div>
+        </div>
+      </div>
+
+      <!-- TEMPLATES pane -->
+      <div class="tab-pane" data-pane="templates">
+        <div class="tab-pane-header">
+          <h2 class="tab-pane-title">Branded Templates</h2>
+          <p class="tab-pane-desc">PPTX template applied to deliverables.</p>
+        </div>
+        <div class="template-strip">
+          <div class="template-card selected"><div class="template-thumb">PREP</div><div class="template-name">PREP IC Memo <span>· default</span></div></div>
+          <div class="template-card"><div class="template-thumb t2">Vetted</div><div class="template-name">Vetted Diligence Brief</div></div>
+          <div class="template-card"><div class="template-thumb t3">QR</div><div class="template-name">Quarterly Review</div></div>
+        </div>
+      </div>
+
+      <!-- FILES pane -->
+      <div class="tab-pane" data-pane="files">
+        <div class="tab-pane-header" style="display:flex;align-items:flex-start;justify-content:space-between;">
+          <div><h2 class="tab-pane-title">Files</h2><p class="tab-pane-desc">14 files · 38.2 MB indexed.</p></div>
+          <button class="btn btn-primary"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Upload</button>
+        </div>
+        <div class="files">
+          <div class="file-row head"><span></span><span>Name</span><span>Type</span><span>Uploaded</span><span></span></div>
+          <div class="file-row"><div class="file-icon">PDF</div><div><div style="font-weight:500;">Highland_Park_MOB_RR_2026_Q1.pdf</div><div class="file-meta">2.4 MB · indexed</div></div><span class="file-meta">Rent Roll</span><span class="file-meta">Apr 28</span><span><button class="btn btn-sm btn-ghost">⋯</button></span></div>
+          <div class="file-row"><div class="file-icon">XLS</div><div><div style="font-weight:500;">Sponsor_Diligence_Comps.xlsx</div><div class="file-meta">820 KB · indexed</div></div><span class="file-meta">Spreadsheet</span><span class="file-meta">Apr 26</span><span><button class="btn btn-sm btn-ghost">⋯</button></span></div>
+          <div class="file-row"><div class="file-icon">PDF</div><div><div style="font-weight:500;">Westfield_Phase2_OM.pdf</div><div class="file-meta">8.1 MB · indexed</div></div><span class="file-meta">Offering Memo</span><span class="file-meta">Apr 22</span><span><button class="btn btn-sm btn-ghost">⋯</button></span></div>
+        </div>
+      </div>
+
+      <!-- DANGER pane -->
+      <div class="tab-pane" data-pane="danger">
+        <div class="tab-pane-header">
+          <h2 class="tab-pane-title" style="color:var(--danger);">Danger Zone</h2>
+          <p class="tab-pane-desc">Permanent actions. Owner only.</p>
+        </div>
+        <div style="display:flex;gap:12px;">
+          <button class="btn">Archive project</button>
+          <button class="btn btn-danger">Delete project…</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================== -->
+<!--  LAYOUT 3: ACCORDION                                    -->
+<!-- ====================================================== -->
+<div class="layout-view" data-view="accordion">
+
+  <div class="annotation">
+    <strong>Accordion —</strong> hybrid: every section is on one page but collapsed. Most-edited sections start open. Each header carries a one-line summary so you don't have to expand to see state.
+  </div>
+
+  <div class="accordion">
+
+    <!-- ACCESS - open -->
+    <div class="acc-item open">
+      <div class="acc-head">
+        <span class="acc-num">i</span>
+        <div class="acc-title-group">
+          <h3 class="acc-title">Access &amp; Sharing</h3>
+          <p class="acc-summary">3 collaborators · 2 viewers · you own this project</p>
+        </div>
+        <div class="acc-aside">
+          <div class="avatar-stack">
+            <div class="avatar sm av-1">JK</div>
+            <div class="avatar sm av-2">WR</div>
+            <div class="avatar sm av-3">JF</div>
+            <div class="avatar sm av-6">BK</div>
+            <div class="avatar sm" style="background:var(--gold-tint);color:var(--ink);">+2</div>
+          </div>
+          <span class="acc-chev">›</span>
+        </div>
+      </div>
+      <div class="acc-body">
+        <div class="member-row" style="background:var(--panel-soft);border:1px solid var(--divider-2);border-radius:10px;padding:14px 16px;margin-bottom:18px;">
+          <div class="avatar lg av-1">JK</div>
+          <div class="member-info"><p class="member-name">Jeff Kwiatkowski <span style="color:var(--muted);font-weight:400;font-size:12px;margin-left:6px;">(you)</span></p><p class="member-email">jeffk@vettedbot.com</p></div>
+          <span class="role-chip role-owner">Owner</span>
+          <button class="btn btn-sm btn-ghost">Transfer…</button>
+        </div>
+        <div class="access-grid">
+          <div class="access-block">
+            <div class="access-block-title"><h4>Collaborators</h4><span class="count">3</span></div>
+            <div class="member-row"><div class="avatar av-2">WR</div><div class="member-info"><p class="member-name">Wesley Ross</p><p class="member-email">wross@prepfunds.net</p></div><span class="role-chip role-editor">Editor</span></div>
+            <div class="member-row"><div class="avatar av-3">JF</div><div class="member-info"><p class="member-name">Jeff Fox</p><p class="member-email">jefffox@vettedconsultant.com</p></div><span class="role-chip role-editor">Editor</span></div>
+            <div class="member-row"><div class="avatar av-6">BK</div><div class="member-info"><p class="member-name">Bill Kovach</p><p class="member-email">bill@vettedbot.com</p></div><span class="role-chip role-editor">Editor</span></div>
+            <div class="invite-input-wrap"><input class="input" placeholder="email@vettedbot.com" /><button class="btn">Invite</button></div>
+          </div>
+          <div class="access-block">
+            <div class="access-block-title"><h4>Shared with</h4><span class="count">2</span></div>
+            <div class="member-row"><div class="avatar av-4">MT</div><div class="member-info"><p class="member-name">Maya Thomas</p><p class="member-email">maya.thomas@vettedconsultant.com</p></div><span class="role-chip role-viewer">Viewer</span></div>
+            <div class="member-row"><div class="avatar av-5">DC</div><div class="member-info"><p class="member-name">David Chen</p><p class="member-email">dchen@prepfunds.net</p></div><span class="role-chip role-viewer">Viewer</span></div>
+            <div class="invite-input-wrap"><input class="input" placeholder="email@vettedbot.com" /><button class="btn">Invite</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GENERAL - open -->
+    <div class="acc-item open">
+      <div class="acc-head">
+        <span class="acc-num">ii</span>
+        <div class="acc-title-group">
+          <h3 class="acc-title">General</h3>
+          <p class="acc-summary">Q3 Acquisition Memos · Active</p>
+        </div>
+        <span class="acc-chev">›</span>
+      </div>
+      <div class="acc-body">
+        <div class="field"><label class="label">Project name</label><input class="input" value="Q3 Acquisition Memos" /></div>
+        <div class="field"><label class="label">Description</label><textarea class="textarea" style="min-height:72px;">Investment committee memos for medical office building acquisitions targeted in Q3.</textarea></div>
+      </div>
+    </div>
+
+    <!-- AI - closed -->
+    <div class="acc-item">
+      <div class="acc-head">
+        <span class="acc-num">iii</span>
+        <div class="acc-title-group">
+          <h3 class="acc-title">AI Defaults</h3>
+          <p class="acc-summary">Claude Opus 4.7 · temp 0.35 · custom system prompt</p>
+        </div>
+        <span class="acc-chev">›</span>
+      </div>
+      <div class="acc-body">
+        <div class="field-row">
+          <div class="field"><label class="label">Default model</label><select class="select"><option>Claude Opus 4.7</option></select></div>
+          <div class="field"><label class="label">Temperature</label><div class="slider-wrap"><input type="range" value="0.35" /><div class="slider-val">0.35</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOOLS - closed -->
+    <div class="acc-item">
+      <div class="acc-head">
+        <span class="acc-num">iv</span>
+        <div class="acc-title-group">
+          <h3 class="acc-title">Tools &amp; MCP Servers</h3>
+          <p class="acc-summary">3 enabled — mcp-memory, mcp-sequential-thinking, tavily-search</p>
+        </div>
+        <span class="acc-chev">›</span>
+      </div>
+      <div class="acc-body">
+        <p class="help">Click to manage tool sets and MCP servers.</p>
+      </div>
+    </div>
+
+    <!-- SKILLS - closed -->
+    <div class="acc-item">
+      <div class="acc-head">
+        <span class="acc-num">v</span>
+        <div class="acc-title-group">
+          <h3 class="acc-title">Skills</h3>
+          <p class="acc-summary">2 attached — rent-roll-analyst, ic-memo-generator</p>
+        </div>
+        <span class="acc-chev">›</span>
+      </div>
+      <div class="acc-body"></div>
+    </div>
+
+    <!-- TEMPLATES - closed -->
+    <div class="acc-item">
+      <div class="acc-head">
+        <span class="acc-num">vi</span>
+        <div class="acc-title-group">
+          <h3 class="acc-title">Branded Templates</h3>
+          <p class="acc-summary">PREP IC Memo (default)</p>
+        </div>
+        <span class="acc-chev">›</span>
+      </div>
+      <div class="acc-body"></div>
+    </div>
+
+    <!-- FILES - closed -->
+    <div class="acc-item">
+      <div class="acc-head">
+        <span class="acc-num">vii</span>
+        <div class="acc-title-group">
+          <h3 class="acc-title">Files</h3>
+          <p class="acc-summary">14 files · 38.2 MB indexed</p>
+        </div>
+        <span class="acc-chev">›</span>
+      </div>
+      <div class="acc-body"></div>
+    </div>
+
+    <!-- DANGER - closed -->
+    <div class="acc-item" style="border-color:rgba(154,59,59,0.18);">
+      <div class="acc-head">
+        <span class="acc-num" style="color:var(--danger);">—</span>
+        <div class="acc-title-group">
+          <h3 class="acc-title" style="color:var(--danger);">Danger Zone</h3>
+          <p class="acc-summary">Archive or delete the project. Owner only.</p>
+        </div>
+        <span class="acc-chev">›</span>
+      </div>
+      <div class="acc-body"></div>
+    </div>
+
+  </div>
+</div>
+
+</div><!-- /canvas -->
+
+<script>
+  // Layout switcher
+  const buttons = document.querySelectorAll('.layout-toggle button');
+  const views = document.querySelectorAll('.layout-view');
+  buttons.forEach(b => {
+    b.addEventListener('click', () => {
+      const target = b.dataset.layout;
+      buttons.forEach(x => x.classList.toggle('active', x === b));
+      views.forEach(v => v.classList.toggle('active', v.dataset.view === target));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+
+  // Tabs (left rail)
+  document.querySelectorAll('.tab-btn').forEach(t => {
+    t.addEventListener('click', () => {
+      const target = t.dataset.tab;
+      document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('active', x === t));
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === target));
+    });
+  });
+
+  // Accordion
+  document.querySelectorAll('.acc-head').forEach(h => {
+    h.addEventListener('click', () => {
+      h.parentElement.classList.toggle('open');
+    });
+  });
+
+  // Tool card check toggle
+  document.querySelectorAll('.tool-card').forEach(c => {
+    c.addEventListener('click', () => c.classList.toggle('checked'));
+  });
+
+  // Long-page TOC active highlight on scroll
+  const sections = document.querySelectorAll('.long-stack .section');
+  const tocLinks = document.querySelectorAll('.toc-list li');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        const id = e.target.id;
+        tocLinks.forEach(li => {
+          const a = li.querySelector('a');
+          li.classList.toggle('active', a && a.getAttribute('href') === '#' + id);
+        });
+      }
+    });
+  }, { rootMargin: '-40% 0px -50% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

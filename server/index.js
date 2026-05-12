@@ -1965,6 +1965,24 @@ app.post('/api/projects/:id/transfer-ownership', requireAuth, requireProjectOwne
   res.json({ success: true, owner_id: new_owner_user_id });
 });
 
+// Self-leave for non-owners. Owner cannot leave (must transfer first).
+app.post('/api/projects/:id/leave', requireAuth, (req, res) => {
+  const { project, level } = getProjectAccess(req.params.id, req.user);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (level === 'owner' || level === 'admin') return res.status(400).json({ error: 'Owner cannot leave; transfer ownership first' });
+  if (level === 'none') return res.status(400).json({ error: 'You are not a member of this project' });
+
+  dbRun(db, 'DELETE FROM project_members WHERE project_id = ? AND user_id = ?', [req.params.id, req.user.id]);
+  auditLog({
+    userId: req.user.id,
+    action: 'project_left',
+    resourceType: 'project',
+    resourceId: req.params.id,
+    details: null
+  });
+  res.json({ success: true });
+});
+
 app.delete('/api/projects/:id/members/:userId', requireAuth, (req, res) => {
   const project = dbGet(db, 'SELECT * FROM projects WHERE id = ? AND owner_id = ?', [req.params.id, req.user.id]);
 

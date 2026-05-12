@@ -18,13 +18,20 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description || '');
   const [systemPrompt, setSystemPrompt] = useState(project.system_prompt || '');
-  const model = project.default_model || 'claude-opus-4-7';
-  const temperature = project.temperature ?? 0.7;
+  const [model, setModel] = useState(project.default_model || '');
+  const [temperature, setTemperature] = useState(project.temperature ?? 0.7);
+  const [models, setModels] = useState<{ id: string; name: string; isDefault: boolean }[]>([]);
   const [saving, setSaving] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const isOwner = access?.your_level === 'owner' || access?.your_level === 'admin';
   const isWriter = isOwner || access?.your_level === 'editor';
+
+  useEffect(() => {
+    api.models.list().then((data: any[]) => {
+      setModels(data.map(m => ({ id: m.id, name: m.display_name, isDefault: !!m.is_default })));
+    }).catch(() => {});
+  }, []);
 
   async function handleAdvancedSave(data: { name: string; description: string; system_prompt: string; tool_sets: string[]; mcp_servers: string[]; file_ids: string[]; pptx_template_id: string | null }) {
     setSaving(true);
@@ -61,6 +68,7 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
     try {
       const updated = await api.projects.update(project.id, {
         name, description, system_prompt: systemPrompt,
+        default_model: model, temperature,
       });
       onUpdated(updated);
       addToast({ type: 'success', title: 'Project saved' });
@@ -131,9 +139,45 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
       <AccordionSection
         num="iii"
         title="AI Defaults"
-        summary={`${model} · temp ${temperature.toFixed(2)}`}
+        summary={(() => {
+          const friendly = models.find(m => m.name === model || m.id === model)?.name || model || 'system default';
+          return `${friendly} · temp ${temperature.toFixed(2)}`;
+        })()}
       >
         <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-vetted-primary mb-1">Default model</label>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={!isWriter}
+                className="w-full border border-vetted-border rounded-lg px-3 py-2 text-sm bg-white disabled:opacity-50"
+              >
+                <option value="">— Use system default —</option>
+                {models.map(m => (
+                  <option key={m.id} value={m.name}>{m.name}{m.isDefault ? ' (system default)' : ''}</option>
+                ))}
+              </select>
+              <p className="text-xs text-vetted-text-muted mt-1">Model new chats in this project use unless overridden.</p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-vetted-primary mb-1">
+                Temperature <span className="font-mono text-vetted-text-muted">{temperature.toFixed(2)}</span>
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={temperature}
+                onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                disabled={!isWriter}
+                className="w-full accent-vetted-accent disabled:opacity-50"
+              />
+              <p className="text-xs text-vetted-text-muted mt-1">Lower = more deterministic. Higher = more creative.</p>
+            </div>
+          </div>
           <div>
             <label className="block text-xs font-semibold text-vetted-primary mb-1">System prompt</label>
             <textarea
@@ -160,7 +204,22 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
       <AccordionSection
         num="iv"
         title="Tools, Skills, Templates, Files"
-        summary={`${projectFiles.length} ${projectFiles.length === 1 ? 'file' : 'files'} attached`}
+        summary={(() => {
+          const fileCount = projectFiles.length;
+          let mcpCount = 0;
+          try {
+            const raw = project.mcp_servers;
+            const parsed = Array.isArray(raw) ? raw : (typeof raw === 'string' && raw ? JSON.parse(raw) : []);
+            mcpCount = Array.isArray(parsed) ? parsed.length : 0;
+          } catch { mcpCount = 0; }
+          const hasTemplate = !!(project as any).pptx_template_id;
+          const parts = [
+            `${fileCount} ${fileCount === 1 ? 'file' : 'files'}`,
+            `${mcpCount} ${mcpCount === 1 ? 'tool' : 'tools'}`,
+            hasTemplate ? 'branded template' : 'no template',
+          ];
+          return parts.join(' · ');
+        })()}
       >
         <div className="space-y-3">
           <p className="text-sm text-vetted-text-muted">

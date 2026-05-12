@@ -1983,14 +1983,36 @@ app.post('/api/projects/:id/leave', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
-app.delete('/api/projects/:id/members/:userId', requireAuth, (req, res) => {
-  const project = dbGet(db, 'SELECT * FROM projects WHERE id = ? AND owner_id = ?', [req.params.id, req.user.id]);
-
-  if (!project) {
-    return res.status(404).json({ error: 'Project not found or not authorized' });
-  }
+app.delete('/api/projects/:id/members/:userId', requireAuth, requireProjectOwner, (req, res) => {
+  const member = dbGet(db, 'SELECT id, permission FROM project_members WHERE project_id = ? AND user_id = ?', [req.params.id, req.params.userId]);
+  if (!member) return res.status(404).json({ error: 'Member not found' });
 
   dbRun(db, 'DELETE FROM project_members WHERE project_id = ? AND user_id = ?', [req.params.id, req.params.userId]);
+
+  // Notify the removed user (if they want project_updates)
+  const prefs = dbGet(db, 'SELECT notify_project_updates FROM user_preferences WHERE user_id = ?', [req.params.userId]);
+  const wantsNotif = !prefs || prefs.notify_project_updates !== 0;
+  if (wantsNotif) {
+    dbRun(db, `
+      INSERT INTO notifications (id, user_id, type, title, description, link, is_read, created_at)
+      VALUES (?, ?, ?, ?, ?, NULL, 0, ?)
+    `, [
+      uuidv4(),
+      req.params.userId,
+      'project_unshare',
+      `${req.user.display_name} removed your access to "${req.project.name}"`,
+      null,
+      new Date().toISOString()
+    ]);
+  }
+
+  auditLog({
+    userId: req.user.id,
+    action: 'project_member_removed',
+    resourceType: 'project',
+    resourceId: req.params.id,
+    details: JSON.stringify({ target_user_id: req.params.userId, was_permission: member.permission })
+  });
 
   res.json({ success: true });
 });

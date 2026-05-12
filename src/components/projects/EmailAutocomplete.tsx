@@ -16,8 +16,29 @@ export default function EmailAutocomplete({ placeholder, excludeUserIds = [], on
   const [results, setResults] = useState<UserSearchResult[]>([]);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const debounceRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function updatePosition() {
+    const el = inputRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setDropdownPos({ top: r.bottom + 4, left: r.left, width: r.width });
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    updatePosition();
+    const handler = () => updatePosition();
+    window.addEventListener('scroll', handler, true);
+    window.addEventListener('resize', handler);
+    return () => {
+      window.removeEventListener('scroll', handler, true);
+      window.removeEventListener('resize', handler);
+    };
+  }, [open, results.length]);
 
   async function fetchUsers(query: string) {
     try {
@@ -59,6 +80,7 @@ export default function EmailAutocomplete({ placeholder, excludeUserIds = [], on
       <div className="relative">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-vetted-text-muted" />
         <input
+          ref={inputRef}
           type="text"
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -69,13 +91,17 @@ export default function EmailAutocomplete({ placeholder, excludeUserIds = [], on
           className="w-full pl-9 pr-3 py-2 text-sm border border-vetted-border rounded-lg bg-white focus:outline-none focus:border-vetted-accent disabled:opacity-50"
         />
       </div>
-      {open && results.length > 0 && (
-        <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-vetted-border rounded-lg shadow-lg z-30 max-h-64 overflow-y-auto">
+      {open && results.length > 0 && dropdownPos && (
+        <div
+          style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width }}
+          className="bg-white border border-vetted-border rounded-lg shadow-lg z-50 max-h-72 overflow-y-auto"
+        >
           {results.map((u, i) => (
             <button
               key={u.id}
               type="button"
               onMouseEnter={() => setHighlight(i)}
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => { onSelect(u); setQ(''); setOpen(false); }}
               className={`w-full text-left px-3 py-2 flex items-center gap-2.5 ${i === highlight ? 'bg-vetted-surface' : 'hover:bg-vetted-surface'}`}
             >

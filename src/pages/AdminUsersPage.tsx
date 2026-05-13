@@ -466,9 +466,9 @@ export default function AdminUsersPage() {
               <button
                 onClick={modal === 'add' ? handleAdd : modal === 'edit' ? handleEdit : handleSetPassword}
                 disabled={submitting}
-                className="btn-primary"
+                className="bg-vetted-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-vetted-accent hover:text-vetted-primary disabled:opacity-50"
               >
-                {submitting ? 'Saving...' : modal === 'add' ? 'Create User' : modal === 'password' ? 'Set Password' : 'Save Changes'}
+                {submitting ? 'Saving…' : modal === 'add' ? 'Create User' : modal === 'password' ? 'Set Password' : 'Save Changes'}
               </button>
             </div>
           </div>

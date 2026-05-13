@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Upload, ChevronDown, ChevronUp, FileText, Check, Sparkles } from 'lucide-react';
+import { X, Upload, ChevronDown, ChevronUp, FileText, Check, Sparkles, Crown } from 'lucide-react';
 import * as api from '../../api';
-import type { LibraryFile, ProjectSkill } from '../../types';
+import { useStore } from '../../store';
+import type { LibraryFile, ProjectSkill, UserSearchResult } from '../../types';
 import TemplatePickerModal from '../templates/TemplatePickerModal';
+import AccordionSection from './AccordionSection';
+import EmailAutocomplete from './EmailAutocomplete';
 
 export interface ProjectFormData {
   name: string;
@@ -131,6 +134,22 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
   const [pptxTemplateStatus, setPptxTemplateStatus] = useState<string>('active');
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
+  // Pending invites — only used for New Project (when projectId doesn't exist yet).
+  // Each entry: { email, displayName?, permission }. Sent after the project is created.
+  const currentUser = useStore((s) => s.user);
+  const [pendingInvites, setPendingInvites] = useState<{ email: string; displayName?: string; permission: 'editor' | 'viewer' }[]>([]);
+  const pendingCollaborators = pendingInvites.filter((p) => p.permission === 'editor');
+  const pendingViewers = pendingInvites.filter((p) => p.permission === 'viewer');
+  const queueInvite = (email: string, displayName: string | undefined, permission: 'editor' | 'viewer') => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) return;
+    if (currentUser && trimmed === currentUser.email.toLowerCase()) return;
+    if (pendingInvites.some((p) => p.email === trimmed)) return;
+    setPendingInvites((prev) => [...prev, { email: trimmed, displayName, permission }]);
+  };
+  const removeInvite = (email: string) =>
+    setPendingInvites((prev) => prev.filter((p) => p.email !== email));
+
   // Hydrate the chip with the template's name when initialData provides an id.
   useEffect(() => {
     if (!pptxTemplateId) { setPptxTemplateName(''); return; }
@@ -181,6 +200,12 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
         await api.skills.updateProjectSkills(resolvedId, projectSkills.map((s) => ({ skill_id: s.skill_id, enabled: s.enabled })));
       } catch {}
     }
+    // Send any queued invites (New Project flow — project didn't exist when user added them).
+    if (resolvedId && pendingInvites.length > 0) {
+      await Promise.all(
+        pendingInvites.map((p) => api.projects.invite(resolvedId, p.email, p.permission).catch(() => {})),
+      );
+    }
   };
 
   const attachedFiles = allFiles.filter((f) => selectedFileIds.includes(f.id));
@@ -198,80 +223,198 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
           </div>
 
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
-            <div className="px-6 py-5 space-y-5">
+            <div className={`px-6 py-5 ${compact ? 'space-y-5' : 'space-y-3'}`}>
 
               {!compact && (
                 <>
-                  {/* Name */}
-                  <div>
-                    <label className="block text-sm font-medium text-vetted-primary mb-1.5">
-                      Project Name <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Q2 Product Roadmap"
-                      required
-                      className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent"
-                    />
-                  </div>
-
-                  {/* Description */}
-                  <div>
-                    <label className="block text-sm font-medium text-vetted-primary mb-1.5">Description</label>
-                    <textarea
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder="What is this project about?"
-                      rows={2}
-                      className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent resize-none"
-                    />
-                  </div>
-
-                  {/* Default Model */}
-                  <div>
-                    <label className="block text-sm font-medium text-vetted-primary mb-1.5">Default Model</label>
-                    <select
-                      value={selectedModel}
-                      onChange={(e) => setSelectedModel(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent"
-                    >
-                      {models.map((m) => (
-                        <option key={m.id} value={m.name}>
-                          {m.name}{m.isDefault ? ' (system default)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* System Instructions — expandable */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <div>
-                        <label className="text-sm font-medium text-vetted-primary">System Instructions</label>
-                        <p className="text-xs text-vetted-text-muted mt-0.5">Define a persona or set behavior for the AI.</p>
+                  <AccordionSection
+                    num="i"
+                    title="Access & Sharing"
+                    summary={
+                      pendingInvites.length === 0
+                        ? 'Just you for now — invite collaborators below'
+                        : `${pendingCollaborators.length} ${pendingCollaborators.length === 1 ? 'collaborator' : 'collaborators'} · ${pendingViewers.length} ${pendingViewers.length === 1 ? 'viewer' : 'viewers'} queued`
+                    }
+                    defaultOpen
+                  >
+                    <div>
+                      {/* Owner card — current user */}
+                      <div className="flex items-center gap-3 bg-vetted-surface border border-vetted-border/60 rounded-xl px-4 py-3 mb-5">
+                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-vetted-primary to-vetted-text-muted text-white flex items-center justify-center flex-shrink-0 font-semibold text-sm">
+                          {(currentUser?.display_name || currentUser?.email || '?').split(' ').map((s) => s[0]).join('').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-vetted-primary">
+                            {currentUser?.display_name || currentUser?.email || 'You'}
+                            <span className="text-xs text-vetted-text-muted font-normal ml-2">(you)</span>
+                          </p>
+                          <p className="text-xs text-vetted-text-muted">{currentUser?.email}</p>
+                        </div>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-vetted-primary text-vetted-accent">
+                          <Crown size={10} /> owner
+                        </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setSysExpanded((v) => !v)}
-                        className="flex items-center gap-1 text-xs text-vetted-text-secondary hover:text-vetted-primary transition-colors"
-                      >
-                        {sysExpanded ? <><ChevronUp size={13} /> Collapse</> : <><ChevronDown size={13} /> Expand</>}
-                      </button>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        {/* Collaborators */}
+                        <div className="bg-vetted-surface border border-vetted-border/60 rounded-xl p-4">
+                          <div className="flex items-baseline justify-between mb-2">
+                            <h4 className="text-xs font-semibold uppercase tracking-wider text-vetted-primary">Collaborators</h4>
+                            <span className="text-xs text-vetted-text-muted">{pendingCollaborators.length}</span>
+                          </div>
+                          {pendingCollaborators.length === 0 ? (
+                            <p className="text-xs text-vetted-text-muted py-3">No collaborators yet.</p>
+                          ) : (
+                            pendingCollaborators.map((p) => (
+                              <div key={p.email} className="flex items-center gap-2 py-2 border-b border-vetted-border/50 last:border-b-0">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-vetted-primary truncate">{p.displayName || p.email}</p>
+                                  {p.displayName && <p className="text-xs text-vetted-text-muted truncate">{p.email}</p>}
+                                </div>
+                                <button type="button" onClick={() => removeInvite(p.email)} className="text-vetted-text-muted hover:text-red-600 px-1">
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ))
+                          )}
+                          <div className="mt-3">
+                            <EmailAutocomplete
+                              placeholder="email or name"
+                              onSelect={(u: UserSearchResult) => queueInvite(u.email, u.display_name, 'editor')}
+                              onSubmit={(email) => queueInvite(email, undefined, 'editor')}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Shared with */}
+                        <div className="bg-vetted-surface border border-vetted-border/60 rounded-xl p-4">
+                          <div className="flex items-baseline justify-between mb-2">
+                            <h4 className="text-xs font-semibold uppercase tracking-wider text-vetted-primary">Shared with</h4>
+                            <span className="text-xs text-vetted-text-muted">{pendingViewers.length}</span>
+                          </div>
+                          {pendingViewers.length === 0 ? (
+                            <p className="text-xs text-vetted-text-muted py-3">Not shared with anyone yet.</p>
+                          ) : (
+                            pendingViewers.map((p) => (
+                              <div key={p.email} className="flex items-center gap-2 py-2 border-b border-vetted-border/50 last:border-b-0">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-vetted-primary truncate">{p.displayName || p.email}</p>
+                                  {p.displayName && <p className="text-xs text-vetted-text-muted truncate">{p.email}</p>}
+                                </div>
+                                <button type="button" onClick={() => removeInvite(p.email)} className="text-vetted-text-muted hover:text-red-600 px-1">
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ))
+                          )}
+                          <div className="mt-3">
+                            <EmailAutocomplete
+                              placeholder="email or name"
+                              onSelect={(u: UserSearchResult) => queueInvite(u.email, u.display_name, 'viewer')}
+                              onSubmit={(email) => queueInvite(email, undefined, 'viewer')}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-vetted-text-muted mt-3">
+                        Invites are sent when you save the project.
+                      </p>
                     </div>
-                    <textarea
-                      value={systemPrompt}
-                      onChange={(e) => setSystemPrompt(e.target.value)}
-                      placeholder="You are a product strategist helping a team plan and prioritize features..."
-                      rows={sysExpanded ? 12 : 3}
-                      className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent resize-none font-mono transition-all"
-                    />
-                  </div>
+                  </AccordionSection>
+
+                  <AccordionSection
+                    num="ii"
+                    title="General"
+                    summary={name ? `${name}${description ? ` · ${description.slice(0, 60)}` : ''}` : 'Name & description'}
+                    defaultOpen
+                  >
+                    <div className="space-y-4">
+                      {/* Name */}
+                      <div>
+                        <label className="block text-sm font-medium text-vetted-primary mb-1.5">
+                          Project Name <span className="text-red-400">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          placeholder="e.g. Q2 Product Roadmap"
+                          required
+                          className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent"
+                        />
+                      </div>
+
+                      {/* Description */}
+                      <div>
+                        <label className="block text-sm font-medium text-vetted-primary mb-1.5">Description</label>
+                        <textarea
+                          value={description}
+                          onChange={(e) => setDescription(e.target.value)}
+                          placeholder="What is this project about?"
+                          rows={2}
+                          className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent resize-none"
+                        />
+                      </div>
+                    </div>
+                  </AccordionSection>
+
+                  <AccordionSection
+                    num="iii"
+                    title="AI Defaults"
+                    summary={selectedModel || 'system default'}
+                    defaultOpen
+                  >
+                    <div className="space-y-4">
+                      {/* Default Model */}
+                      <div>
+                        <label className="block text-sm font-medium text-vetted-primary mb-1.5">Default Model</label>
+                        <select
+                          value={selectedModel}
+                          onChange={(e) => setSelectedModel(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent"
+                        >
+                          {models.map((m) => (
+                            <option key={m.id} value={m.name}>
+                              {m.name}{m.isDefault ? ' (system default)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* System Instructions — expandable */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <div>
+                            <label className="text-sm font-medium text-vetted-primary">System Instructions</label>
+                            <p className="text-xs text-vetted-text-muted mt-0.5">Define a persona or set behavior for the AI.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSysExpanded((v) => !v)}
+                            className="flex items-center gap-1 text-xs text-vetted-text-secondary hover:text-vetted-primary transition-colors"
+                          >
+                            {sysExpanded ? <><ChevronUp size={13} /> Collapse</> : <><ChevronDown size={13} /> Expand</>}
+                          </button>
+                        </div>
+                        <textarea
+                          value={systemPrompt}
+                          onChange={(e) => setSystemPrompt(e.target.value)}
+                          placeholder="You are a product strategist helping a team plan and prioritize features..."
+                          rows={sysExpanded ? 12 : 3}
+                          className="w-full px-3 py-2 text-sm border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent resize-none font-mono transition-all"
+                        />
+                      </div>
+                    </div>
+                  </AccordionSection>
                 </>
               )}
 
-              {/* Files from Library */}
+              {/* Tools / Skills / Templates / Files — accordion in non-compact, flat in compact */}
+              {(() => {
+                const body = (
+                  <div className="space-y-5">
+                    {/* Files from Library */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <div>
@@ -398,6 +541,20 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
                   </div>
                 </div>
               )}
+                  </div>
+                );
+                if (compact) return body;
+                return (
+                  <AccordionSection
+                    num="iv"
+                    title="Tools, Skills, Templates, Files"
+                    summary={`${selectedFileIds.length} ${selectedFileIds.length === 1 ? 'file' : 'files'} · ${enabledMcps.length} ${enabledMcps.length === 1 ? 'tool' : 'tools'}${pptxTemplateId ? ' · branded template' : ''}`}
+                    defaultOpen
+                  >
+                    {body}
+                  </AccordionSection>
+                );
+              })()}
             </div>
 
             {/* Footer */}
@@ -409,7 +566,11 @@ export default function ProjectForm({ initialData, onSave, onCancel, onDelete, t
               ) : <div />}
               <div className="flex gap-2">
                 <button type="button" onClick={onCancel} className="btn-secondary text-sm py-1.5 px-4">Cancel</button>
-                <button type="submit" disabled={saving || !name.trim()} className="btn-primary text-sm py-1.5 px-4">
+                <button
+                  type="submit"
+                  disabled={saving || !name.trim()}
+                  className="bg-vetted-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-vetted-accent hover:text-vetted-primary disabled:opacity-50"
+                >
                   {saving ? 'Saving…' : (compact ? 'Save' : 'Save Project')}
                 </button>
               </div>

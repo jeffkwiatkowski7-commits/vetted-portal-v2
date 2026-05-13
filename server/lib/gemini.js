@@ -89,6 +89,7 @@ async function generate(contents, genConfig = {}, tools = [], modelOverride = nu
         const msg = err.message || '';
         const isRateLimited = msg.includes('429') || msg.includes('quota') || msg.includes('rate limit') || msg.includes('RESOURCE_EXHAUSTED');
         const isModelNotFound = msg.includes('404') || msg.includes('not found') || msg.includes('NOT_FOUND');
+        const isInvalidArgument = msg.includes('INVALID_ARGUMENT') || msg.includes('"code":400');
 
         // Model doesn't exist in this location — skip directly to next fallback
         if (isModelNotFound && modelIdx < modelsToTry.length - 1) {
@@ -107,6 +108,41 @@ async function generate(contents, genConfig = {}, tools = [], modelOverride = nu
           console.log(`[gemini] ${model} exhausted retries, falling back to ${modelsToTry[modelIdx + 1]}`);
           break; // break inner retry loop, try next model
         }
+
+        // One-shot retry on INVALID_ARGUMENT for preview models — these endpoints
+        // intermittently reject otherwise-valid requests. Single retry only, then
+        // bubble up so real schema bugs aren't masked.
+        if (isInvalidArgument && model.includes('-preview') && attempt === 0) {
+          console.log(`[gemini] ${model} returned INVALID_ARGUMENT, retrying once (preview model flakiness)...`);
+          await new Promise(r => setTimeout(r, 800));
+          continue;
+        }
+
+        // Diagnostic context for non-retryable errors. Vertex INVALID_ARGUMENT
+        // responses usually carry a `details[]` array that pinpoints the
+        // offending field, but the SDK only surfaces the top-level message.
+        // Capture whatever we can find so future occurrences are debuggable.
+        let parsedDetails = null;
+        try { parsedDetails = JSON.parse(msg)?.error?.details ?? null; } catch { /* not JSON */ }
+        const textParts = contents.flatMap(c => c.parts || []).filter(p => typeof p.text === 'string');
+        const inlineParts = contents.flatMap(c => c.parts || []).filter(p => p.inlineData);
+        const totalTextChars = textParts.reduce((n, p) => n + p.text.length, 0);
+        console.error('[gemini] generate failed:', {
+          model,
+          attempt,
+          message: msg.slice(0, 500),
+          cause: err.cause?.message,
+          details: err.details || err.response?.data?.error?.details || parsedDetails,
+          status: err.status || err.response?.status,
+          request: {
+            turns: contents.length,
+            textParts: textParts.length,
+            totalTextChars,
+            inlineParts: inlineParts.length,
+            toolCount: tools.length,
+          },
+        });
+
         throw err;
       }
     }

@@ -394,13 +394,15 @@ export default function TeamEditPage() {
             placeholder="One-line description"
             className="w-full px-3 py-2 border border-vetted-border rounded-lg text-sm mb-3"
           />
-          <button
-            onClick={handleSaveIdentity}
-            disabled={saving}
-            className="px-4 py-2 bg-vetted-primary text-white rounded-lg text-sm hover:bg-black disabled:opacity-50"
-          >
-            {isNew ? 'Create team' : 'Save'}
-          </button>
+          <div className="flex justify-end">
+            <button
+              onClick={handleSaveIdentity}
+              disabled={saving}
+              className="bg-vetted-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-vetted-accent hover:text-vetted-primary disabled:opacity-50"
+            >
+              {isNew ? 'Create team' : saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
         </section>
 
         {/* Members */}

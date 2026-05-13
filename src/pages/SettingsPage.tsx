@@ -1,20 +1,46 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useStore } from '../store';
 import * as api from '../api';
 import { ArrowLeft, Plus, Copy, Trash2, LogOut } from 'lucide-react';
 import type { UserPreferences, ApiKey } from '../types';
 
+const DEFAULT_PREFERENCES: UserPreferences = {
+  default_model: 'Claude',
+  default_temperature: 0.7,
+  show_reasoning: 0,
+  auto_scroll: 1,
+  compact_view: 0,
+  code_theme: 'Light',
+  notify_shared_chat: 1,
+  notify_project_updates: 1,
+  notify_system: 1,
+  notify_weekly_summary: 0,
+};
+
+type TabId = 'profile' | 'preferences' | 'notifications' | 'api' | 'security';
+const TAB_IDS: TabId[] = ['profile', 'preferences', 'notifications', 'api', 'security'];
+
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const params = useParams<{ tab?: string }>();
   const { user, addToast } = useStore();
-  const [tab, setTab] = useState<'profile' | 'preferences' | 'notifications' | 'api' | 'security'>(
-    'profile'
-  );
-  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+  const urlTab = params.tab && (TAB_IDS as string[]).includes(params.tab) ? (params.tab as TabId) : 'profile';
+  const [tab, setTab] = useState<TabId>(urlTab);
+  const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Keep tab in sync with URL when the user navigates via the address bar or back/forward.
+  useEffect(() => {
+    setTab(urlTab);
+  }, [urlTab]);
+
+  const selectTab = (id: TabId) => {
+    setTab(id);
+    navigate(id === 'profile' ? '/settings' : `/settings/${id}`, { replace: false });
+  };
 
   useEffect(() => {
     loadSettings();
@@ -22,22 +48,16 @@ export default function SettingsPage() {
 
   const loadSettings = async () => {
     try {
-      const prefs = await api.settings.preferences();
-      const keys = await api.settings.apiKeys();
-      setPreferences(prefs);
-      setApiKeys(keys);
-    } catch (err) {
-      addToast({
-        type: 'error',
-        title: 'Failed to load settings',
-      });
+      const prefs = await api.settings.preferences().catch(() => null);
+      const keys = await api.settings.apiKeys().catch(() => [] as ApiKey[]);
+      if (prefs) setPreferences(prefs);
+      setApiKeys(keys || []);
     } finally {
       setLoading(false);
     }
   };
 
   const handleSavePreferences = async () => {
-    if (!preferences) return;
     setSaving(true);
     try {
       await api.settings.updatePreferences(preferences);
@@ -121,7 +141,7 @@ export default function SettingsPage() {
           ].map(({ id, label }) => (
             <button
               key={id}
-              onClick={() => setTab(id as any)}
+              onClick={() => selectTab(id as TabId)}
               className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
                 tab === id
                   ? 'bg-white text-vetted-primary font-medium border-l-2 border-vetted-accent'
@@ -190,11 +210,15 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <button className="btn-primary">Save Profile</button>
+              <div className="flex justify-end">
+                <button className="bg-vetted-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-vetted-accent hover:text-vetted-primary disabled:opacity-50">
+                  Save Profile
+                </button>
+              </div>
             </div>
           )}
 
-          {tab === 'preferences' && preferences && (
+          {tab === 'preferences' && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-2xl font-serif text-vetted-primary mb-4">Preferences</h2>
@@ -291,13 +315,15 @@ export default function SettingsPage() {
                 </select>
               </div>
 
-              <button
-                onClick={handleSavePreferences}
-                disabled={saving}
-                className="btn-primary"
-              >
-                {saving ? 'Saving...' : 'Save Preferences'}
-              </button>
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSavePreferences}
+                  disabled={saving}
+                  className="bg-vetted-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-vetted-accent hover:text-vetted-primary disabled:opacity-50"
+                >
+                  {saving ? 'Saving…' : 'Save Preferences'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -308,20 +334,35 @@ export default function SettingsPage() {
               </div>
 
               <div className="space-y-3">
-                {[
+                {([
                   { label: 'Shared chat notifications', key: 'notify_shared_chat' },
                   { label: 'Project updates', key: 'notify_project_updates' },
                   { label: 'System notifications', key: 'notify_system' },
                   { label: 'Weekly summary', key: 'notify_weekly_summary' },
-                ].map(({ label, key }) => (
+                ] as { label: string; key: keyof UserPreferences }[]).map(({ label, key }) => (
                   <label key={key} className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" defaultChecked className="w-4 h-4" />
+                    <input
+                      type="checkbox"
+                      checked={!!preferences[key]}
+                      onChange={(e) =>
+                        setPreferences({ ...preferences, [key]: e.target.checked ? 1 : 0 })
+                      }
+                      className="w-4 h-4"
+                    />
                     <span className="text-sm text-vetted-primary">{label}</span>
                   </label>
                 ))}
               </div>
 
-              <button className="btn-primary">Save Notification Preferences</button>
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSavePreferences}
+                  disabled={saving}
+                  className="bg-vetted-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-vetted-accent hover:text-vetted-primary disabled:opacity-50"
+                >
+                  {saving ? 'Saving…' : 'Save Notification Preferences'}
+                </button>
+              </div>
             </div>
           )}
 

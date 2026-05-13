@@ -24,8 +24,12 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
   const [saving, setSaving] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const isOwner = access?.your_level === 'owner' || access?.your_level === 'admin';
-  const isWriter = isOwner || access?.your_level === 'editor';
+  // Until access is loaded, optimistically allow editing. The server still
+  // enforces permissions on save, so the worst case is a friendly toast.
+  // This avoids disabled controls on a fresh page load before /access returns.
+  const accessLoaded = access !== null;
+  const isOwner = !accessLoaded || access?.your_level === 'owner' || access?.your_level === 'admin';
+  const isWriter = !accessLoaded || isOwner || access?.your_level === 'editor';
 
   useEffect(() => {
     api.models.list().then((data: any[]) => {
@@ -124,14 +128,16 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
             />
           </div>
           {isWriter && (
-            <button
-              type="button"
-              onClick={saveGeneral}
-              disabled={saving}
-              className="bg-vetted-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-vetted-accent hover:text-vetted-primary disabled:opacity-50"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={saveGeneral}
+                disabled={saving}
+                className="bg-vetted-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-vetted-accent hover:text-vetted-primary disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
           )}
         </div>
       </AccordionSection>
@@ -189,14 +195,16 @@ export default function ProjectSettings({ project, onUpdated }: Props) {
             />
           </div>
           {isWriter && (
-            <button
-              type="button"
-              onClick={saveGeneral}
-              disabled={saving}
-              className="bg-vetted-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-vetted-accent hover:text-vetted-primary disabled:opacity-50"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={saveGeneral}
+                disabled={saving}
+                className="bg-vetted-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-vetted-accent hover:text-vetted-primary disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
           )}
         </div>
       </AccordionSection>

@@ -139,7 +139,9 @@ function App() {
             <Route path="/admin/usage" element={<AdminUsagePage />} />
             <Route path="/admin/chats" element={<AdminChatsPage />} />
             <Route path="/admin/errors" element={<AdminErrorsPage />} />
+            <Route path="/admin/logs" element={<AdminErrorsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings/:tab" element={<SettingsPage />} />
             <Route path="/leases" element={<LeaseChatPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>

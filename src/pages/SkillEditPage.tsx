@@ -296,9 +296,9 @@ export default function SkillEditPage() {
             <button
               onClick={handleSave}
               disabled={saving || !name.trim() || !instructions.trim()}
-              className="btn-primary text-sm py-1.5 px-4"
+              className="bg-vetted-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-vetted-accent hover:text-vetted-primary disabled:opacity-50"
             >
-              {saving ? 'Saving...' : isNew ? 'Create Skill' : 'Save Skill'}
+              {saving ? 'Saving…' : isNew ? 'Create Skill' : 'Save Skill'}
             </button>
           </div>
         </div>

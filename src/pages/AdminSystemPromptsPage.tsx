@@ -226,7 +226,7 @@ function PromptForm({
         <button
           onClick={onSave}
           disabled={!form.name.trim() || !form.prompt_text.trim() || saving}
-          className="btn-primary text-sm py-1.5 px-3 flex items-center gap-1.5"
+          className="bg-vetted-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-vetted-accent hover:text-vetted-primary disabled:opacity-50 flex items-center gap-1.5"
         >
           {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
           Save

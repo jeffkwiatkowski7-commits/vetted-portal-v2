@@ -8,6 +8,8 @@ import {
   MoreHorizontal,
   Search,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import {
   FaFilePdf,
@@ -31,6 +33,21 @@ export default function LibraryPage() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'date'>('date');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const toggleSort = (col: 'name' | 'size' | 'date') => {
+    if (sortBy === col) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(col);
+      setSortDir(col === 'name' ? 'asc' : 'desc');
+    }
+  };
+
+  const sortArrow = (col: 'name' | 'size' | 'date') => {
+    if (sortBy !== col) return <ArrowUpDown size={12} />;
+    return sortDir === 'asc' ? <ArrowUp size={12} className="text-vetted-accent" /> : <ArrowDown size={12} className="text-vetted-accent" />;
+  };
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadFileName, setUploadFileName] = useState('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -144,14 +161,15 @@ export default function LibraryPage() {
   );
 
   const sorted = [...filtered].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
     switch (sortBy) {
       case 'name':
-        return a.original_name.localeCompare(b.original_name);
+        return a.original_name.localeCompare(b.original_name) * dir;
       case 'size':
-        return b.file_size - a.file_size;
+        return (a.file_size - b.file_size) * dir;
       case 'date':
       default:
-        return new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime();
+        return (new Date(a.uploaded_at).getTime() - new Date(b.uploaded_at).getTime()) * dir;
     }
   });
 
@@ -289,15 +307,15 @@ export default function LibraryPage() {
                 }
                 className="w-4 h-4"
               />
-              <div className="flex-1 flex items-center gap-2 cursor-pointer" onClick={() => setSortBy('name')}>
-                Name <ArrowUpDown size={12} />
-              </div>
-              <div className="w-20 text-right cursor-pointer flex items-center justify-end gap-2" onClick={() => setSortBy('size')}>
-                Size <ArrowUpDown size={12} />
-              </div>
-              <div className="w-32 cursor-pointer flex items-center gap-2" onClick={() => setSortBy('date')}>
-                Date <ArrowUpDown size={12} />
-              </div>
+              <button type="button" className="flex-1 flex items-center gap-2 cursor-pointer text-left hover:text-vetted-primary transition-colors" onClick={() => toggleSort('name')}>
+                Name {sortArrow('name')}
+              </button>
+              <button type="button" className="w-20 text-right cursor-pointer flex items-center justify-end gap-2 hover:text-vetted-primary transition-colors" onClick={() => toggleSort('size')}>
+                Size {sortArrow('size')}
+              </button>
+              <button type="button" className="w-32 cursor-pointer flex items-center gap-2 hover:text-vetted-primary transition-colors" onClick={() => toggleSort('date')}>
+                Date {sortArrow('date')}
+              </button>
               <div className="w-10" />
             </div>
 

@@ -192,6 +192,30 @@ export async function runSchedule(db, scheduleId, { port } = {}) {
         if (done) break;
       }
     }
+
+    // The chat handler swallows AI-side errors and writes them as a normal
+    // assistant message (e.g. "The AI service could not authenticate...").
+    // Without this check those runs look healthy. Reuse the same prefix list
+    // the chat handler uses to suppress usage logging.
+    const lastAssistant = dbGet(
+      db,
+      `SELECT content FROM messages
+       WHERE chat_id = ? AND role = 'assistant'
+       ORDER BY created_at DESC LIMIT 1`,
+      [chatId],
+    );
+    if (!lastAssistant) {
+      runError = 'no assistant response was produced';
+    } else {
+      const c = lastAssistant.content || '';
+      if (
+        c.startsWith('The AI service') ||
+        c.startsWith('Sorry, I was unable') ||
+        c.startsWith('The AI model')
+      ) {
+        runError = c.length > 240 ? c.slice(0, 240) + '…' : c;
+      }
+    }
   } catch (err) {
     runError = err?.message || String(err);
   }

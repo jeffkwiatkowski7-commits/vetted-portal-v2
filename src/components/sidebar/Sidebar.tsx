@@ -16,8 +16,10 @@ import {
   Trash2,
   Pencil,
   Users,
+  FolderInput,
+  ChevronRight as ChevronRightIcon,
 } from 'lucide-react';
-import type { Chat } from '../../types';
+import type { Chat, Project } from '../../types';
 
 export default function Sidebar() {
   const navigate = useNavigate();
@@ -35,6 +37,9 @@ export default function Sidebar() {
     setPendingProjectId,
   } = useStore();
   const [contextMenu, setContextMenu] = useState<{ chatId: string; x: number; y: number } | null>(null);
+  const [menuView, setMenuView] = useState<'main' | 'move'>('main');
+  const [moveProjects, setMoveProjects] = useState<Project[] | null>(null);
+  const [moveLoading, setMoveLoading] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
 
@@ -84,7 +89,38 @@ export default function Sidebar() {
       await api.chats.delete(chatId);
       setChats(chats.filter((c) => c.id !== chatId));
       if (activeChat?.id === chatId) setActiveChat(null);
-      setContextMenu(null);
+      closeContextMenu();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu(null);
+    setMenuView('main');
+  };
+
+  const openMoveSubmenu = async () => {
+    setMenuView('move');
+    if (moveProjects) return;
+    setMoveLoading(true);
+    try {
+      const list = await api.projects.list();
+      setMoveProjects(list);
+    } catch (err) {
+      console.error(err);
+      setMoveProjects([]);
+    } finally {
+      setMoveLoading(false);
+    }
+  };
+
+  const handleMoveChat = async (chatId: string, projectId: string | null) => {
+    try {
+      const updated = await api.chats.update(chatId, { project_id: projectId });
+      setChats(chats.map((c) => (c.id === chatId ? { ...c, project_id: updated.project_id } : c)));
+      if (activeChat?.id === chatId) setActiveChat({ ...activeChat, project_id: updated.project_id });
+      closeContextMenu();
     } catch (err) {
       console.error(err);
     }
@@ -178,6 +214,7 @@ export default function Sidebar() {
                     setNewTitle(chat.title);
                   }}
                   onRenameSave={() => handleRenameChat(chat.id)}
+                  onRenameCancel={() => setRenaming(null)}
                   newTitle={newTitle}
                   setNewTitle={setNewTitle}
                 />
@@ -206,6 +243,7 @@ export default function Sidebar() {
                     setNewTitle(chat.title);
                   }}
                   onRenameSave={() => handleRenameChat(chat.id)}
+                  onRenameCancel={() => setRenaming(null)}
                   newTitle={newTitle}
                   setNewTitle={setNewTitle}
                 />
@@ -217,35 +255,93 @@ export default function Sidebar() {
 
       {/* User Footer */}
       <div className="p-3 border-t border-vetted-border">
-        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.21.4</p>
+        <p className="text-[10px] text-vetted-text-muted text-center pb-2 opacity-50">v1.21.10</p>
       </div>
 
       {/* Context Menu */}
       {contextMenu && (
-        <div
-          className="fixed bg-white border border-vetted-border rounded-lg shadow-lg z-50"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          onMouseLeave={() => setContextMenu(null)}
-        >
-          <button
-            onClick={() => {
-              setRenaming(contextMenu.chatId);
-              setNewTitle(chats.find((c) => c.id === contextMenu.chatId)?.title || '');
-              setContextMenu(null);
-            }}
-            className="w-full px-3 py-2 text-sm flex items-center gap-2 hover:bg-vetted-surface text-left"
+        <>
+          <div className="fixed inset-0 z-40" onClick={closeContextMenu} />
+          <div
+            className="fixed bg-white border border-vetted-border rounded-lg shadow-lg z-50 min-w-[180px]"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
           >
-            <Pencil size={14} />
-            Rename
-          </button>
-          <button
-            onClick={() => handleDeleteChat(contextMenu.chatId)}
-            className="w-full px-3 py-2 text-sm flex items-center gap-2 hover:bg-red-50 text-vetted-danger text-left"
-          >
-            <Trash2 size={14} />
-            Delete
-          </button>
-        </div>
+            {menuView === 'main' && (
+              <>
+                <button
+                  onClick={() => {
+                    setRenaming(contextMenu.chatId);
+                    setNewTitle(chats.find((c) => c.id === contextMenu.chatId)?.title || '');
+                    closeContextMenu();
+                  }}
+                  className="w-full px-3 py-2 text-sm flex items-center gap-2 hover:bg-vetted-surface text-left"
+                >
+                  <Pencil size={14} />
+                  Rename
+                </button>
+                <button
+                  onClick={openMoveSubmenu}
+                  className="w-full px-3 py-2 text-sm flex items-center gap-2 hover:bg-vetted-surface text-left"
+                >
+                  <FolderInput size={14} />
+                  <span className="flex-1">Move to project</span>
+                  <ChevronRightIcon size={12} className="text-vetted-text-muted" />
+                </button>
+                <button
+                  onClick={() => handleDeleteChat(contextMenu.chatId)}
+                  className="w-full px-3 py-2 text-sm flex items-center gap-2 hover:bg-red-50 text-vetted-danger text-left"
+                >
+                  <Trash2 size={14} />
+                  Delete
+                </button>
+              </>
+            )}
+            {menuView === 'move' && (
+              <div className="max-h-72 overflow-y-auto">
+                <button
+                  onClick={() => setMenuView('main')}
+                  className="w-full px-3 py-2 text-xs flex items-center gap-2 hover:bg-vetted-surface text-vetted-text-muted text-left border-b border-vetted-border"
+                >
+                  <ChevronLeft size={12} /> Back
+                </button>
+                {moveLoading && (
+                  <p className="px-3 py-3 text-xs text-vetted-text-muted">Loading…</p>
+                )}
+                {!moveLoading && moveProjects && (() => {
+                  const currentProjectId = chats.find((c) => c.id === contextMenu.chatId)?.project_id ?? null;
+                  return (
+                    <>
+                      <button
+                        onClick={() => handleMoveChat(contextMenu.chatId, null)}
+                        disabled={currentProjectId === null}
+                        className="w-full px-3 py-2 text-sm flex items-center gap-2 hover:bg-vetted-surface text-left disabled:opacity-50 disabled:cursor-default"
+                      >
+                        <span className="text-vetted-text-muted">No project</span>
+                        {currentProjectId === null && <span className="ml-auto text-[10px] text-vetted-text-muted">current</span>}
+                      </button>
+                      {moveProjects.length === 0 && (
+                        <p className="px-3 py-3 text-xs text-vetted-text-muted">No projects yet</p>
+                      )}
+                      {moveProjects.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => handleMoveChat(contextMenu.chatId, p.id)}
+                          disabled={currentProjectId === p.id}
+                          className="w-full px-3 py-2 text-sm flex items-center gap-2 hover:bg-vetted-surface text-left disabled:opacity-50 disabled:cursor-default"
+                          title={p.name}
+                        >
+                          <FolderOpen size={12} className="text-vetted-text-muted shrink-0" />
+                          <span className="truncate">{p.name}</span>
+                          {currentProjectId === p.id && <span className="ml-auto text-[10px] text-vetted-text-muted">current</span>}
+                        </button>
+                      ))}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -259,6 +355,7 @@ function ChatItem({
   renaming,
   onRenameStart,
   onRenameSave,
+  onRenameCancel,
   newTitle,
   setNewTitle,
 }: {
@@ -269,6 +366,7 @@ function ChatItem({
   renaming: boolean;
   onRenameStart: () => void;
   onRenameSave: () => void;
+  onRenameCancel: () => void;
   newTitle: string;
   setNewTitle: (v: string) => void;
 }) {
@@ -282,30 +380,47 @@ function ChatItem({
           onChange={(e) => setNewTitle(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') onRenameSave();
-            if (e.key === 'Escape') renaming = false;
+            if (e.key === 'Escape') onRenameCancel();
           }}
           onBlur={onRenameSave}
-          className="flex-1 text-sm px-2 py-1 border border-vetted-border rounded focus:outline-none focus:ring-1 focus:ring-vetted-accent"
+          className="flex-1 text-xs px-2 py-1 border border-vetted-border rounded focus:outline-none focus:ring-1 focus:ring-vetted-accent"
         />
       </div>
     );
   }
 
   return (
-    <button
-      onClick={onSelect}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        onContextMenu(e.clientX, e.clientY);
-      }}
-      className={`w-full text-left px-2 py-1.5 rounded text-xs truncate transition-colors ${
+    <div
+      className={`group relative w-full rounded transition-colors ${
         isActive
           ? 'bg-white text-vetted-primary font-medium border-l-2 border-vetted-accent'
           : 'text-vetted-text-secondary hover:bg-white hover:bg-opacity-50'
       }`}
-      title={chat.title}
     >
-      {chat.title}
-    </button>
+      <button
+        onClick={onSelect}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onContextMenu(e.clientX, e.clientY);
+        }}
+        className="w-full text-left pl-2 pr-7 py-1.5 text-xs truncate"
+        title={chat.title}
+      >
+        {chat.title}
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          onContextMenu(rect.left, rect.bottom + 4);
+        }}
+        aria-label="More options"
+        title="More"
+        className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-vetted-surface text-vetted-text-muted opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+      >
+        <MoreHorizontal size={14} />
+      </button>
+    </div>
   );
 }

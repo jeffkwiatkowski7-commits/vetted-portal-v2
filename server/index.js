@@ -754,23 +754,37 @@ app.get('/api/chats/:id', requireAuth, (req, res) => {
 });
 
 app.put('/api/chats/:id', requireAuth, (req, res) => {
-  const { title, model, temperature, system_prompt } = req.body;
+  const { title, model, temperature, system_prompt, project_id } = req.body;
 
   const chat = dbGet(db, 'SELECT * FROM chats WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
   if (!chat) {
     return res.status(404).json({ error: 'Chat not found' });
   }
 
+  let nextProjectId = chat.project_id;
+  if (project_id !== undefined) {
+    if (project_id === null || project_id === '') {
+      nextProjectId = null;
+    } else {
+      const project = dbGet(db, 'SELECT id FROM projects WHERE id = ? AND user_id = ?', [project_id, req.user.id]);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      nextProjectId = project_id;
+    }
+  }
+
   const now = new Date().toISOString();
   dbRun(db, `
     UPDATE chats
-    SET title = ?, model = ?, temperature = ?, system_prompt = ?, updated_at = ?
+    SET title = ?, model = ?, temperature = ?, system_prompt = ?, project_id = ?, updated_at = ?
     WHERE id = ?
   `, [
     title !== undefined ? title : chat.title,
     model !== undefined ? model : chat.model,
     temperature !== undefined ? temperature : chat.temperature,
     system_prompt !== undefined ? system_prompt : chat.system_prompt,
+    nextProjectId,
     now,
     req.params.id
   ]);
@@ -2716,8 +2730,19 @@ app.post('/api/projects/:id/files/:fileId/reindex', requireAuth, async (req, res
 app.get('/api/apps', (req, res) => {
   const apps = dbAll(db, 'SELECT * FROM apps WHERE status = ? ORDER BY usage_count DESC', ['active']);
 
+  // Seed previously stored a system_prompts UUID in apps.system_prompt instead
+  // of the prompt text. Resolve to text here so chats launched from an app get
+  // a real system message. Also normalize unknown models to the registry default
+  // so the chat-create call doesn't fail on a phantom model name.
+  const prompts = dbAll(db, 'SELECT id, prompt_text FROM system_prompts');
+  const promptById = new Map(prompts.map(p => [p.id, p.prompt_text]));
+  const validModels = new Set(dbAll(db, 'SELECT model_name FROM model_configs WHERE is_enabled = 1').map(m => m.model_name));
+  const defaultModel = (dbGet(db, 'SELECT model_name FROM model_configs WHERE is_default = 1 AND is_enabled = 1') || {}).model_name || 'Gemini 3.1';
+
   const result = apps.map(app => ({
     ...app,
+    system_prompt: promptById.get(app.system_prompt) || app.system_prompt,
+    model: validModels.has(app.model) ? app.model : defaultModel,
     tool_sets: app.tool_sets ? JSON.parse(app.tool_sets) : []
   }));
 

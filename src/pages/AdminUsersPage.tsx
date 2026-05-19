@@ -43,6 +43,40 @@ function initials(name: string) {
   return name.split(' ').map(p => p[0]).join('').toUpperCase().slice(0, 2);
 }
 
+const fieldClass = "w-full px-3 py-2 border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent text-sm";
+
+function PasswordField({
+  label,
+  value,
+  onChange,
+  show,
+  onToggle,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  show: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-vetted-primary mb-1">{label}</label>
+      <div className="relative">
+        <input
+          type={show ? 'text' : 'password'}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder="••••••••"
+          className={fieldClass + ' pr-10'}
+        />
+        <button type="button" onClick={onToggle} className="absolute right-3 top-1/2 -translate-y-1/2 text-vetted-text-muted hover:text-vetted-primary" tabIndex={-1}>
+          {show ? <EyeOff size={14} /> : <Eye size={14} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminUsersPage() {
   const navigate = useNavigate();
   const { user: currentUser, addToast } = useStore();
@@ -220,26 +254,6 @@ export default function AdminUsersPage() {
     admins: users.filter(u => u.role === 'admin' || u.role === 'super_admin').length,
     withPassword: users.filter(u => u.has_password).length,
   };
-
-  const fieldClass = "w-full px-3 py-2 border border-vetted-border rounded-lg focus:outline-none focus:ring-2 focus:ring-vetted-accent text-sm";
-
-  const PasswordField = ({ label, field, show, onToggle }: { label: string; field: 'password' | 'confirmPassword'; show: boolean; onToggle: () => void }) => (
-    <div>
-      <label className="block text-sm font-medium text-vetted-primary mb-1">{label}</label>
-      <div className="relative">
-        <input
-          type={show ? 'text' : 'password'}
-          value={form[field]}
-          onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
-          placeholder="••••••••"
-          className={fieldClass + ' pr-10'}
-        />
-        <button type="button" onClick={onToggle} className="absolute right-3 top-1/2 -translate-y-1/2 text-vetted-text-muted hover:text-vetted-primary" tabIndex={-1}>
-          {show ? <EyeOff size={14} /> : <Eye size={14} />}
-        </button>
-      </div>
-    </div>
-  );
 
   if (loading) return <div className="flex items-center justify-center h-full"><p className="text-vetted-text-secondary">Loading users...</p></div>;
 
@@ -442,8 +456,8 @@ export default function AdminUsersPage() {
                   <div className="border-t border-vetted-border pt-4">
                     <p className="text-xs text-vetted-text-muted mb-3">{modal === 'add' ? 'Optional — set a password now or later' : 'Leave blank to keep current password'}</p>
                     <div className="space-y-3">
-                      <PasswordField label="Password" field="password" show={showPw} onToggle={() => setShowPw(v => !v)} />
-                      <PasswordField label="Confirm Password" field="confirmPassword" show={showConfirmPw} onToggle={() => setShowConfirmPw(v => !v)} />
+                      <PasswordField label="Password" value={form.password} onChange={v => setForm(f => ({ ...f, password: v }))} show={showPw} onToggle={() => setShowPw(v => !v)} />
+                      <PasswordField label="Confirm Password" value={form.confirmPassword} onChange={v => setForm(f => ({ ...f, confirmPassword: v }))} show={showConfirmPw} onToggle={() => setShowConfirmPw(v => !v)} />
                     </div>
                   </div>
                 </>
@@ -452,8 +466,8 @@ export default function AdminUsersPage() {
               {modal === 'password' && (
                 <div className="space-y-3">
                   <p className="text-sm text-vetted-text-secondary">Setting password for <strong>{selectedUser?.display_name}</strong></p>
-                  <PasswordField label="New Password" field="password" show={showPw} onToggle={() => setShowPw(v => !v)} />
-                  <PasswordField label="Confirm Password" field="confirmPassword" show={showConfirmPw} onToggle={() => setShowConfirmPw(v => !v)} />
+                  <PasswordField label="New Password" value={form.password} onChange={v => setForm(f => ({ ...f, password: v }))} show={showPw} onToggle={() => setShowPw(v => !v)} />
+                  <PasswordField label="Confirm Password" value={form.confirmPassword} onChange={v => setForm(f => ({ ...f, confirmPassword: v }))} show={showConfirmPw} onToggle={() => setShowConfirmPw(v => !v)} />
                 </div>
               )}
             </div>
